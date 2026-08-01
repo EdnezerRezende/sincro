@@ -24,6 +24,10 @@ class AnamneseNotifier {
     state = state.copyWith(tomPreferido: value);
   }
 
+  void setOutroGatilho(String? value) {
+    state = state.copyWith(outroGatilho: value);
+  }
+
   Future<void> submit() async {
     await _repository.upsert(state.toJson());
   }

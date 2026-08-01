@@ -32,6 +32,11 @@ class _AnamneseNotifierWrapper extends Notifier<AnamneseAnswers> {
     state = _notifier.state;
   }
 
+  void setOutroGatilho(String? value) {
+    _notifier.setOutroGatilho(value);
+    state = _notifier.state;
+  }
+
   Future<void> submit() async {
     await _notifier.submit();
   }

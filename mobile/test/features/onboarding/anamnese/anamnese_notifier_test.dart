@@ -35,4 +35,33 @@ void main() {
       'tomPreferido': 'DIRETO_E_CURTO',
     });
   });
+
+  test('outroGatilho is included in submitted data when present', () async {
+    final fakeRepo = _FakeSensoryProfileRepository();
+    final notifier = AnamneseNotifier(fakeRepo as dynamic);
+
+    notifier.setOutroGatilho('Situações não antecipadas');
+    await notifier.submit();
+
+    expect(fakeRepo.lastSubmittedDados, {
+      'toleranciaNotificacao': null,
+      'gatilhos': [],
+      'tomPreferido': null,
+      'outroGatilho': 'Situações não antecipadas',
+    });
+  });
+
+  test('outroGatilho is omitted from submitted data when empty', () async {
+    final fakeRepo = _FakeSensoryProfileRepository();
+    final notifier = AnamneseNotifier(fakeRepo as dynamic);
+
+    notifier.setOutroGatilho('');
+    await notifier.submit();
+
+    expect(fakeRepo.lastSubmittedDados, {
+      'toleranciaNotificacao': null,
+      'gatilhos': [],
+      'tomPreferido': null,
+    });
+  });
 }

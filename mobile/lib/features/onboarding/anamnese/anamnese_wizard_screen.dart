@@ -52,7 +52,9 @@ class _AnamneseWizardScreenState extends ConsumerState<AnamneseWizardScreen> {
           ),
           _TriggersStep(
             selected: answers.gatilhos,
+            outroGatilho: answers.outroGatilho,
             onToggle: notifier.toggleGatilho,
+            onSetOutroGatilho: notifier.setOutroGatilho,
             onNext: () => _goToStep(2),
           ),
           _ToneStep(
@@ -93,10 +95,18 @@ class _NotificationStep extends StatelessWidget {
 }
 
 class _TriggersStep extends StatelessWidget {
-  const _TriggersStep({required this.selected, required this.onToggle, required this.onNext});
+  const _TriggersStep({
+    required this.selected,
+    required this.outroGatilho,
+    required this.onToggle,
+    required this.onSetOutroGatilho,
+    required this.onNext,
+  });
 
   final List<String> selected;
+  final String? outroGatilho;
   final ValueChanged<String> onToggle;
+  final ValueChanged<String?> onSetOutroGatilho;
   final VoidCallback onNext;
 
   @override
@@ -113,6 +123,15 @@ class _TriggersStep extends StatelessWidget {
               onSelected: (_) => onToggle(gatilho),
             );
           }).toList(),
+        ),
+        const SizedBox(height: 24),
+        TextField(
+          onChanged: onSetOutroGatilho,
+          controller: TextEditingController(text: outroGatilho ?? ''),
+          decoration: InputDecoration(
+            hintText: 'Outro gatilho (opcional)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
         ),
         const SizedBox(height: 24),
         ElevatedButton(onPressed: onNext, child: const Text('Continuar')),
@@ -158,7 +177,17 @@ class _SummaryStep extends StatelessWidget {
         ),
         ListTile(
           title: const Text('Gatilhos'),
-          subtitle: Text(answers.gatilhos.isEmpty ? 'Nenhum' : answers.gatilhos.join(', ')),
+          subtitle: Text(
+            [
+              if (answers.gatilhos.isNotEmpty) answers.gatilhos.join(', '),
+              if (answers.outroGatilho?.isNotEmpty ?? false) answers.outroGatilho,
+            ].join(' + ').isEmpty
+                ? 'Nenhum'
+                : [
+                    if (answers.gatilhos.isNotEmpty) answers.gatilhos.join(', '),
+                    if (answers.outroGatilho?.isNotEmpty ?? false) answers.outroGatilho,
+                  ].join(' + '),
+          ),
           trailing: TextButton(onPressed: () => onEditStep(1), child: const Text('Editar')),
         ),
         ListTile(

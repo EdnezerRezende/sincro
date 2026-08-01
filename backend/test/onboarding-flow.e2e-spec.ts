@@ -25,8 +25,13 @@ interface EmergencyMessageResponseBody {
 describe('Onboarding flow (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let contactId: string;
   const testFirebaseUid = 'e2e-user-1';
+  const otherFirebaseUid = 'e2e-user-2';
   const authHeader = { Authorization: `Bearer test-uid:${testFirebaseUid}` };
+  const otherAuthHeader = {
+    Authorization: `Bearer test-uid:${otherFirebaseUid}`,
+  };
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -45,13 +50,15 @@ describe('Onboarding flow (e2e)', () => {
   });
 
   afterAll(async () => {
-    const user = await prisma.user.findUnique({
-      where: { firebaseUid: testFirebaseUid },
-    });
-    if (user) {
-      await prisma.trustedContact.deleteMany({ where: { userId: user.id } });
-      await prisma.sensoryProfile.deleteMany({ where: { userId: user.id } });
-      await prisma.user.delete({ where: { id: user.id } });
+    for (const uid of [testFirebaseUid, otherFirebaseUid]) {
+      const user = await prisma.user.findUnique({
+        where: { firebaseUid: uid },
+      });
+      if (user) {
+        await prisma.trustedContact.deleteMany({ where: { userId: user.id } });
+        await prisma.sensoryProfile.deleteMany({ where: { userId: user.id } });
+        await prisma.user.delete({ where: { id: user.id } });
+      }
     }
     await app.close();
   });
@@ -93,7 +100,7 @@ describe('Onboarding flow (e2e)', () => {
         consentimentoAceito: true,
       })
       .expect(201);
-    const contactId = (contactResponse.body as TrustedContactResponseBody).id;
+    contactId = (contactResponse.body as TrustedContactResponseBody).id;
 
     const meAfterOnboarding = await request(app.getHttpServer())
       .get('/users/me')
@@ -117,5 +124,26 @@ describe('Onboarding flow (e2e)', () => {
 
   it('rejects requests without a valid Firebase token', async () => {
     await request(app.getHttpServer()).get('/users/me').expect(401);
+  });
+
+  it('does not leak trusted contacts across firebaseUid tenants', async () => {
+    await request(app.getHttpServer())
+      .post('/users/me')
+      .set(otherAuthHeader)
+      .send({ nome: 'Outro Usuário E2E' })
+      .expect(201);
+
+    const otherMe = await request(app.getHttpServer())
+      .get('/users/me')
+      .set(otherAuthHeader)
+      .expect(200);
+    const otherMeBody = otherMe.body as MeResponseBody;
+    expect(otherMeBody.trustedContactCount).toBe(0);
+
+    await request(app.getHttpServer())
+      .post('/emergency/message')
+      .set(otherAuthHeader)
+      .send({ contactId })
+      .expect(404);
   });
 });

@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sincro
+      POSTGRES_PASSWORD: sincro_dev_password
+      POSTGRES_DB: sincro_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - sincro_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  sincro_postgres_data:

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "393611506422",
+    "project_id": "sincro-3ac01",
+    "storage_bucket": "sincro-3ac01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:393611506422:android:f864f79df7084de28972d7",
+        "android_client_info": {
+          "package_name": "com.sincro.sincro_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB04cvj0TEdac1-wfHbMbmoCRTq4XVbg_U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

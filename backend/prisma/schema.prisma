@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String           @id @default(uuid())
+  firebaseUid     String           @unique @map("firebase_uid")
+  nome            String
+  createdAt       DateTime         @default(now()) @map("created_at")
+  sensoryProfile  SensoryProfile?
+  trustedContacts TrustedContact[]
+
+  @@map("usuarios")
+}
+
+model SensoryProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  dados     Json
+  versao    Int      @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("perfis_sensoriais")
+}
+
+model TrustedContact {
+  id                    String   @id @default(uuid())
+  userId                String   @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id])
+  nome                  String
+  relacao               String
+  whatsapp              String
+  prioridade            Int      @default(0)
+  consentimentoAceitoEm DateTime @map("consentimento_aceito_em")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("contatos_confianca")
+}

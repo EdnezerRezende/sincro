@@ -94,7 +94,7 @@ class _NotificationStep extends StatelessWidget {
   }
 }
 
-class _TriggersStep extends StatelessWidget {
+class _TriggersStep extends StatefulWidget {
   const _TriggersStep({
     required this.selected,
     required this.outroGatilho,
@@ -110,6 +110,35 @@ class _TriggersStep extends StatelessWidget {
   final VoidCallback onNext;
 
   @override
+  State<_TriggersStep> createState() => _TriggersStepState();
+}
+
+class _TriggersStepState extends State<_TriggersStep> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.outroGatilho ?? '');
+  }
+
+  @override
+  void didUpdateWidget(_TriggersStep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only update controller text if the external value changed
+    // (avoid overwriting if user is actively typing)
+    if (oldWidget.outroGatilho != widget.outroGatilho && widget.outroGatilho != null) {
+      _controller.text = widget.outroGatilho!;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return _StepScaffold(
       title: 'Algum desses costuma te incomodar?',
@@ -119,22 +148,22 @@ class _TriggersStep extends StatelessWidget {
           children: _gatilhosDisponiveis.map((gatilho) {
             return FilterChip(
               label: Text(gatilho),
-              selected: selected.contains(gatilho),
-              onSelected: (_) => onToggle(gatilho),
+              selected: widget.selected.contains(gatilho),
+              onSelected: (_) => widget.onToggle(gatilho),
             );
           }).toList(),
         ),
         const SizedBox(height: 24),
         TextField(
-          onChanged: onSetOutroGatilho,
-          controller: TextEditingController(text: outroGatilho ?? ''),
+          onChanged: widget.onSetOutroGatilho,
+          controller: _controller,
           decoration: InputDecoration(
             hintText: 'Outro gatilho (opcional)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         const SizedBox(height: 24),
-        ElevatedButton(onPressed: onNext, child: const Text('Continuar')),
+        ElevatedButton(onPressed: widget.onNext, child: const Text('Continuar')),
       ],
     );
   }

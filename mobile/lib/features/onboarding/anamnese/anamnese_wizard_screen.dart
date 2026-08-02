@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'anamnese_answers.dart';
 import 'anamnese_providers.dart';
 
 const _gatilhosDisponiveis = [
@@ -24,6 +25,12 @@ class _AnamneseWizardScreenState extends ConsumerState<AnamneseWizardScreen> {
   void _goToStep(int step) {
     setState(() => _step = step);
     _pageController.animateToPage(step, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _finish() async {
@@ -190,7 +197,7 @@ class _ToneStep extends StatelessWidget {
 class _SummaryStep extends StatelessWidget {
   const _SummaryStep({required this.answers, required this.onEditStep, required this.onConfirm});
 
-  final dynamic answers;
+  final AnamneseAnswers answers;
   final ValueChanged<int> onEditStep;
   final VoidCallback? onConfirm;
 

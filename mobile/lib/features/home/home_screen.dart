@@ -24,18 +24,10 @@ class HomeScreen extends ConsumerWidget {
             contactsAsync.when(
               data: (contacts) {
                 if (contacts.isEmpty) {
-                  return Column(
+                  return const Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: const [
-                      Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            '💡 Adicione um contato de confiança para estar preparado em emergências.',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                        ),
-                      ),
+                    children: [
+                      _NoContactsHint(),
                       SizedBox(height: 16),
                       EmergencyButton(),
                     ],
@@ -43,40 +35,27 @@ class HomeScreen extends ConsumerWidget {
                 }
                 return const EmergencyButton();
               },
-              loading: () => const Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        '💡 Adicione um contato de confiança para estar preparado em emergências.',
-                        style: TextStyle(fontSize: 13, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  EmergencyButton(),
-                ],
-              ),
-              error: (_, __) => const Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        '💡 Adicione um contato de confiança para estar preparado em emergências.',
-                        style: TextStyle(fontSize: 13, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  EmergencyButton(),
-                ],
-              ),
+              loading: () => const EmergencyButton(),
+              error: (_, __) => const EmergencyButton(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoContactsHint extends StatelessWidget {
+  const _NoContactsHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          '💡 Adicione um contato de confiança para estar preparado em emergências.',
+          style: TextStyle(fontSize: 13, color: Colors.grey),
         ),
       ),
     );

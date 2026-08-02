@@ -39,5 +39,6 @@ model TrustedContact {
   consentimentoAceitoEm DateTime @map("consentimento_aceito_em")
   createdAt             DateTime @default(now()) @map("created_at")
 
+  @@index([userId])
   @@map("contatos_confianca")
 }

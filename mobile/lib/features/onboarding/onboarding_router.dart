@@ -7,18 +7,10 @@ class OnboardingRouterScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final usersRepository = ref.watch(usersRepositoryProvider);
+    final statusAsync = ref.watch(onboardingStatusProvider);
 
-    return FutureBuilder(
-      future: usersRepository.getMe(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.hasError) {
-          return const Scaffold(body: Center(child: Text('Não foi possível carregar seu perfil.')));
-        }
-        final status = snapshot.data!;
+    return statusAsync.when(
+      data: (status) {
         if (!status.hasSensoryProfile) {
           return const _RedirectOnce(routeName: '/onboarding/anamnese');
         }
@@ -27,6 +19,8 @@ class OnboardingRouterScreen extends ConsumerWidget {
         }
         return const _RedirectOnce(routeName: '/home');
       },
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (_, __) => const Scaffold(body: Center(child: Text('Não foi possível carregar seu perfil.'))),
     );
   }
 }

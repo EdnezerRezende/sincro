@@ -25,7 +25,6 @@ interface EmergencyMessageResponseBody {
 describe('Onboarding flow (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  let contactId: string;
   const testFirebaseUid = 'e2e-user-1';
   const otherFirebaseUid = 'e2e-user-2';
   const authHeader = { Authorization: `Bearer test-uid:${testFirebaseUid}` };
@@ -100,7 +99,7 @@ describe('Onboarding flow (e2e)', () => {
         consentimentoAceito: true,
       })
       .expect(201);
-    contactId = (contactResponse.body as TrustedContactResponseBody).id;
+    const contactId = (contactResponse.body as TrustedContactResponseBody).id;
 
     const meAfterOnboarding = await request(app.getHttpServer())
       .get('/users/me')
@@ -140,10 +139,31 @@ describe('Onboarding flow (e2e)', () => {
     const otherMeBody = otherMe.body as MeResponseBody;
     expect(otherMeBody.trustedContactCount).toBe(0);
 
+    // Ensure the owner user exists independently of any other test's
+    // execution order (upsert is idempotent).
+    await request(app.getHttpServer())
+      .post('/users/me')
+      .set(authHeader)
+      .send({ nome: 'Usuário E2E' })
+      .expect(201);
+
+    const ownerContactResponse = await request(app.getHttpServer())
+      .post('/trusted-contacts')
+      .set(authHeader)
+      .send({
+        nome: 'Contato Isolado',
+        relacao: 'FAMILIAR',
+        whatsapp: '+5511988888888',
+        prioridade: 0,
+        consentimentoAceito: true,
+      })
+      .expect(201);
+    const ownerContactId = (ownerContactResponse.body as TrustedContactResponseBody).id;
+
     await request(app.getHttpServer())
       .post('/emergency/message')
       .set(otherAuthHeader)
-      .send({ contactId })
+      .send({ contactId: ownerContactId })
       .expect(404);
   });
 });

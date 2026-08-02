@@ -4,6 +4,8 @@ import 'trusted_contacts_providers.dart';
 
 const _relacoes = ['PSICOLOGO', 'PSIQUIATRA', 'T.O.', 'FAMILIAR', 'OUTRO'];
 
+final _whatsappRegex = RegExp(r'^\+\d{10,15}$');
+
 class AddContactScreen extends ConsumerStatefulWidget {
   const AddContactScreen({super.key});
 
@@ -18,6 +20,13 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
   bool _consentimentoAceito = false;
   bool _saving = false;
   String? _error;
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _whatsappController.dispose();
+    super.dispose();
+  }
 
   Future<void> _save() async {
     setState(() {
@@ -44,7 +53,7 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
   @override
   Widget build(BuildContext context) {
     final canSave = _nomeController.text.trim().isNotEmpty &&
-        _whatsappController.text.trim().isNotEmpty &&
+        _whatsappRegex.hasMatch(_whatsappController.text.trim()) &&
         _consentimentoAceito &&
         !_saving;
 
@@ -70,7 +79,10 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _whatsappController,
-              decoration: const InputDecoration(labelText: 'WhatsApp'),
+              decoration: const InputDecoration(
+                labelText: 'WhatsApp',
+                helperText: 'Inclua o código do país, ex: +5511999999999',
+              ),
               keyboardType: TextInputType.phone,
               onChanged: (_) => setState(() {}),
             ),

@@ -45,17 +45,29 @@ class TrustedContactsScreen extends ConsumerWidget {
           }
         },
       ),
-      bottomNavigationBar: contactsAsync.maybeWhen(
-        data: (contacts) => contacts.isNotEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(16),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
-                  child: const Text('Continuar'),
-                ),
-              )
-            : null,
-        orElse: () => null,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            contactsAsync.maybeWhen(
+              data: (contacts) => contacts.isNotEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
+                        child: const Text('Continuar'),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              orElse: () => const SizedBox.shrink(),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
+              child: const Text('Pular por enquanto'),
+            ),
+          ],
+        ),
       ),
     );
   }

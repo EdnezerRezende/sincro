@@ -1,9 +1,10 @@
 import 'anamnese_answers.dart';
+import 'sensory_profile_repository.dart';
 
 class AnamneseNotifier {
-  AnamneseNotifier(dynamic repository) : _repository = repository, state = const AnamneseAnswers();
+  AnamneseNotifier(SensoryProfileRepository repository) : _repository = repository, state = const AnamneseAnswers();
 
-  final dynamic _repository;
+  final SensoryProfileRepository _repository;
   AnamneseAnswers state;
 
   void setTolerancia(String value) {

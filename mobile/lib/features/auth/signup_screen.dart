@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_providers.dart';
+import '../onboarding/onboarding_providers.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -16,6 +17,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _loading = false;
   String? _error;
 
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _emailController.dispose();
+    _senhaController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     setState(() {
       _loading = true;
@@ -24,8 +33,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     try {
       final authService = ref.read(authServiceProvider);
       await authService.signUp(_emailController.text.trim(), _senhaController.text);
+      await ref.read(usersRepositoryProvider).upsertMe(_nomeController.text.trim());
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/onboarding', arguments: _nomeController.text.trim());
+        Navigator.of(context).pushReplacementNamed('/onboarding-router');
       }
     } catch (e) {
       setState(() => _error = 'Não foi possível criar sua conta. Tente novamente.');

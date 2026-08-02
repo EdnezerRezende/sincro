@@ -1,17 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:sincro_mobile/features/onboarding/anamnese/anamnese_notifier.dart';
+import 'package:sincro_mobile/features/onboarding/anamnese/sensory_profile_repository.dart';
 
-class _FakeSensoryProfileRepository {
-  Map<String, dynamic>? lastSubmittedDados;
-
-  Future<void> upsert(Map<String, dynamic> dados) async {
-    lastSubmittedDados = dados;
-  }
-}
+class MockSensoryProfileRepository extends Mock implements SensoryProfileRepository {}
 
 void main() {
+  late MockSensoryProfileRepository mockRepository;
+
+  setUp(() {
+    mockRepository = MockSensoryProfileRepository();
+    when(() => mockRepository.upsert(any())).thenAnswer((_) async {});
+  });
+
   test('toggling a gatilho adds and removes it', () {
-    final notifier = AnamneseNotifier(_FakeSensoryProfileRepository() as dynamic);
+    final notifier = AnamneseNotifier(mockRepository);
 
     notifier.toggleGatilho('Abrir o app do banco');
     expect(notifier.state.gatilhos, contains('Abrir o app do banco'));
@@ -21,15 +24,15 @@ void main() {
   });
 
   test('submit sends the current answers as dados', () async {
-    final fakeRepo = _FakeSensoryProfileRepository();
-    final notifier = AnamneseNotifier(fakeRepo as dynamic);
+    final notifier = AnamneseNotifier(mockRepository);
 
     notifier.setTolerancia('SILENCIOSAS');
     notifier.toggleGatilho('Ligações não agendadas');
     notifier.setTom('DIRETO_E_CURTO');
     await notifier.submit();
 
-    expect(fakeRepo.lastSubmittedDados, {
+    final captured = verify(() => mockRepository.upsert(captureAny())).captured;
+    expect(captured.single, {
       'toleranciaNotificacao': 'SILENCIOSAS',
       'gatilhos': ['Ligações não agendadas'],
       'tomPreferido': 'DIRETO_E_CURTO',
@@ -37,13 +40,13 @@ void main() {
   });
 
   test('outroGatilho is included in submitted data when present', () async {
-    final fakeRepo = _FakeSensoryProfileRepository();
-    final notifier = AnamneseNotifier(fakeRepo as dynamic);
+    final notifier = AnamneseNotifier(mockRepository);
 
     notifier.setOutroGatilho('Situações não antecipadas');
     await notifier.submit();
 
-    expect(fakeRepo.lastSubmittedDados, {
+    final captured = verify(() => mockRepository.upsert(captureAny())).captured;
+    expect(captured.single, {
       'toleranciaNotificacao': null,
       'gatilhos': [],
       'tomPreferido': null,
@@ -52,13 +55,13 @@ void main() {
   });
 
   test('outroGatilho is omitted from submitted data when empty', () async {
-    final fakeRepo = _FakeSensoryProfileRepository();
-    final notifier = AnamneseNotifier(fakeRepo as dynamic);
+    final notifier = AnamneseNotifier(mockRepository);
 
     notifier.setOutroGatilho('');
     await notifier.submit();
 
-    expect(fakeRepo.lastSubmittedDados, {
+    final captured = verify(() => mockRepository.upsert(captureAny())).captured;
+    expect(captured.single, {
       'toleranciaNotificacao': null,
       'gatilhos': [],
       'tomPreferido': null,

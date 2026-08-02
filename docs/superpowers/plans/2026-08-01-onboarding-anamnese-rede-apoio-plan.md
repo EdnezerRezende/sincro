@@ -8,6 +8,26 @@
 
 **Tech Stack:** NestJS 10, Prisma 5, PostgreSQL 16 (`pgvector/pgvector:pg16` image), Firebase Admin SDK, Flutter 3.x, Riverpod, Dio, firebase_auth, url_launcher, Jest/Supertest, flutter_test/mocktail.
 
+## Status: ✅ Implemented (Tasks 1–15, all reviewed)
+
+All 14 original tasks plus one task added after final review (Task 15) are implemented, individually reviewed (spec compliance + code quality), and passing. Branch `worktree-sincro-onboarding-anamnese-rede-apoio` is pushed to `origin`, PR pending creation.
+
+**Final test status:**
+- Backend: `npm test` 16/16 unit tests passing, `npm run test:e2e` 5/5 passing (incl. cross-tenant isolation).
+- Mobile: `flutter test` 20/20 passing, `flutter analyze` clean.
+
+**Version drift from this plan's assumptions (discovered and adapted for during implementation):**
+- **Prisma resolved to `^7.9.1`, not `5`.** `datasource.url` in `schema.prisma` is no longer supported in v7 (moved to `backend/prisma.config.ts`), and `PrismaClient` requires an explicit driver adapter (`@prisma/adapter-pg`) built in `PrismaService`'s constructor rather than a bare `new PrismaClient()`. Also required `import 'dotenv/config'` as the first line of `backend/src/main.ts` so `DATABASE_URL` is actually loaded into `process.env` before the adapter reads it (Task 2, fix round 1).
+- **`flutter_riverpod` resolved to `^3.3.2`,** whose idiomatic API is `Notifier`/`NotifierProvider`, not the classic `StateNotifier`/`StateNotifierProvider` this plan's code snippets use. Fixed via a consistent pattern across every notifier: a plain Dart state-holder class (matches the brief's test contract) wrapped by a thin `Notifier` subclass for Riverpod wiring (see `AnamneseNotifier` + `_AnamneseNotifierWrapper` in `mobile/lib/features/onboarding/anamnese/anamnese_providers.dart`).
+
+**Final whole-branch review (after Task 14) found and fixed two integration-level Critical bugs no single task review could see:**
+1. `signup_screen.dart` navigated to an unregistered route (`/onboarding` instead of `/onboarding-router`) — every signup dead-ended.
+2. `UsersRepository.upsertMe()` had zero callers anywhere in the mobile app, so no `usuarios` Postgres row was ever created for a new user — `OnboardingRouterScreen` 404'd forever.
+
+Also fixed in the same pass: a zero-contacts navigation trap, missing WhatsApp number format validation (client + server), a broken pre-existing e2e scaffold file, a missing DB index, and several resource-leak/type-safety polish items. See the `## Plan Self-Review Notes` and the git history (commits `9d2c984..3320dbc`) for the full list.
+
+**Task 15 (added post-review):** the design spec's "edit/delete your profile and contacts at any time" requirement (objective 5, LGPD *direito de exclusão*) was never assigned to any of the original 14 tasks — `/home` had no outgoing navigation at all. Task 15 added a `DELETE /sensory-profile` endpoint, a settings screen (edit/delete sensory profile with existing-answers reload, manage/delete trusted contacts, sign out), and wired it up from `/home`. See the new Task 15 section below.
+
 ## Global Constraints
 
 - Every table/column name in Postgres uses the Portuguese names fixed in the spec: `usuarios`, `perfis_sensoriais`, `contatos_confianca`, `firebase_uid`, `dados`, `versao`, `relacao`, `whatsapp`, `prioridade`, `consentimento_aceito_em`.
@@ -32,14 +52,14 @@
 **Interfaces:**
 - Produces: a running NestJS app on port 3000, a running Postgres instance on port 5432 reachable at the `DATABASE_URL` in `.env`.
 
-- [ ] **Step 1: Scaffold the NestJS project**
+- [x] **Step 1: Scaffold the NestJS project**
 
 Run from the repo root:
 ```bash
 npx @nestjs/cli new backend --package-manager npm --skip-git
 ```
 
-- [ ] **Step 2: Install backend dependencies**
+- [x] **Step 2: Install backend dependencies**
 
 ```bash
 cd backend
@@ -47,7 +67,7 @@ npm install prisma @prisma/client class-validator class-transformer firebase-adm
 npm install -D @types/supertest
 ```
 
-- [ ] **Step 3: Create the local Postgres via docker-compose**
+- [x] **Step 3: Create the local Postgres via docker-compose**
 
 `backend/docker-compose.yml`:
 ```yaml
@@ -69,7 +89,7 @@ volumes:
   sincro_postgres_data:
 ```
 
-- [ ] **Step 4: Create environment files**
+- [x] **Step 4: Create environment files**
 
 `backend/.env.example`:
 ```
@@ -81,7 +101,7 @@ FIREBASE_PRIVATE_KEY=""
 
 Copy it to `backend/.env` with the same values (local dev only — real Firebase credentials are added in Task 3).
 
-- [ ] **Step 5: Start Postgres and verify connectivity**
+- [x] **Step 5: Start Postgres and verify connectivity**
 
 ```bash
 docker compose -f backend/docker-compose.yml up -d
@@ -89,7 +109,7 @@ docker exec -it $(docker compose -f backend/docker-compose.yml ps -q postgres) p
 ```
 Expected: query returns `1`.
 
-- [ ] **Step 6: Add `.gitignore` entries and commit**
+- [x] **Step 6: Add `.gitignore` entries and commit**
 
 Append to `backend/.gitignore` (created by Nest scaffold): `.env`
 
@@ -112,7 +132,7 @@ git commit -m "chore: scaffold NestJS backend with local Postgres via docker-com
 **Interfaces:**
 - Produces: `PrismaService` (importable from `src/prisma/prisma.service.ts`), Prisma models `User`, `SensoryProfile`, `TrustedContact` with generated client types.
 
-- [ ] **Step 1: Initialize Prisma**
+- [x] **Step 1: Initialize Prisma**
 
 ```bash
 cd backend
@@ -120,7 +140,7 @@ npx prisma init --datasource-provider postgresql
 ```
 This overwrites `prisma/schema.prisma` — replace it in the next step.
 
-- [ ] **Step 2: Write the schema**
+- [x] **Step 2: Write the schema**
 
 `backend/prisma/schema.prisma`:
 ```prisma
@@ -170,14 +190,14 @@ model TrustedContact {
 }
 ```
 
-- [ ] **Step 3: Run the initial migration**
+- [x] **Step 3: Run the initial migration**
 
 ```bash
 npx prisma migrate dev --name init
 ```
 Expected: migration applied, Prisma Client generated, no errors.
 
-- [ ] **Step 4: Create PrismaService and PrismaModule**
+- [x] **Step 4: Create PrismaService and PrismaModule**
 
 `backend/src/prisma/prisma.service.ts`:
 ```typescript
@@ -209,7 +229,7 @@ import { PrismaService } from './prisma.service';
 export class PrismaModule {}
 ```
 
-- [ ] **Step 5: Register PrismaModule in AppModule**
+- [x] **Step 5: Register PrismaModule in AppModule**
 
 Modify `backend/src/app.module.ts` to import `PrismaModule`:
 ```typescript
@@ -222,14 +242,14 @@ import { PrismaModule } from './prisma/prisma.module';
 export class AppModule {}
 ```
 
-- [ ] **Step 6: Verify the app still boots**
+- [x] **Step 6: Verify the app still boots**
 
 ```bash
 npm run start:dev
 ```
 Expected: `Nest application successfully started` with no errors, then stop it (Ctrl+C).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/prisma backend/src/prisma backend/src/app.module.ts
@@ -252,7 +272,7 @@ git commit -m "feat: add Prisma schema and initial migration for usuarios, perfi
 - Consumes: none (first auth layer).
 - Produces: `FirebaseAuthGuard` (class, `@UseGuards(FirebaseAuthGuard)`), `@CurrentFirebaseUid()` param decorator returning `string`, `FIREBASE_ADMIN` DI token.
 
-- [ ] **Step 1: Write the failing guard test**
+- [x] **Step 1: Write the failing guard test**
 
 `backend/src/auth/firebase-auth.guard.spec.ts`:
 ```typescript
@@ -300,14 +320,14 @@ describe('FirebaseAuthGuard', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx jest src/auth/firebase-auth.guard.spec.ts
 ```
 Expected: FAIL — `Cannot find module './firebase-auth.guard'`.
 
-- [ ] **Step 3: Implement the Firebase Admin provider**
+- [x] **Step 3: Implement the Firebase Admin provider**
 
 `backend/src/auth/firebase-admin.provider.ts`:
 ```typescript
@@ -333,7 +353,7 @@ export const firebaseAdminProvider: Provider = {
 };
 ```
 
-- [ ] **Step 4: Implement the guard and decorator**
+- [x] **Step 4: Implement the guard and decorator**
 
 `backend/src/auth/firebase-auth.guard.ts`:
 ```typescript
@@ -391,7 +411,7 @@ import { FirebaseAuthGuard } from './firebase-auth.guard';
 export class AuthModule {}
 ```
 
-- [ ] **Step 5: Register AuthModule in AppModule**
+- [x] **Step 5: Register AuthModule in AppModule**
 
 Modify `backend/src/app.module.ts`:
 ```typescript
@@ -405,14 +425,14 @@ import { AuthModule } from './auth/auth.module';
 export class AppModule {}
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 ```bash
 npx jest src/auth/firebase-auth.guard.spec.ts
 ```
 Expected: PASS, 3 tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/auth backend/src/common backend/src/app.module.ts
@@ -435,7 +455,7 @@ git commit -m "feat: add Firebase Auth guard and current-uid decorator"
 - Consumes: `PrismaService` (Task 2), `FirebaseAuthGuard` + `CurrentFirebaseUid` (Task 3).
 - Produces: `UsersService.upsertByFirebaseUid(firebaseUid: string, nome: string): Promise<User>`, `UsersService.getByFirebaseUidOrThrow(firebaseUid: string): Promise<User>`, `UsersService.getOnboardingStatus(firebaseUid: string): Promise<{ userId, nome, hasSensoryProfile, trustedContactCount }>`. Routes: `POST /users/me`, `GET /users/me`.
 
-- [ ] **Step 1: Write the failing service test**
+- [x] **Step 1: Write the failing service test**
 
 `backend/src/users/users.service.spec.ts`:
 ```typescript
@@ -493,14 +513,14 @@ describe('UsersService', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx jest src/users/users.service.spec.ts
 ```
 Expected: FAIL — `Cannot find module './users.service'`.
 
-- [ ] **Step 3: Implement UsersService**
+- [x] **Step 3: Implement UsersService**
 
 `backend/src/users/users.service.ts`:
 ```typescript
@@ -544,14 +564,14 @@ export class UsersService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 npx jest src/users/users.service.spec.ts
 ```
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Add the DTO, controller, and module**
+- [x] **Step 5: Add the DTO, controller, and module**
 
 `backend/src/users/dto/upsert-user.dto.ts`:
 ```typescript
@@ -605,7 +625,7 @@ import { UsersController } from './users.controller';
 export class UsersModule {}
 ```
 
-- [ ] **Step 6: Register UsersModule in AppModule and enable global validation**
+- [x] **Step 6: Register UsersModule in AppModule and enable global validation**
 
 Modify `backend/src/main.ts` to add the global validation pipe:
 ```typescript
@@ -634,7 +654,7 @@ import { UsersModule } from './users/users.module';
 export class AppModule {}
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/users backend/src/main.ts backend/src/app.module.ts
@@ -657,7 +677,7 @@ git commit -m "feat: add users module with onboarding status endpoint"
 - Consumes: `UsersService.getByFirebaseUidOrThrow` (Task 4), `PrismaService` (Task 2).
 - Produces: `SensoryProfileService.upsert(firebaseUid: string, dados: Record<string, unknown>): Promise<SensoryProfile>`, `SensoryProfileService.get(firebaseUid: string): Promise<SensoryProfile | null>`. Routes: `PUT /sensory-profile`, `GET /sensory-profile`.
 
-- [ ] **Step 1: Write the failing service test**
+- [x] **Step 1: Write the failing service test**
 
 `backend/src/sensory-profile/sensory-profile.service.spec.ts`:
 ```typescript
@@ -693,14 +713,14 @@ describe('SensoryProfileService', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx jest src/sensory-profile/sensory-profile.service.spec.ts
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement SensoryProfileService**
+- [x] **Step 3: Implement SensoryProfileService**
 
 `backend/src/sensory-profile/sensory-profile.service.ts`:
 ```typescript
@@ -731,14 +751,14 @@ export class SensoryProfileService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 npx jest src/sensory-profile/sensory-profile.service.spec.ts
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Add DTO, controller, and module**
+- [x] **Step 5: Add DTO, controller, and module**
 
 `backend/src/sensory-profile/dto/upsert-sensory-profile.dto.ts`:
 ```typescript
@@ -791,11 +811,11 @@ import { SensoryProfileController } from './sensory-profile.controller';
 export class SensoryProfileModule {}
 ```
 
-- [ ] **Step 6: Register the module in AppModule**
+- [x] **Step 6: Register the module in AppModule**
 
 Modify `backend/src/app.module.ts` to add `SensoryProfileModule` to `imports`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/sensory-profile backend/src/app.module.ts
@@ -818,7 +838,7 @@ git commit -m "feat: add sensory profile module for the anamnese wizard"
 - Consumes: `UsersService.getByFirebaseUidOrThrow` (Task 4), `PrismaService` (Task 2).
 - Produces: `TrustedContactsService.create(firebaseUid, dto: CreateTrustedContactDto): Promise<TrustedContact>`, `.list(firebaseUid): Promise<TrustedContact[]>`, `.remove(firebaseUid, contactId): Promise<void>`. Routes: `POST /trusted-contacts`, `GET /trusted-contacts`, `DELETE /trusted-contacts/:id`. Consumed later by Task 7 (Emergency module needs `TrustedContact` shape: `id`, `nome`, `whatsapp`, `userId`).
 
-- [ ] **Step 1: Write the failing service test**
+- [x] **Step 1: Write the failing service test**
 
 `backend/src/trusted-contacts/trusted-contacts.service.spec.ts`:
 ```typescript
@@ -894,14 +914,14 @@ describe('TrustedContactsService', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx jest src/trusted-contacts/trusted-contacts.service.spec.ts
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement TrustedContactsService**
+- [x] **Step 3: Implement TrustedContactsService**
 
 `backend/src/trusted-contacts/trusted-contacts.service.ts`:
 ```typescript
@@ -953,14 +973,14 @@ export class TrustedContactsService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 npx jest src/trusted-contacts/trusted-contacts.service.spec.ts
 ```
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Add DTO, controller, and module**
+- [x] **Step 5: Add DTO, controller, and module**
 
 `backend/src/trusted-contacts/dto/create-trusted-contact.dto.ts`:
 ```typescript
@@ -1037,11 +1057,11 @@ import { TrustedContactsController } from './trusted-contacts.controller';
 export class TrustedContactsModule {}
 ```
 
-- [ ] **Step 6: Register the module in AppModule**
+- [x] **Step 6: Register the module in AppModule**
 
 Modify `backend/src/app.module.ts` to add `TrustedContactsModule` to `imports`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/trusted-contacts backend/src/app.module.ts
@@ -1064,7 +1084,7 @@ git commit -m "feat: add trusted contacts module with mandatory consent"
 - Consumes: `UsersService.getByFirebaseUidOrThrow` (Task 4), `PrismaService` (Task 2), `TrustedContact` shape from Task 6 (`id`, `nome`, `whatsapp`, `userId`).
 - Produces: `EmergencyService.buildMessage(firebaseUid: string, contactId: string): Promise<{ contactId, contactName, whatsapp, message, waUrl }>`. Route: `POST /emergency/message`.
 
-- [ ] **Step 1: Write the failing service test**
+- [x] **Step 1: Write the failing service test**
 
 `backend/src/emergency/emergency.service.spec.ts`:
 ```typescript
@@ -1110,14 +1130,14 @@ describe('EmergencyService', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx jest src/emergency/emergency.service.spec.ts
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement EmergencyService**
+- [x] **Step 3: Implement EmergencyService**
 
 `backend/src/emergency/emergency.service.ts`:
 ```typescript
@@ -1158,14 +1178,14 @@ export class EmergencyService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 npx jest src/emergency/emergency.service.spec.ts
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Add DTO, controller, and module**
+- [x] **Step 5: Add DTO, controller, and module**
 
 `backend/src/emergency/dto/build-emergency-message.dto.ts`:
 ```typescript
@@ -1213,7 +1233,7 @@ import { EmergencyController } from './emergency.controller';
 export class EmergencyModule {}
 ```
 
-- [ ] **Step 6: Register the module in AppModule**
+- [x] **Step 6: Register the module in AppModule**
 
 Modify `backend/src/app.module.ts` to add `EmergencyModule` to `imports`. Final `imports` array should be:
 ```typescript
@@ -1227,7 +1247,7 @@ imports: [
 ],
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/emergency backend/src/app.module.ts
@@ -1246,7 +1266,7 @@ git commit -m "feat: add emergency module to build pre-filled wa.me support mess
 - Consumes: `AppModule` (all modules from Tasks 1–7), `FIREBASE_ADMIN` token (Task 3).
 - Produces: a repeatable e2e test proving the full chain: create user → set sensory profile → add trusted contact → build emergency message, all correctly scoped by `firebaseUid`.
 
-- [ ] **Step 1: Write the fake Firebase Admin test double**
+- [x] **Step 1: Write the fake Firebase Admin test double**
 
 `backend/test/support/fake-firebase-admin.ts`:
 ```typescript
@@ -1264,7 +1284,7 @@ export function buildFakeFirebaseAdmin() {
 }
 ```
 
-- [ ] **Step 2: Write the failing e2e test**
+- [x] **Step 2: Write the failing e2e test**
 
 `backend/test/onboarding-flow.e2e-spec.ts`:
 ```typescript
@@ -1358,7 +1378,7 @@ describe('Onboarding flow (e2e)', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails first (before Postgres is confirmed up)**
+- [x] **Step 3: Run test to verify it fails first (before Postgres is confirmed up)**
 
 ```bash
 docker compose -f backend/docker-compose.yml up -d
@@ -1366,14 +1386,14 @@ cd backend && npx jest --config ./test/jest-e2e.json onboarding-flow
 ```
 If `jest-e2e.json` does not exist yet (default Nest scaffold names it `test/jest-e2e.json`), verify it points `rootDir` at `..` and `testRegex` at `.e2e-spec.ts$`. Expected on first run before Task 1–7 code exists: FAIL. Since Tasks 1–7 are already implemented at this point, expected result here is actually a real run — if it fails, read the error and fix any drift between this test and the actual DTOs/routes before proceeding.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd backend && npx jest --config ./test/jest-e2e.json onboarding-flow
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test
@@ -1397,7 +1417,7 @@ git commit -m "test: add e2e coverage for the full onboarding, anamnese, and eme
 **Interfaces:**
 - Produces: `AuthService` with `signUp(email, password): Future<User>`, `logIn(email, password): Future<User>`, `currentUser: User?`, `authStateChanges(): Stream<User?>`. Screens routed to from `main.dart`.
 
-- [ ] **Step 1: Scaffold the Flutter project**
+- [x] **Step 1: Scaffold the Flutter project**
 
 ```bash
 flutter create --org com.sincro --project-name sincro_mobile mobile
@@ -1406,11 +1426,11 @@ flutter pub add firebase_core firebase_auth flutter_riverpod dio url_launcher
 flutter pub add -d mocktail
 ```
 
-- [ ] **Step 2: Configure Firebase for the project**
+- [x] **Step 2: Configure Firebase for the project**
 
 Run `flutterfire configure` (requires the Firebase CLI logged in and a Firebase project already created in the console) to generate `mobile/lib/firebase_options.dart`. This step requires interactive CLI selection of the Firebase project and platforms (iOS/Android) — run it manually and confirm `firebase_options.dart` was generated before continuing.
 
-- [ ] **Step 3: Write the failing AuthService test**
+- [x] **Step 3: Write the failing AuthService test**
 
 `mobile/test/features/auth/auth_service_test.dart`:
 ```dart
@@ -1468,14 +1488,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it fails**
+- [x] **Step 4: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/features/auth/auth_service_test.dart
 ```
 Expected: FAIL — `Target of URI doesn't exist: 'package:sincro_mobile/features/auth/auth_service.dart'`.
 
-- [ ] **Step 5: Implement AuthService**
+- [x] **Step 5: Implement AuthService**
 
 `mobile/lib/features/auth/auth_service.dart`:
 ```dart
@@ -1510,14 +1530,14 @@ class AuthService {
 }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/features/auth/auth_service_test.dart
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 7: Build the signup and login screens**
+- [x] **Step 7: Build the signup and login screens**
 
 `mobile/lib/features/auth/signup_screen.dart`:
 ```dart
@@ -1686,7 +1706,7 @@ final authStateProvider = StreamProvider<User?>((ref) {
 });
 ```
 
-- [ ] **Step 8: Wire up `main.dart`**
+- [x] **Step 8: Wire up `main.dart`**
 
 `mobile/lib/main.dart`:
 ```dart
@@ -1720,7 +1740,7 @@ class SincroApp extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add mobile
@@ -1740,7 +1760,7 @@ git commit -m "feat: scaffold Flutter app with Firebase email/password auth"
 - Consumes: `FirebaseAuth` (Task 9, via `firebase_auth` package directly).
 - Produces: `ApiClient` with `dio` (Dio instance) attaching `Authorization: Bearer <idToken>` to every request when a user is signed in. `apiClientProvider` (Riverpod `Provider<ApiClient>`) consumed by Tasks 11–14.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `mobile/test/core/api_client_test.dart`:
 ```dart
@@ -1787,14 +1807,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/core/api_client_test.dart
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement ApiClient**
+- [x] **Step 3: Implement ApiClient**
 
 `mobile/lib/core/api_client.dart`:
 ```dart
@@ -1825,14 +1845,14 @@ class ApiClient {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/core/api_client_test.dart
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Add the Riverpod provider**
+- [x] **Step 5: Add the Riverpod provider**
 
 `mobile/lib/core/api_providers.dart`:
 ```dart
@@ -1850,7 +1870,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 });
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/lib/core mobile/test/core
@@ -1871,7 +1891,7 @@ git commit -m "feat: add API client with Firebase token interceptor"
 - Consumes: `ApiClient` (Task 10).
 - Produces: `OnboardingStatus` model, `UsersRepository.upsertMe(nome): Future<void>`, `UsersRepository.getMe(): Future<OnboardingStatus>`. `OnboardingRouterScreen` widget that reads status and navigates to `/onboarding/anamnese`, `/onboarding/contacts`, or `/home` — consumed by Task 9's login flow and Tasks 12–14's screens.
 
-- [ ] **Step 1: Write the failing repository test**
+- [x] **Step 1: Write the failing repository test**
 
 `mobile/test/features/onboarding/users_repository_test.dart`:
 ```dart
@@ -1912,14 +1932,14 @@ class _FakeAdapter implements HttpClientAdapter {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/features/onboarding/users_repository_test.dart
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the model and repository**
+- [x] **Step 3: Implement the model and repository**
 
 `mobile/lib/features/onboarding/onboarding_status.dart`:
 ```dart
@@ -1968,14 +1988,14 @@ class UsersRepository {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/features/onboarding/users_repository_test.dart
 ```
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Add the provider and router screen**
+- [x] **Step 5: Add the provider and router screen**
 
 `mobile/lib/features/onboarding/onboarding_providers.dart`:
 ```dart
@@ -2046,7 +2066,7 @@ class _RedirectOnceState extends State<_RedirectOnce> {
 }
 ```
 
-- [ ] **Step 6: Register the `/onboarding-router` route in `main.dart`**
+- [x] **Step 6: Register the `/onboarding-router` route in `main.dart`**
 
 Modify `mobile/lib/main.dart` to add the import and route:
 ```dart
@@ -2059,7 +2079,7 @@ routes: {
 },
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add mobile/lib/features/onboarding mobile/lib/main.dart mobile/test/features/onboarding
@@ -2080,7 +2100,7 @@ git commit -m "feat: add onboarding status repository and routing screen"
 - Consumes: `SensoryProfileRepository` (created in this task, mirroring `UsersRepository`'s pattern from Task 11), `apiClientProvider` (Task 10).
 - Produces: `AnamneseAnswers` model, `AnamneseNotifier` (Riverpod `StateNotifier<AnamneseAnswers>`) with `setTolerancia`, `toggleGatilho`, `setTom`, and `submit(): Future<void>`. Route `/onboarding/anamnese` registered in `main.dart`, navigating to `/onboarding/contacts` (Task 13) on success.
 
-- [ ] **Step 1: Write the failing notifier test**
+- [x] **Step 1: Write the failing notifier test**
 
 `mobile/test/features/onboarding/anamnese/anamnese_notifier_test.dart`:
 ```dart
@@ -2124,14 +2144,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/features/onboarding/anamnese/anamnese_notifier_test.dart
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the answers model and repository**
+- [x] **Step 3: Implement the answers model and repository**
 
 `mobile/lib/features/onboarding/anamnese/anamnese_answers.dart`:
 ```dart
@@ -2183,7 +2203,7 @@ class SensoryProfileRepository {
 }
 ```
 
-- [ ] **Step 4: Implement AnamneseNotifier**
+- [x] **Step 4: Implement AnamneseNotifier**
 
 `mobile/lib/features/onboarding/anamnese/anamnese_notifier.dart`:
 ```dart
@@ -2220,14 +2240,14 @@ class AnamneseNotifier extends StateNotifier<AnamneseAnswers> {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/features/onboarding/anamnese/anamnese_notifier_test.dart
 ```
 Expected: PASS, 2 tests.
 
-- [ ] **Step 6: Build the wizard screen (4 steps in a `PageView`)**
+- [x] **Step 6: Build the wizard screen (4 steps in a `PageView`)**
 
 `mobile/lib/features/onboarding/anamnese/anamnese_providers.dart`:
 ```dart
@@ -2475,7 +2495,7 @@ class _ChoiceButton extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 7: Register the `/onboarding/anamnese` route**
+- [x] **Step 7: Register the `/onboarding/anamnese` route**
 
 Modify `mobile/lib/main.dart` to add the import and route entry:
 ```dart
@@ -2484,7 +2504,7 @@ import 'features/onboarding/anamnese/anamnese_wizard_screen.dart';
 '/onboarding/anamnese': (_) => const AnamneseWizardScreen(),
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add mobile/lib/features/onboarding/anamnese mobile/lib/main.dart mobile/test/features/onboarding/anamnese
@@ -2507,7 +2527,7 @@ git commit -m "feat: add anamnese wizard with notification, triggers, tone, and 
 - Consumes: `apiClientProvider` (Task 10).
 - Produces: `TrustedContact` model, `TrustedContactsRepository.list()`, `.create(...)`, `.remove(id)`. Routes `/onboarding/contacts` and `/onboarding/contacts/add`, navigating to `/home` (Task 14) once at least one contact exists.
 
-- [ ] **Step 1: Write the failing repository test**
+- [x] **Step 1: Write the failing repository test**
 
 `mobile/test/features/trusted_contacts/trusted_contacts_repository_test.dart`:
 ```dart
@@ -2544,14 +2564,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/features/trusted_contacts/trusted_contacts_repository_test.dart
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the model and repository**
+- [x] **Step 3: Implement the model and repository**
 
 `mobile/lib/features/trusted_contacts/trusted_contact.dart`:
 ```dart
@@ -2621,14 +2641,14 @@ class TrustedContactsRepository {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/features/trusted_contacts/trusted_contacts_repository_test.dart
 ```
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Add providers and screens**
+- [x] **Step 5: Add providers and screens**
 
 `mobile/lib/features/trusted_contacts/trusted_contacts_providers.dart`:
 ```dart
@@ -2801,7 +2821,7 @@ class TrustedContactsScreen extends ConsumerWidget {
 }
 ```
 
-- [ ] **Step 6: Register the routes**
+- [x] **Step 6: Register the routes**
 
 Modify `mobile/lib/main.dart`:
 ```dart
@@ -2810,7 +2830,7 @@ import 'features/trusted_contacts/trusted_contacts_screen.dart';
 '/onboarding/contacts': (_) => const TrustedContactsScreen(),
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add mobile/lib/features/trusted_contacts mobile/lib/main.dart mobile/test/features/trusted_contacts
@@ -2833,7 +2853,7 @@ git commit -m "feat: add trusted contacts list, add-contact form, and mandatory 
 - Consumes: `apiClientProvider` (Task 10), `TrustedContactsRepository`/`trustedContactsListProvider` (Task 13).
 - Produces: `EmergencyMessage` model, `EmergencyRepository.buildMessage(contactId): Future<EmergencyMessage>`. `HomeScreen` (route `/home`) with the "Avisar Rede de Apoio" button that opens the resulting `waUrl` via `url_launcher`.
 
-- [ ] **Step 1: Write the failing repository test**
+- [x] **Step 1: Write the failing repository test**
 
 `mobile/test/features/emergency/emergency_repository_test.dart`:
 ```dart
@@ -2867,14 +2887,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd mobile && flutter test test/features/emergency/emergency_repository_test.dart
 ```
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the model and repository**
+- [x] **Step 3: Implement the model and repository**
 
 `mobile/lib/features/emergency/emergency_message.dart`:
 ```dart
@@ -2922,14 +2942,14 @@ class EmergencyRepository {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd mobile && flutter test test/features/emergency/emergency_repository_test.dart
 ```
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Add the provider, emergency button, and home screen**
+- [x] **Step 5: Add the provider, emergency button, and home screen**
 
 `mobile/lib/features/emergency/emergency_providers.dart`:
 ```dart
@@ -3026,7 +3046,7 @@ class HomeScreen extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 6: Register the `/home` route**
+- [x] **Step 6: Register the `/home` route**
 
 Modify `mobile/lib/main.dart`:
 ```dart
@@ -3035,7 +3055,7 @@ import 'features/home/home_screen.dart';
 '/home': (_) => const HomeScreen(),
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add mobile/lib/features/emergency mobile/lib/features/home mobile/lib/main.dart mobile/test/features/emergency
@@ -3045,6 +3065,8 @@ git commit -m "feat: add home screen with emergency wa.me handoff flow"
 ---
 
 ### Task 15: Post-onboarding profile & contacts management (added post-final-review)
+
+**Status: ✅ Done** (commits `b3ea0f5..f0c32dd`, one fix round — edit mode initially opened a blank wizard instead of loading the saved profile; fixed by adding `SensoryProfileRepository.get()` + `AnamneseAnswers.fromJson` + seeding the notifier before the wizard renders).
 
 **Why:** The design spec's objective 5 ("Edite ou apague seu perfil sensorial e seus contatos a qualquer momento") and its "Direito de exclusão" LGPD requirement (`docs/superpowers/specs/2026-08-01-onboarding-anamnese-rede-apoio-design.md` line 25, line 166-167) were never assigned to any of Tasks 1-14. The final whole-branch review caught this: `/home` has no outgoing navigation at all, `TrustedContactsRepository.remove()` and the backend's `DELETE /trusted-contacts/:id` are dead code with no caller, `AuthService.signOut()` is dead code, and there is no delete endpoint for the sensory profile at all.
 

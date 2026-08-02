@@ -11,7 +11,16 @@ class HomeScreen extends ConsumerWidget {
     final contactsAsync = ref.watch(trustedContactsListProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sincro')),
+      appBar: AppBar(
+        title: const Text('Sincro'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Configurações',
+            onPressed: () => Navigator.of(context).pushNamed('/settings'),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

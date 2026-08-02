@@ -8,4 +8,8 @@ class SensoryProfileRepository {
   Future<void> upsert(Map<String, dynamic> dados) async {
     await _dio.put('/sensory-profile', data: {'dados': dados});
   }
+
+  Future<void> remove() async {
+    await _dio.delete('/sensory-profile');
+  }
 }

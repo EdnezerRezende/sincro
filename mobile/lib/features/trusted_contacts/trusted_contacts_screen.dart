@@ -6,6 +6,33 @@ import 'trusted_contacts_providers.dart';
 class TrustedContactsScreen extends ConsumerWidget {
   const TrustedContactsScreen({super.key});
 
+  Future<void> _confirmAndRemove(BuildContext context, WidgetRef ref, String id, String nome) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remover contato?'),
+        content: Text('$nome deixará de fazer parte da sua rede de apoio. Você pode adicionar novamente quando quiser.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Remover')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(trustedContactsRepositoryProvider).remove(id);
+      ref.invalidate(trustedContactsListProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível remover o contato. Tente novamente.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contactsAsync = ref.watch(trustedContactsListProvider);
@@ -26,7 +53,15 @@ class TrustedContactsScreen extends ConsumerWidget {
             itemCount: contacts.length,
             itemBuilder: (context, index) {
               final contact = contacts[index];
-              return ListTile(title: Text(contact.nome), subtitle: Text(contact.relacao));
+              return ListTile(
+                title: Text(contact.nome),
+                subtitle: Text(contact.relacao),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Remover contato',
+                  onPressed: () => _confirmAndRemove(context, ref, contact.id, contact.nome),
+                ),
+              );
             },
           );
         },

@@ -11,7 +11,12 @@ const _gatilhosDisponiveis = [
 ];
 
 class AnamneseWizardScreen extends ConsumerStatefulWidget {
-  const AnamneseWizardScreen({super.key});
+  const AnamneseWizardScreen({super.key, this.isEditing = false});
+
+  /// When true, this screen is being reused post-onboarding to edit an
+  /// existing sensory profile, so submitting should simply return to the
+  /// caller instead of continuing the onboarding flow.
+  final bool isEditing;
 
   @override
   ConsumerState<AnamneseWizardScreen> createState() => _AnamneseWizardScreenState();
@@ -35,8 +40,23 @@ class _AnamneseWizardScreenState extends ConsumerState<AnamneseWizardScreen> {
 
   Future<void> _finish() async {
     setState(() => _submitting = true);
-    await ref.read(anamneseNotifierProvider.notifier).submit();
-    if (mounted) Navigator.of(context).pushReplacementNamed('/onboarding/contacts');
+    try {
+      await ref.read(anamneseNotifierProvider.notifier).submit();
+      if (!mounted) return;
+      if (widget.isEditing) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/onboarding/contacts');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível salvar seu perfil. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override

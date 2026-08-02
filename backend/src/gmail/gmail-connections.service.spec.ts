@@ -72,6 +72,19 @@ describe('GmailConnectionsService', () => {
     expect(prisma.gmailConnection.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } });
   });
 
+  it('disconnect still deletes local rows when revoking with Google fails (e.g. already-revoked token)', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    prisma.gmailConnection.findUnique.mockResolvedValue({ refreshTokenCriptografado: 'encrypted(rt-123)' });
+    oauthService.revoke.mockRejectedValue(new Error('invalid_grant'));
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    await expect(service.disconnect('fb1')).resolves.not.toThrow();
+
+    expect(oauthService.revoke).toHaveBeenCalledWith('rt-123');
+    expect(prisma.emailSummary.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+    expect(prisma.gmailConnection.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+  });
+
   it('disconnect is a no-op-safe call when there is nothing to disconnect', async () => {
     const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
     prisma.gmailConnection.findUnique.mockResolvedValue(null);

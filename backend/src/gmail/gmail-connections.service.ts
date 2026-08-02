@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { TokenCryptoService } from '../crypto/token-crypto.service';
@@ -6,6 +6,8 @@ import { GmailOAuthService } from './gmail-oauth.service';
 
 @Injectable()
 export class GmailConnectionsService {
+  private readonly logger = new Logger(GmailConnectionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
@@ -43,7 +45,18 @@ export class GmailConnectionsService {
     const connection = await this.prisma.gmailConnection.findUnique({ where: { userId: user.id } });
     if (connection) {
       const refreshToken = this.tokenCrypto.decrypt(connection.refreshTokenCriptografado);
-      await this.oauthService.revoke(refreshToken);
+      try {
+        await this.oauthService.revoke(refreshToken);
+      } catch (error) {
+        // Revoking with Google is best-effort: if the user already revoked access externally
+        // (invalid_grant/invalid_token) or there's a transient network error, we still must
+        // remove local state so the user isn't stuck "connected" with a stale token.
+        this.logger.warn(
+          `Failed to revoke Gmail refresh token with Google during disconnect (continuing with local cleanup): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
     await this.prisma.emailSummary.deleteMany({ where: { userId: user.id } });
     await this.prisma.gmailConnection.deleteMany({ where: { userId: user.id } });

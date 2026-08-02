@@ -1,3 +1,4 @@
+import { UnprocessableEntityException } from '@nestjs/common';
 import { GmailOAuthService } from './gmail-oauth.service';
 
 jest.mock('googleapis', () => {
@@ -41,5 +42,18 @@ describe('GmailOAuthService', () => {
     const service = new GmailOAuthService();
 
     await expect(service.exchangeServerAuthCode('code-abc')).rejects.toThrow(/refresh token/i);
+  });
+
+  it('maps the missing-refresh-token case to an UnprocessableEntityException so the guidance message reaches the client', async () => {
+    const { google } = jest.requireMock('googleapis');
+    const mockClient = google.auth.OAuth2();
+    mockClient.getToken.mockResolvedValue({ tokens: { access_token: 'at-123' } });
+
+    const service = new GmailOAuthService();
+
+    await expect(service.exchangeServerAuthCode('code-abc')).rejects.toThrow(UnprocessableEntityException);
+    await expect(service.exchangeServerAuthCode('code-abc')).rejects.toThrow(
+      /revogue o acesso em https:\/\/myaccount\.google\.com\/permissions/,
+    );
   });
 });

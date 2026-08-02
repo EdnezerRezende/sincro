@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { google } from 'googleapis';
 
 @Injectable()
@@ -11,7 +11,7 @@ export class GmailOAuthService {
     const client = this.buildClient();
     const { tokens } = await client.getToken(serverAuthCode);
     if (!tokens.refresh_token) {
-      throw new Error(
+      throw new UnprocessableEntityException(
         'O Google não retornou um refresh token. Isso geralmente acontece quando o acesso já ' +
           'foi concedido antes — revogue o acesso em https://myaccount.google.com/permissions ' +
           'e tente conectar novamente.',

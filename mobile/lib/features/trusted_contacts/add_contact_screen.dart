@@ -35,7 +35,7 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      setState(() => _error = 'Não foi possível salvar o contato. Verifique os dados e tente novamente.');
+      if (mounted) setState(() => _error = 'Não foi possível salvar o contato. Verifique os dados e tente novamente.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

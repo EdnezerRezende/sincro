@@ -17,18 +17,28 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
   String _relacao = _relacoes.first;
   bool _consentimentoAceito = false;
   bool _saving = false;
+  String? _error;
 
   Future<void> _save() async {
-    setState(() => _saving = true);
-    final repository = ref.read(trustedContactsRepositoryProvider);
-    await repository.create(
-      nome: _nomeController.text.trim(),
-      relacao: _relacao,
-      whatsapp: _whatsappController.text.trim(),
-      prioridade: 0,
-      consentimentoAceito: _consentimentoAceito,
-    );
-    if (mounted) Navigator.of(context).pop(true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final repository = ref.read(trustedContactsRepositoryProvider);
+      await repository.create(
+        nome: _nomeController.text.trim(),
+        relacao: _relacao,
+        whatsapp: _whatsappController.text.trim(),
+        prioridade: 0,
+        consentimentoAceito: _consentimentoAceito,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _error = 'Não foi possível salvar o contato. Verifique os dados e tente novamente.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -73,6 +83,7 @@ class _AddContactScreenState extends ConsumerState<AddContactScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             ElevatedButton(
               onPressed: canSave ? _save : null,
               child: _saving ? const CircularProgressIndicator() : const Text('Salvar contato'),

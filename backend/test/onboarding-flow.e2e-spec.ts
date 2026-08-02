@@ -166,4 +166,55 @@ describe('Onboarding flow (e2e)', () => {
       .send({ contactId: ownerContactId })
       .expect(404);
   });
+
+  it('deletes the sensory profile scoped to the resolved user, leaving other tenants untouched', async () => {
+    await request(app.getHttpServer())
+      .post('/users/me')
+      .set(authHeader)
+      .send({ nome: 'Usuário E2E' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/users/me')
+      .set(otherAuthHeader)
+      .send({ nome: 'Outro Usuário E2E' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .put('/sensory-profile')
+      .set(authHeader)
+      .send({ dados: { toleranciaNotificacao: 'SILENCIOSAS' } })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put('/sensory-profile')
+      .set(otherAuthHeader)
+      .send({ dados: { toleranciaNotificacao: 'PADRAO' } })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .delete('/sensory-profile')
+      .set(authHeader)
+      .expect(200);
+
+    const meAfterDelete = await request(app.getHttpServer())
+      .get('/users/me')
+      .set(authHeader)
+      .expect(200);
+    expect((meAfterDelete.body as MeResponseBody).hasSensoryProfile).toBe(false);
+
+    const otherMeAfterDelete = await request(app.getHttpServer())
+      .get('/users/me')
+      .set(otherAuthHeader)
+      .expect(200);
+    expect((otherMeAfterDelete.body as MeResponseBody).hasSensoryProfile).toBe(true);
+
+    // Deleting again (no profile left) must not throw.
+    await request(app.getHttpServer())
+      .delete('/sensory-profile')
+      .set(authHeader)
+      .expect(200);
+  });
+
+  it('rejects sensory-profile deletion without a valid Firebase token', async () => {
+    await request(app.getHttpServer()).delete('/sensory-profile').expect(401);
+  });
 });

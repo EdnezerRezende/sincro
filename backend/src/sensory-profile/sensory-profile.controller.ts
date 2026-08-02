@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Put, UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { CurrentFirebaseUid } from '../common/current-firebase-uid.decorator';
 import { SensoryProfileService } from './sensory-profile.service';
@@ -17,5 +17,11 @@ export class SensoryProfileController {
   @Get()
   async get(@CurrentFirebaseUid() firebaseUid: string) {
     return this.service.get(firebaseUid);
+  }
+
+  @Delete()
+  async remove(@CurrentFirebaseUid() firebaseUid: string) {
+    await this.service.remove(firebaseUid);
+    return { success: true };
   }
 }

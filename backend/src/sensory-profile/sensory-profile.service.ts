@@ -22,4 +22,11 @@ export class SensoryProfileService {
     const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
     return this.prisma.sensoryProfile.findUnique({ where: { userId: user.id } });
   }
+
+  async remove(firebaseUid: string): Promise<void> {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    await this.prisma.sensoryProfile.deleteMany({
+      where: { userId: user.id },
+    });
+  }
 }

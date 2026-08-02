@@ -49,4 +49,15 @@ describe('UsersService', () => {
       trustedContactCount: 2,
     });
   });
+
+  it('registers an fcm token for the resolved user', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1' });
+    prisma.user.update = jest.fn();
+    const service = new UsersService(prisma as any);
+
+    await service.registerFcmToken('fb1', 'token-xyz');
+
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { fcmToken: 'token-xyz' } });
+  });
 });

@@ -35,4 +35,9 @@ export class UsersService {
       trustedContactCount,
     };
   }
+
+  async registerFcmToken(firebaseUid: string, fcmToken: string): Promise<void> {
+    const user = await this.getByFirebaseUidOrThrow(firebaseUid);
+    await this.prisma.user.update({ where: { id: user.id }, data: { fcmToken } });
+  }
 }

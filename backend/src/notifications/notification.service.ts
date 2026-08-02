@@ -1,13 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import * as admin from 'firebase-admin';
 import { FIREBASE_ADMIN } from '../auth/firebase-admin.provider';
+import type { FirebaseAdmin } from '../auth/firebase-admin.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { SensoryProfileService } from '../sensory-profile/sensory-profile.service';
 
 @Injectable()
 export class NotificationService {
   constructor(
-    @Inject(FIREBASE_ADMIN) private readonly firebaseAdmin: typeof admin,
+    @Inject(FIREBASE_ADMIN) private readonly firebaseAdmin: FirebaseAdmin,
     private readonly prisma: PrismaService,
     private readonly sensoryProfileService: SensoryProfileService,
   ) {}

@@ -7,6 +7,7 @@ import 'features/auth/signup_screen.dart';
 import 'features/onboarding/onboarding_router.dart';
 import 'features/onboarding/anamnese/anamnese_wizard_screen.dart';
 import 'features/trusted_contacts/trusted_contacts_screen.dart';
+import 'features/home/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ class SincroApp extends StatelessWidget {
         '/onboarding-router': (_) => const OnboardingRouterScreen(),
         '/onboarding/anamnese': (_) => const AnamneseWizardScreen(),
         '/onboarding/contacts': (_) => const TrustedContactsScreen(),
+        '/home': (_) => const HomeScreen(),
       },
     );
   }

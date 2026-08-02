@@ -1,0 +1,52 @@
+import { NotFoundException } from '@nestjs/common';
+import { UsersService } from './users.service';
+
+function buildPrismaMock() {
+  return {
+    user: { upsert: jest.fn(), findUnique: jest.fn() },
+    sensoryProfile: { findUnique: jest.fn() },
+    trustedContact: { count: jest.fn() },
+  };
+}
+
+describe('UsersService', () => {
+  it('upserts a user by firebaseUid', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana' });
+    const service = new UsersService(prisma as any);
+
+    const result = await service.upsertByFirebaseUid('fb1', 'Ana');
+
+    expect(prisma.user.upsert).toHaveBeenCalledWith({
+      where: { firebaseUid: 'fb1' },
+      update: { nome: 'Ana' },
+      create: { firebaseUid: 'fb1', nome: 'Ana' },
+    });
+    expect(result.nome).toBe('Ana');
+  });
+
+  it('throws NotFoundException when the user does not exist yet', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    const service = new UsersService(prisma as any);
+
+    await expect(service.getByFirebaseUidOrThrow('missing')).rejects.toThrow(NotFoundException);
+  });
+
+  it('builds onboarding status combining profile and contact count', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana' });
+    prisma.sensoryProfile.findUnique.mockResolvedValue({ id: 'sp1' });
+    prisma.trustedContact.count.mockResolvedValue(2);
+    const service = new UsersService(prisma as any);
+
+    const status = await service.getOnboardingStatus('fb1');
+
+    expect(status).toEqual({
+      userId: 'u1',
+      nome: 'Ana',
+      hasSensoryProfile: true,
+      trustedContactCount: 2,
+    });
+  });
+});

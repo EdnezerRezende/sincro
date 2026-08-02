@@ -3044,6 +3044,33 @@ git commit -m "feat: add home screen with emergency wa.me handoff flow"
 
 ---
 
+### Task 15: Post-onboarding profile & contacts management (added post-final-review)
+
+**Why:** The design spec's objective 5 ("Edite ou apague seu perfil sensorial e seus contatos a qualquer momento") and its "Direito de exclusão" LGPD requirement (`docs/superpowers/specs/2026-08-01-onboarding-anamnese-rede-apoio-design.md` line 25, line 166-167) were never assigned to any of Tasks 1-14. The final whole-branch review caught this: `/home` has no outgoing navigation at all, `TrustedContactsRepository.remove()` and the backend's `DELETE /trusted-contacts/:id` are dead code with no caller, `AuthService.signOut()` is dead code, and there is no delete endpoint for the sensory profile at all.
+
+**Files:**
+- Create: `backend/src/sensory-profile/dto/` — no new DTO needed (delete has no body)
+- Modify: `backend/src/sensory-profile/sensory-profile.service.ts` (add `remove(firebaseUid): Promise<void>`)
+- Modify: `backend/src/sensory-profile/sensory-profile.controller.ts` (add `@Delete()` route)
+- Modify/Test: `backend/src/sensory-profile/sensory-profile.service.spec.ts`
+- Modify: `mobile/lib/features/onboarding/anamnese/sensory_profile_repository.dart` (add `remove(): Future<void>` calling `DELETE /sensory-profile`)
+- Modify: `mobile/lib/features/onboarding/anamnese/anamnese_wizard_screen.dart` (support an "edit mode" so it can be reused post-onboarding without forcing navigation into `/onboarding/contacts`)
+- Modify: `mobile/lib/features/trusted_contacts/trusted_contacts_screen.dart` (add a delete affordance per contact, calling the existing `TrustedContactsRepository.remove(id)`)
+- Create: `mobile/lib/features/settings/settings_screen.dart` (new screen: edit/delete sensory profile, link to manage contacts, sign out)
+- Modify: `mobile/lib/features/home/home_screen.dart` (add an entry point — e.g. an AppBar icon — to the new settings screen)
+- Modify: `mobile/lib/main.dart` (register the new route)
+
+**Interfaces:**
+- Consumes: `SensoryProfileRepository` (Task 12), `TrustedContactsRepository` (Task 13), `AuthService` (Task 9), existing `AnamneseWizardScreen` and `TrustedContactsScreen`.
+- Produces: `SensoryProfileService.remove(firebaseUid): Promise<void>` / `DELETE /sensory-profile` (scoped by `userId` derived from the verified token, same tenant-isolation pattern as every other service). `SensoryProfileRepository.remove(): Future<void>`. A reachable settings/management screen from `/home`.
+
+**Global constraints that bind this task (same as the rest of the plan):**
+- Tenant isolation stays application-layer only — `remove()` must scope by `userId` derived server-side, never a client-supplied id.
+- No new business data goes to Firebase.
+- Deleting the sensory profile or a contact must be an explicit, confirmed user action (confirmation dialog before either delete) — this is destructive, irreversible data loss from the user's perspective.
+
+---
+
 ## Plan Self-Review Notes
 
 - **Spec coverage:** Onboarding flow (Tasks 9, 11), anamnese wizard 4 steps (Task 12), trusted contacts + consent (Tasks 6, 13), emergency wa.me flow (Tasks 7, 14), tenant isolation via app-layer `user_id` scoping (Tasks 4–7, enforced in every service method), Firebase Auth + Postgres integration (Tasks 2–3), e2e coverage of the full chain (Task 8). All spec sections have a corresponding task.

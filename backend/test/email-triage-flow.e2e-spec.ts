@@ -17,7 +17,10 @@ describe('Email triage flow (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let emailSyncService: EmailSyncService;
-  const authHeader = { Authorization: 'Bearer test-uid:triage-user-1' };
+  const firebaseUid1 = 'triage-user-1';
+  const firebaseUid2 = 'triage-user-2';
+  const authHeader = { Authorization: `Bearer test-uid:${firebaseUid1}` };
+  const otherAuthHeader = { Authorization: `Bearer test-uid:${firebaseUid2}` };
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -39,13 +42,18 @@ describe('Email triage flow (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.emailSummary.deleteMany({});
-    await prisma.gmailConnection.deleteMany({});
-    await prisma.user.deleteMany({ where: { firebaseUid: 'triage-user-1' } });
+    for (const firebaseUid of [firebaseUid1, firebaseUid2]) {
+      const user = await prisma.user.findUnique({ where: { firebaseUid } });
+      if (user) {
+        await prisma.emailSummary.deleteMany({ where: { userId: user.id } });
+        await prisma.gmailConnection.deleteMany({ where: { userId: user.id } });
+      }
+    }
+    await prisma.user.deleteMany({ where: { firebaseUid: { in: [firebaseUid1, firebaseUid2] } } });
     await app.close();
   });
 
-  it('connects Gmail, syncs, lists derived summaries without email bodies, and wipes everything on disconnect', async () => {
+  it('connects Gmail, syncs, and lists derived summaries without email bodies', async () => {
     await request(app.getHttpServer())
       .post('/users/me')
       .set(authHeader)
@@ -55,14 +63,14 @@ describe('Email triage flow (e2e)', () => {
     await request(app.getHttpServer())
       .post('/gmail/connect')
       .set(authHeader)
-      .send({ serverAuthCode: 'test-code' })
+      .send({ serverAuthCode: 'test-code-1' })
       .expect(201);
 
     const status = await request(app.getHttpServer()).get('/gmail/connection').set(authHeader).expect(200);
     expect(status.body).toEqual({ connected: true, gmailEmail: 'usuario.teste@gmail.com' });
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: 'triage-user-1' } });
-    await emailSyncService.syncUser(user.id);
+    const user1 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid1 } });
+    await emailSyncService.syncUser(user1.id);
 
     const summaries = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
     expect(summaries.body).toHaveLength(2);
@@ -75,7 +83,39 @@ describe('Email triage flow (e2e)', () => {
     for (const summary of summaries.body) {
       expect(summary).not.toHaveProperty('corpo');
     }
+  });
 
+  it('does not leak email summaries across tenants while both have synced data', async () => {
+    // A second tenant connects and syncs independently. Both tenants now have
+    // their own 2 rows coexisting in the emailSummary table (4 rows total),
+    // which is what makes the per-tenant assertions below falsifiable: if
+    // EmailSyncService.list() ever lost its userId scoping, each GET below
+    // would return 4 rows instead of 2.
+    await request(app.getHttpServer())
+      .post('/users/me')
+      .set(otherAuthHeader)
+      .send({ nome: 'Outro Usuário' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/gmail/connect')
+      .set(otherAuthHeader)
+      .send({ serverAuthCode: 'test-code-2' })
+      .expect(201);
+
+    const user2 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid2 } });
+    await emailSyncService.syncUser(user2.id);
+
+    const totalRowsInDb = await prisma.emailSummary.count();
+    expect(totalRowsInDb).toBe(4);
+
+    const tenant1Summaries = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
+    const tenant2Summaries = await request(app.getHttpServer()).get('/resumos-email').set(otherAuthHeader).expect(200);
+
+    expect(tenant1Summaries.body).toHaveLength(2);
+    expect(tenant2Summaries.body).toHaveLength(2);
+  });
+
+  it("disconnecting one tenant's Gmail wipes only that tenant's rows, leaving the other tenant untouched", async () => {
     await request(app.getHttpServer()).delete('/gmail/connection').set(authHeader).expect(200);
 
     const afterDisconnect = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
@@ -85,15 +125,14 @@ describe('Email triage flow (e2e)', () => {
       .set(authHeader)
       .expect(200);
     expect(connectionAfterDisconnect.body).toEqual({ connected: false, gmailEmail: null });
-  });
 
-  it('does not leak email summaries across tenants', async () => {
-    const otherAuthHeader = { Authorization: 'Bearer test-uid:triage-user-2' };
-    await request(app.getHttpServer()).post('/users/me').set(otherAuthHeader).send({ nome: 'Outro Usuário' }).expect(201);
-
-    const otherSummaries = await request(app.getHttpServer()).get('/resumos-email').set(otherAuthHeader).expect(200);
-    expect(otherSummaries.body).toEqual([]);
-
-    await prisma.user.deleteMany({ where: { firebaseUid: 'triage-user-2' } });
+    // The other tenant's connection and summaries must survive tenant 1's disconnect.
+    const tenant2Summaries = await request(app.getHttpServer()).get('/resumos-email').set(otherAuthHeader).expect(200);
+    expect(tenant2Summaries.body).toHaveLength(2);
+    const tenant2Connection = await request(app.getHttpServer())
+      .get('/gmail/connection')
+      .set(otherAuthHeader)
+      .expect(200);
+    expect(tenant2Connection.body).toEqual({ connected: true, gmailEmail: 'usuario.teste@gmail.com' });
   });
 });

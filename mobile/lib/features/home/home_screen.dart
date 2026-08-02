@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
@@ -5,11 +6,37 @@ import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
 import 'emergency_button.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _registerFcmToken());
+  }
+
+  Future<void> _registerFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission();
+      final token = await messaging.getToken();
+      if (token != null) {
+        await ref.read(fcmTokenRepositoryProvider).register(token);
+      }
+    } catch (_) {
+      // Registro de notificação é best-effort: o app continua funcionando
+      // normalmente mesmo se o dispositivo não conseguir registrar o token
+      // (ex: emulador sem Google Play Services, permissão negada).
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final contactsAsync = ref.watch(trustedContactsListProvider);
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
 

@@ -9,6 +9,7 @@ import 'features/onboarding/anamnese/anamnese_wizard_screen.dart';
 import 'features/trusted_contacts/trusted_contacts_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/email_triage/inbox_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,7 @@ class SincroApp extends StatelessWidget {
         '/onboarding/contacts': (_) => const TrustedContactsScreen(),
         '/home': (_) => const HomeScreen(),
         '/settings': (_) => const SettingsScreen(),
+        '/inbox': (_) => const InboxScreen(),
       },
     );
   }

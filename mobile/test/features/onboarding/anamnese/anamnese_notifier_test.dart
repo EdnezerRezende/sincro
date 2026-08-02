@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sincro_mobile/features/onboarding/anamnese/anamnese_answers.dart';
 import 'package:sincro_mobile/features/onboarding/anamnese/anamnese_notifier.dart';
 import 'package:sincro_mobile/features/onboarding/anamnese/sensory_profile_repository.dart';
 
@@ -52,6 +53,21 @@ void main() {
       'tomPreferido': null,
       'outroGatilho': 'Situações não antecipadas',
     });
+  });
+
+  test('seed replaces the current state with previously saved answers', () {
+    final notifier = AnamneseNotifier(mockRepository);
+    notifier.setTolerancia('SILENCIOSAS');
+
+    notifier.seed(const AnamneseAnswers(
+      toleranciaNotificacao: 'PADRAO',
+      gatilhos: ['Ambientes barulhentos'],
+      tomPreferido: 'EXPLICATIVO',
+    ));
+
+    expect(notifier.state.toleranciaNotificacao, 'PADRAO');
+    expect(notifier.state.gatilhos, ['Ambientes barulhentos']);
+    expect(notifier.state.tomPreferido, 'EXPLICATIVO');
   });
 
   test('outroGatilho is omitted from submitted data when empty', () async {

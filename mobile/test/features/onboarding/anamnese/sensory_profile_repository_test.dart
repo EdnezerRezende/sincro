@@ -19,6 +19,46 @@ void main() {
     });
   });
 
+  test('get parses the saved dados blob from the profile response', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: {
+          'id': 'sp1',
+          'userId': 'u1',
+          'dados': {
+            'toleranciaNotificacao': 'PADRAO',
+            'gatilhos': ['Ambientes barulhentos'],
+            'tomPreferido': 'EXPLICATIVO',
+          },
+        },
+      ));
+    }));
+    final repository = SensoryProfileRepository(dio);
+
+    final dados = await repository.get();
+
+    expect(dados, {
+      'toleranciaNotificacao': 'PADRAO',
+      'gatilhos': ['Ambientes barulhentos'],
+      'tomPreferido': 'EXPLICATIVO',
+    });
+  });
+
+  test('get returns null when the user has no saved profile', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.resolve(Response(requestOptions: options, statusCode: 200, data: null));
+    }));
+    final repository = SensoryProfileRepository(dio);
+
+    final dados = await repository.get();
+
+    expect(dados, isNull);
+  });
+
   test('remove deletes the sensory profile', () async {
     final dio = Dio(BaseOptions(baseUrl: 'http://test'));
     String? capturedPath;

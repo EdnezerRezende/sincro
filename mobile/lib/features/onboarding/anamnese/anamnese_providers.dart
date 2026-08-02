@@ -37,6 +37,18 @@ class _AnamneseNotifierWrapper extends Notifier<AnamneseAnswers> {
     state = _notifier.state;
   }
 
+  /// Fetches the user's previously saved sensory profile (if any) and seeds
+  /// the wizard's in-progress state from it. Used when the wizard is opened
+  /// in edit mode, so editing doesn't start from a blank slate and silently
+  /// discard unedited fields on submit.
+  Future<void> loadExisting() async {
+    final dados = await ref.read(sensoryProfileRepositoryProvider).get();
+    if (dados != null) {
+      _notifier.seed(AnamneseAnswers.fromJson(dados));
+      state = _notifier.state;
+    }
+  }
+
   Future<void> submit() async {
     await _notifier.submit();
   }

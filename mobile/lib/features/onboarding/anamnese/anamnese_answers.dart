@@ -11,6 +11,15 @@ class AnamneseAnswers {
   final String? tomPreferido;
   final String? outroGatilho;
 
+  factory AnamneseAnswers.fromJson(Map<String, dynamic> json) {
+    return AnamneseAnswers(
+      toleranciaNotificacao: json['toleranciaNotificacao'] as String?,
+      gatilhos: (json['gatilhos'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
+      tomPreferido: json['tomPreferido'] as String?,
+      outroGatilho: json['outroGatilho'] as String?,
+    );
+  }
+
   AnamneseAnswers copyWith({
     String? toleranciaNotificacao,
     List<String>? gatilhos,

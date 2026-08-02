@@ -29,6 +29,12 @@ class AnamneseNotifier {
     state = state.copyWith(outroGatilho: value);
   }
 
+  /// Replaces the current in-progress answers with previously saved ones
+  /// (used to seed the wizard when it's reopened in edit mode).
+  void seed(AnamneseAnswers answers) {
+    state = answers;
+  }
+
   Future<void> submit() async {
     await _repository.upsert(state.toJson());
   }

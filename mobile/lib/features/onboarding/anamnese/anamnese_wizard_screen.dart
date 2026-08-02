@@ -26,6 +26,31 @@ class _AnamneseWizardScreenState extends ConsumerState<AnamneseWizardScreen> {
   final _pageController = PageController();
   int _step = 0;
   bool _submitting = false;
+  bool _loadingExisting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEditing) {
+      _loadingExisting = true;
+      // Seed the wizard from the previously saved profile so editing
+      // doesn't start from a blank slate (which would silently discard
+      // unedited fields when the user confirms).
+      Future.microtask(() async {
+        try {
+          await ref.read(anamneseNotifierProvider.notifier).loadExisting();
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Não foi possível carregar seu perfil salvo. Você pode preenchê-lo novamente.')),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _loadingExisting = false);
+        }
+      });
+    }
+  }
 
   void _goToStep(int step) {
     setState(() => _step = step);
@@ -63,6 +88,10 @@ class _AnamneseWizardScreenState extends ConsumerState<AnamneseWizardScreen> {
   Widget build(BuildContext context) {
     final answers = ref.watch(anamneseNotifierProvider);
     final notifier = ref.read(anamneseNotifierProvider.notifier);
+
+    if (_loadingExisting) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text('Sobre você (${_step + 1}/4)')),

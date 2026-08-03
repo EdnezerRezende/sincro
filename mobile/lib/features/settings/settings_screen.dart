@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_providers.dart';
+import '../biofeedback/biofeedback_frequencia.dart';
+import '../biofeedback/biofeedback_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
@@ -222,6 +224,86 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _editBiofeedbackFrequencia() async {
+    final atual = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
+    if (!mounted) return;
+
+    final escolhida = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Frequência de atualização'),
+        children: BiofeedbackFrequencia.values.map((f) {
+          return RadioListTile<int>(
+            title: Text(f.label),
+            value: f.duracao.inMinutes,
+            groupValue: atual,
+            onChanged: (v) => Navigator.pop(dialogContext, v),
+          );
+        }).toList(),
+      ),
+    );
+    if (escolhida == null) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(biofeedbackCacheProvider).setFrequenciaMinutos(escolhida);
+      final ativo = await ref.read(biofeedbackCacheProvider).isAtivo();
+      if (ativo) {
+        await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: escolhida));
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Frequência atualizada.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível salvar. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _desativarBiofeedback() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desativar Biofeedback?'),
+        content: const Text(
+          'Os dados de frequência cardíaca guardados no app serão apagados. '
+          'Você pode ativar novamente quando quiser.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Desativar')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(biofeedbackBackgroundTaskProvider).cancelar();
+      await ref.read(biofeedbackCacheProvider).clear();
+      ref.invalidate(biofeedbackAtivoProvider);
+      ref.invalidate(biofeedbackResumoProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Biofeedback desativado.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível desativar. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _signOut() async {
     try {
       await ref.read(authServiceProvider).signOut();
@@ -240,6 +322,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final connectionsAsync = ref.watch(financeConnectionsProvider);
+    final biofeedbackAtivo = ref.watch(biofeedbackAtivoProvider).maybeWhen(
+          data: (ativo) => ativo,
+          orElse: () => false,
+        );
     final financeConnectionTiles = connectionsAsync.maybeWhen(
       data: (connections) => connections
           .map(
@@ -283,6 +369,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: _busy ? null : _editDiaRecebimento,
           ),
           ...financeConnectionTiles,
+          ListTile(
+            leading: const Icon(Icons.favorite_border),
+            title: const Text('Frequência do Biofeedback'),
+            onTap: _busy ? null : _editBiofeedbackFrequencia,
+          ),
+          if (biofeedbackAtivo)
+            ListTile(
+              leading: const Icon(Icons.favorite_border),
+              title: const Text('Desativar Biofeedback'),
+              onTap: _busy ? null : _desativarBiofeedback,
+            ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),

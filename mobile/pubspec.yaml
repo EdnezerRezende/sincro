@@ -46,6 +46,19 @@ dependencies:
   workmanager: ^0.9.2
   shared_preferences: ^2.5.3
 
+dependency_overrides:
+  # workmanager 0.9.2's own pubspec constrains workmanager_apple too narrowly to reach a
+  # version compatible with the workmanager_platform_interface version pub otherwise resolves
+  # (via workmanager_android's looser constraint) — without this override, pub picks
+  # workmanager_apple 0.9.4, which doesn't implement workmanager_platform_interface 0.9.4's
+  # `foregroundServiceConfig` parameter, and the whole app fails to compile. workmanager_apple
+  # 0.9.10 fixes this but needs workmanager_platform_interface >=0.10.0, which needs Flutter
+  # >=3.38.0 — newer than this project's SDK (3.32.8) — so pin platform_interface down to the
+  # version workmanager_apple 0.9.4 actually implements instead. See Prerequisite 2 in this
+  # pillar's plan.
+  workmanager_platform_interface: 0.9.3
+  workmanager_android: 0.9.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

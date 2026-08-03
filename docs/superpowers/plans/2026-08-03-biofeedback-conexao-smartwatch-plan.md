@@ -511,7 +511,7 @@ git commit -m "feat: add local shared_preferences cache for biofeedback summary"
 
 This file wraps a package that talks to native platform code — it has no automated test in this plan (there's no platform channel available under `flutter test`). Verification here is `flutter analyze` plus the manual device check called out in the spec's Testes section.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Per Prerequisite 1, confirm the `health` package's actual API against what's resolved in `mobile/pubspec.lock` before treating this as final — adjust method/type names if they differ.
 
@@ -564,12 +564,12 @@ class BiofeedbackHealthService {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `cd mobile && flutter analyze lib/features/biofeedback/biofeedback_health_service.dart`
 Expected: "No issues found!" — if the `health` package's actual API differs from what's used above (per Prerequisite 1), fix the mismatches here until this is clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_health_service.dart

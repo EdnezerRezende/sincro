@@ -35,4 +35,22 @@ export class NotificationService {
       data: { tipo: 'email_triage' },
     });
   }
+
+  async notifyContasVencendo(userId: string, count: number): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.fcmToken) return;
+
+    const sensoryProfile = await this.sensoryProfileService.get(user.firebaseUid);
+    const tolerancia = (sensoryProfile?.dados as { toleranciaNotificacao?: string } | undefined)?.toleranciaNotificacao;
+    if (tolerancia !== 'PADRAO') return;
+
+    await this.firebaseAdmin.messaging().send({
+      token: user.fcmToken,
+      notification: {
+        title: 'Sincro',
+        body: count === 1 ? '1 conta está vencendo nos próximos dias' : `${count} contas estão vencendo nos próximos dias`,
+      },
+      data: { tipo: 'finance_alert' },
+    });
+  }
 }

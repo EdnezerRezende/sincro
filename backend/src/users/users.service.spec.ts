@@ -35,7 +35,7 @@ describe('UsersService', () => {
 
   it('builds onboarding status combining profile and contact count', async () => {
     const prisma = buildPrismaMock();
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: 5 });
     prisma.sensoryProfile.findUnique.mockResolvedValue({ id: 'sp1' });
     prisma.trustedContact.count.mockResolvedValue(2);
     const service = new UsersService(prisma as any);
@@ -47,7 +47,20 @@ describe('UsersService', () => {
       nome: 'Ana',
       hasSensoryProfile: true,
       trustedContactCount: 2,
+      diaRecebimento: 5,
     });
+  });
+
+  it('exposes a null diaRecebimento when the user never set one', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: null });
+    prisma.sensoryProfile.findUnique.mockResolvedValue(null);
+    prisma.trustedContact.count.mockResolvedValue(0);
+    const service = new UsersService(prisma as any);
+
+    const status = await service.getOnboardingStatus('fb1');
+
+    expect(status.diaRecebimento).toBeNull();
   });
 
   it('registers an fcm token for the resolved user', async () => {
@@ -59,5 +72,25 @@ describe('UsersService', () => {
     await service.registerFcmToken('fb1', 'token-xyz');
 
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { fcmToken: 'token-xyz' } });
+  });
+
+  describe('updateDiaRecebimento', () => {
+    it('updates the resolved user with the given day', async () => {
+      const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }), update: jest.fn() } };
+      const service = new UsersService(prisma as any);
+
+      await service.updateDiaRecebimento('fb1', 15);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { diaRecebimento: 15 } });
+    });
+
+    it('allows clearing the day by passing null', async () => {
+      const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }), update: jest.fn() } };
+      const service = new UsersService(prisma as any);
+
+      await service.updateDiaRecebimento('fb1', null);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { diaRecebimento: null } });
+    });
   });
 });

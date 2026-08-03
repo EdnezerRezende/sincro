@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { CurrentFirebaseUid } from '../common/current-firebase-uid.decorator';
 import { UsersService } from './users.service';
 import { UpsertUserDto } from './dto/upsert-user.dto';
 import { RegisterFcmTokenDto } from './dto/register-fcm-token.dto';
+import { UpdateDiaRecebimentoDto } from './dto/update-dia-recebimento.dto';
 
 @UseGuards(FirebaseAuthGuard)
 @Controller('users')
@@ -23,6 +24,12 @@ export class UsersController {
   @Post('me/fcm-token')
   async registerFcmToken(@CurrentFirebaseUid() firebaseUid: string, @Body() dto: RegisterFcmTokenDto) {
     await this.usersService.registerFcmToken(firebaseUid, dto.fcmToken);
+    return { success: true };
+  }
+
+  @Patch('me/dia-recebimento')
+  async updateDiaRecebimento(@CurrentFirebaseUid() firebaseUid: string, @Body() dto: UpdateDiaRecebimentoDto) {
+    await this.usersService.updateDiaRecebimento(firebaseUid, dto.diaRecebimento);
     return { success: true };
   }
 }

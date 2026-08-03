@@ -12,6 +12,7 @@ import 'features/trusted_contacts/trusted_contacts_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/email_triage/inbox_screen.dart';
+import 'features/financas/financas_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -64,6 +65,7 @@ class SincroApp extends StatelessWidget {
         '/home': (_) => const HomeScreen(),
         '/settings': (_) => const SettingsScreen(),
         '/inbox': (_) => const InboxScreen(),
+        '/financas': (_) => const FinancasScreen(),
       },
     );
   }

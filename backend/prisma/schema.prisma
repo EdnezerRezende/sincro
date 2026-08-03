@@ -13,10 +13,13 @@ model User {
   createdAt       DateTime         @default(now()) @map("created_at")
   plano           String           @default("simples")
   fcmToken        String?          @map("fcm_token")
+  diaRecebimento  Int?             @map("dia_recebimento")
   sensoryProfile  SensoryProfile?
   trustedContacts TrustedContact[]
   gmailConnection GmailConnection?
   emailSummaries  EmailSummary[]
+  financeConnections FinanceConnection[]
+  boletosDda      BoletoDda[]
 
   @@map("usuarios")
 }
@@ -76,4 +79,52 @@ model EmailSummary {
   @@unique([userId, gmailMessageId])
   @@index([userId])
   @@map("resumos_email")
+}
+
+model FinanceConnection {
+  id           String           @id @default(uuid())
+  userId       String           @map("user_id")
+  user         User             @relation(fields: [userId], references: [id])
+  pluggyItemId String           @map("pluggy_item_id")
+  instituicao  String
+  status       String
+  criadoEm     DateTime         @default(now()) @map("criado_em")
+  contas       FinanceAccount[]
+
+  @@unique([userId, pluggyItemId])
+  @@index([userId])
+  @@map("conexoes_financeiras")
+}
+
+model FinanceAccount {
+  id               String            @id @default(uuid())
+  conexaoId        String            @map("conexao_id")
+  conexao          FinanceConnection @relation(fields: [conexaoId], references: [id])
+  pluggyAccountId  String            @map("pluggy_account_id")
+  tipo             String
+  nome             String
+  saldoOuFatura    Decimal           @map("saldo_ou_fatura") @db.Decimal(14, 2)
+  vencimentoFatura DateTime?         @map("vencimento_fatura") @db.Date
+  notificadoEm     DateTime?         @map("notificado_em")
+  atualizadoEm     DateTime          @default(now()) @updatedAt @map("atualizado_em")
+
+  @@unique([conexaoId, pluggyAccountId])
+  @@index([conexaoId])
+  @@map("contas_financeiras")
+}
+
+model BoletoDda {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id])
+  codigoBarras String    @map("codigo_barras")
+  valor        Decimal   @db.Decimal(14, 2)
+  vencimento   DateTime  @db.Date
+  pago         Boolean   @default(false)
+  notificadoEm DateTime? @map("notificado_em")
+  criadoEm     DateTime  @default(now()) @map("criado_em")
+
+  @@unique([userId, codigoBarras])
+  @@index([userId])
+  @@map("boletos_dda")
 }

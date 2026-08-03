@@ -70,3 +70,55 @@ describe('NotificationService', () => {
     expect(sensoryProfileService.get).not.toHaveBeenCalled();
   });
 });
+
+describe('notifyContasVencendo', () => {
+  it('sends an aggregated notification when toleranciaNotificacao is PADRAO', async () => {
+    const { firebaseAdmin, prisma, sensoryProfileService, send } = buildDeps();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', fcmToken: 'token-abc' });
+    sensoryProfileService.get.mockResolvedValue({ dados: { toleranciaNotificacao: 'PADRAO' } });
+    const service = new NotificationService(firebaseAdmin as any, prisma as any, sensoryProfileService as any);
+
+    await service.notifyContasVencendo('u1', 2);
+
+    expect(send).toHaveBeenCalledWith({
+      token: 'token-abc',
+      notification: { title: 'Sincro', body: '2 contas estão vencendo nos próximos dias' },
+      data: { tipo: 'finance_alert' },
+    });
+  });
+
+  it('uses singular phrasing for exactly one conta', async () => {
+    const { firebaseAdmin, prisma, sensoryProfileService, send } = buildDeps();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', fcmToken: 'token-abc' });
+    sensoryProfileService.get.mockResolvedValue({ dados: { toleranciaNotificacao: 'PADRAO' } });
+    const service = new NotificationService(firebaseAdmin as any, prisma as any, sensoryProfileService as any);
+
+    await service.notifyContasVencendo('u1', 1);
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ notification: expect.objectContaining({ body: '1 conta está vencendo nos próximos dias' }) }),
+    );
+  });
+
+  it('does not send when toleranciaNotificacao is SILENCIOSAS', async () => {
+    const { firebaseAdmin, prisma, sensoryProfileService, send } = buildDeps();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', fcmToken: 'token-abc' });
+    sensoryProfileService.get.mockResolvedValue({ dados: { toleranciaNotificacao: 'SILENCIOSAS' } });
+    const service = new NotificationService(firebaseAdmin as any, prisma as any, sensoryProfileService as any);
+
+    await service.notifyContasVencendo('u1', 2);
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('does not send when the user has no fcmToken registered', async () => {
+    const { firebaseAdmin, prisma, sensoryProfileService, send } = buildDeps();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', fcmToken: null });
+    const service = new NotificationService(firebaseAdmin as any, prisma as any, sensoryProfileService as any);
+
+    await service.notifyContasVencendo('u1', 2);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(sensoryProfileService.get).not.toHaveBeenCalled();
+  });
+});

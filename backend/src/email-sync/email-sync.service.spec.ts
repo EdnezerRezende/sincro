@@ -132,7 +132,7 @@ describe('EmailSyncService', () => {
     });
   });
 
-  it('does not abort the loop or skip the lastHistoryId update when create() throws an unrelated error', async () => {
+  it('does not abort the loop, but skips the lastHistoryId update, when create() throws a non-duplicate-key error', async () => {
     const deps = buildDeps();
     deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
     deps.prisma.emailSummary.findUnique.mockResolvedValue(null);
@@ -147,10 +147,56 @@ describe('EmailSyncService', () => {
 
     const result = await service.syncUser('u1');
 
+    // The loop still finishes (no throw out of syncUser), but since this message was never
+    // actually persisted for a real (non-duplicate) reason, the cursor must not advance past
+    // it — otherwise fetchIncremental would never look at it again and it'd be lost forever.
     expect(result.novosPrecisamAtencao).toBe(0);
+    expect(deps.prisma.gmailConnection.update).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the cursor when create() rejects with a non-P2002 Prisma error code', async () => {
+    const deps = buildDeps();
+    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h0' });
+    deps.prisma.emailSummary.findUnique.mockResolvedValue(null);
+    deps.prisma.emailSummary.create.mockRejectedValue(
+      Object.assign(new Error('Server has closed the connection'), { code: 'P1017' }),
+    );
+    deps.heuristicClassifier.classify.mockResolvedValue({ categoria: 'PODE_ESPERAR', resumoCurto: 'ok' });
+    deps.gmailApiClient.fetchIncremental.mockResolvedValue({
+      emails: [
+        { gmailMessageId: 'm-transient', remetente: 'x@example.com', assunto: 'A', corpo: '', recebidoEm: new Date() },
+      ],
+      historyId: 'h1',
+      historyExpired: false,
+    });
+    const service = buildService(deps);
+
+    const result = await service.syncUser('u1');
+
+    expect(result.novosPrecisamAtencao).toBe(0);
+    expect(deps.prisma.emailSummary.create).toHaveBeenCalled();
+    expect(deps.prisma.gmailConnection.update).not.toHaveBeenCalled();
+  });
+
+  it('still advances the cursor when every message in the cycle persists successfully', async () => {
+    const deps = buildDeps();
+    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h1' });
+    deps.prisma.emailSummary.findUnique.mockResolvedValue(null);
+    deps.heuristicClassifier.classify.mockResolvedValue({ categoria: 'PODE_ESPERAR', resumoCurto: 'ok' });
+    deps.gmailApiClient.fetchIncremental.mockResolvedValue({
+      emails: [
+        { gmailMessageId: 'm-ok', remetente: 'x@example.com', assunto: 'A', corpo: '', recebidoEm: new Date() },
+      ],
+      historyId: 'h2',
+      historyExpired: false,
+    });
+    const service = buildService(deps);
+
+    await service.syncUser('u1');
+
     expect(deps.prisma.gmailConnection.update).toHaveBeenCalledWith({
       where: { userId: 'u1' },
-      data: { lastHistoryId: 'h1', ultimaSincronizacao: expect.any(Date) },
+      data: { lastHistoryId: 'h2', ultimaSincronizacao: expect.any(Date) },
     });
   });
 

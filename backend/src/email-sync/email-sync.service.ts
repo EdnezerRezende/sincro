@@ -37,6 +37,7 @@ export class EmailSyncService {
     const tomPreferido = (sensoryProfile?.dados as { tomPreferido?: string } | undefined)?.tomPreferido;
 
     let novosPrecisamAtencao = 0;
+    let hasUnrecoverableFailure = false;
     for (const email of emails) {
       // Cheap pre-filter: avoids a wasted classifier call for messages we already know about.
       // This is NOT the source of truth for idempotency — the @@unique([userId, gmailMessageId])
@@ -79,6 +80,10 @@ export class EmailSyncService {
           );
         } else {
           this.logger.error(`Failed to persist summary for message ${email.gmailMessageId}`, error as Error);
+          // Not a duplicate-key race, so this message was never actually persisted. The cursor
+          // must not advance past it this cycle, or it would never be retried (fetchIncremental
+          // only looks forward from lastHistoryId) and would be silently lost.
+          hasUnrecoverableFailure = true;
         }
         continue;
       }
@@ -86,13 +91,21 @@ export class EmailSyncService {
       if (classification.categoria === 'PRECISA_ATENCAO') novosPrecisamAtencao++;
     }
 
-    // Runs even if some messages above failed to persist (duplicate-key race or otherwise) —
-    // the cursor must always advance for whatever *was* successfully synced this cycle, or a
-    // single race/error would wedge the user into full-resync mode forever (see whole-branch review).
-    await this.prisma.gmailConnection.update({
-      where: { userId },
-      data: { lastHistoryId: historyId, ultimaSincronizacao: new Date() },
-    });
+    // Duplicate-key races are safe to skip past (the message was already persisted by a
+    // concurrent run), so the cursor still advances in that case. But if a message failed to
+    // persist for any other reason, skip the cursor update entirely so the next cron cycle
+    // re-fetches and retries it — the messages that DID persist in this loop stay persisted,
+    // only the cursor stays put.
+    if (hasUnrecoverableFailure) {
+      this.logger.warn(
+        `Skipping lastHistoryId update for user ${userId}: at least one message failed to persist for a non-duplicate reason and must be retried next cycle`,
+      );
+    } else {
+      await this.prisma.gmailConnection.update({
+        where: { userId },
+        data: { lastHistoryId: historyId, ultimaSincronizacao: new Date() },
+      });
+    }
 
     return { novosPrecisamAtencao };
   }

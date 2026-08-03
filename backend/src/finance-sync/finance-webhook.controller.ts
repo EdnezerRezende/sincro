@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Headers, Logger, Post, Req, UnauthorizedException } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -11,11 +11,13 @@ import { FinanceSyncService } from './finance-sync.service';
 // runtime, which the ValidationPipe skips entirely — see main.ts's `toValidate` behavior.
 interface PluggyWebhookPayload {
   event: string;
-  itemId: string;
+  itemId?: string;
 }
 
 @Controller('financas/webhooks')
 export class FinanceWebhookController {
+  private readonly logger = new Logger(FinanceWebhookController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly financeSyncService: FinanceSyncService,
@@ -29,9 +31,20 @@ export class FinanceWebhookController {
   ) {
     this.verifySignature(req.rawBody, signature);
 
+    // Pluggy also delivers connector-level events that carry no itemId. Without this guard,
+    // Prisma silently drops the `pluggyItemId: undefined` filter, turning the findFirst below
+    // into an unfiltered "match any row" query that would sync an arbitrary tenant's connection.
+    if (!payload?.itemId) return { received: true };
+
     const connection = await this.prisma.financeConnection.findFirst({ where: { pluggyItemId: payload.itemId } });
     if (connection) {
-      await this.financeSyncService.syncConnection(connection.id);
+      try {
+        await this.financeSyncService.syncConnection(connection.id);
+      } catch (error) {
+        // Best-effort: a 500 here makes Pluggy retry against the same failing dependency.
+        // Both the on-demand sync and the next webhook delivery provide retry paths.
+        this.logger.error(`Failed to sync finance connection ${connection.id} from webhook`, error as Error);
+      }
     }
     return { received: true };
   }

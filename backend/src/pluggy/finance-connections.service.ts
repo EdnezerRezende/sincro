@@ -25,6 +25,8 @@ export class FinanceConnectionsService {
       where: { userId_pluggyItemId: { userId: user.id, pluggyItemId: itemId } },
       update: { status: item.status, instituicao: item.connector.name },
       create: { userId: user.id, pluggyItemId: itemId, instituicao: item.connector.name, status: item.status },
+      // Mesma projeção estreita de listConnections: userId/pluggyItemId/criadoEm são internos.
+      select: { id: true, instituicao: true, status: true },
     });
   }
 

@@ -35,7 +35,7 @@ describe('UsersService', () => {
 
   it('builds onboarding status combining profile and contact count', async () => {
     const prisma = buildPrismaMock();
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: 5 });
     prisma.sensoryProfile.findUnique.mockResolvedValue({ id: 'sp1' });
     prisma.trustedContact.count.mockResolvedValue(2);
     const service = new UsersService(prisma as any);
@@ -47,7 +47,20 @@ describe('UsersService', () => {
       nome: 'Ana',
       hasSensoryProfile: true,
       trustedContactCount: 2,
+      diaRecebimento: 5,
     });
+  });
+
+  it('exposes a null diaRecebimento when the user never set one', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: null });
+    prisma.sensoryProfile.findUnique.mockResolvedValue(null);
+    prisma.trustedContact.count.mockResolvedValue(0);
+    const service = new UsersService(prisma as any);
+
+    const status = await service.getOnboardingStatus('fb1');
+
+    expect(status.diaRecebimento).toBeNull();
   });
 
   it('registers an fcm token for the resolved user', async () => {

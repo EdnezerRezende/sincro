@@ -26,9 +26,27 @@ export class FinanceSyncService {
       const vencimentoFatura = account.creditData?.balanceCloseDate
         ? new Date(account.creditData.balanceCloseDate)
         : null;
+      // Uma linha de FinanceAccount é permanente por (conexão, conta) e reaproveitada a cada
+      // ciclo de fatura. Sem limpar `notificadoEm` quando o vencimento vira para o mês
+      // seguinte, o scheduler (que seleciona por `notificadoEm: null`) alertaria uma única vez
+      // na vida daquele cartão. Não limpamos quando o vencimento é o mesmo: aí o carimbo ainda
+      // é válido para o ciclo em aberto e limpá-lo geraria alerta duplicado.
+      const existente = await this.prisma.financeAccount.findUnique({
+        where: { conexaoId_pluggyAccountId: { conexaoId: connection.id, pluggyAccountId: account.id } },
+        select: { vencimentoFatura: true },
+      });
+      const cicloMudou =
+        existente != null &&
+        (existente.vencimentoFatura?.getTime() ?? null) !== (vencimentoFatura?.getTime() ?? null);
+
       await this.prisma.financeAccount.upsert({
         where: { conexaoId_pluggyAccountId: { conexaoId: connection.id, pluggyAccountId: account.id } },
-        update: { nome: account.name, saldoOuFatura: account.balance, vencimentoFatura },
+        update: {
+          nome: account.name,
+          saldoOuFatura: account.balance,
+          vencimentoFatura,
+          ...(cicloMudou ? { notificadoEm: null } : {}),
+        },
         create: {
           conexaoId: connection.id,
           pluggyAccountId: account.id,

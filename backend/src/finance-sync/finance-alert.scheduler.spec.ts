@@ -40,12 +40,48 @@ describe('FinanceAlertScheduler', () => {
     await scheduler.checkContasVencendo();
 
     expect(prisma.boletoDda.findMany).toHaveBeenCalledWith({
-      where: { pago: false, notificadoEm: null, vencimento: { lte: expect.any(Date) } },
+      where: { pago: false, notificadoEm: null, vencimento: { gte: expect.any(Date), lte: expect.any(Date) } },
     });
     expect(prisma.financeAccount.findMany).toHaveBeenCalledWith({
-      where: { tipo: 'CARTAO_CREDITO', notificadoEm: null, vencimentoFatura: { lte: expect.any(Date) } },
+      where: {
+        tipo: 'CARTAO_CREDITO',
+        notificadoEm: null,
+        vencimentoFatura: { gte: expect.any(Date), lte: expect.any(Date) },
+      },
       include: { conexao: true },
     });
+  });
+
+  it('excludes items that already came due before today, so a first sync of historical data does not flood the user', async () => {
+    // Sem piso inferior, uma primeira sincronização com anos de boletos vencidos
+    // (todos com notificadoEm null e pago false) viraria um único push
+    // "N contas estão vencendo nos próximos dias" — factualmente errado.
+    jest.useFakeTimers().setSystemTime(new Date(2026, 7, 3, 10, 0));
+    try {
+      const { prisma, notificationService } = buildDeps();
+      const scheduler = new FinanceAlertScheduler(prisma as any, notificationService as any);
+
+      await scheduler.checkContasVencendo();
+
+      const pisoEsperado = new Date(Date.UTC(2026, 7, 3));
+      expect(prisma.boletoDda.findMany).toHaveBeenCalledWith({
+        where: {
+          pago: false,
+          notificadoEm: null,
+          vencimento: { gte: pisoEsperado, lte: new Date(Date.UTC(2026, 7, 6)) },
+        },
+      });
+      expect(prisma.financeAccount.findMany).toHaveBeenCalledWith({
+        where: {
+          tipo: 'CARTAO_CREDITO',
+          notificadoEm: null,
+          vencimentoFatura: { gte: pisoEsperado, lte: new Date(Date.UTC(2026, 7, 6)) },
+        },
+        include: { conexao: true },
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('computes the 3-day window boundary using the LOCAL calendar day of "hoje", not the UTC day', async () => {
@@ -63,10 +99,18 @@ describe('FinanceAlertScheduler', () => {
 
       const limiteEsperado = new Date(Date.UTC(2026, 7, 6));
       expect(prisma.boletoDda.findMany).toHaveBeenCalledWith({
-        where: { pago: false, notificadoEm: null, vencimento: { lte: limiteEsperado } },
+        where: {
+          pago: false,
+          notificadoEm: null,
+          vencimento: { gte: new Date(Date.UTC(2026, 7, 3)), lte: limiteEsperado },
+        },
       });
       expect(prisma.financeAccount.findMany).toHaveBeenCalledWith({
-        where: { tipo: 'CARTAO_CREDITO', notificadoEm: null, vencimentoFatura: { lte: limiteEsperado } },
+        where: {
+          tipo: 'CARTAO_CREDITO',
+          notificadoEm: null,
+          vencimentoFatura: { gte: new Date(Date.UTC(2026, 7, 3)), lte: limiteEsperado },
+        },
         include: { conexao: true },
       });
     } finally {

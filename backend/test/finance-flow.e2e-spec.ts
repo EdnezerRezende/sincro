@@ -95,6 +95,29 @@ describe('Finance flow (e2e)', () => {
     expect(tenant2Resumo.body.boletos).toHaveLength(0);
   });
 
+  it("rejects deleting another tenant's connection with 404 and leaves that tenant's data intact", async () => {
+    const tenant2Conexoes = await request(app.getHttpServer()).get('/financas/conexoes').set(otherAuthHeader).expect(200);
+    const tenant2ConnectionId = tenant2Conexoes.body[0].id;
+
+    await request(app.getHttpServer())
+      .delete(`/financas/conexoes/${tenant2ConnectionId}`)
+      .set(authHeader)
+      .expect(404);
+
+    const tenant2Resumo = await request(app.getHttpServer()).get('/financas/resumo').set(otherAuthHeader).expect(200);
+    expect(tenant2Resumo.body.contas).toHaveLength(1);
+
+    // E o inverso: o tenant 2 também não consegue apagar a conexão do tenant 1.
+    const tenant1Conexoes = await request(app.getHttpServer()).get('/financas/conexoes').set(authHeader).expect(200);
+    await request(app.getHttpServer())
+      .delete(`/financas/conexoes/${tenant1Conexoes.body[0].id}`)
+      .set(otherAuthHeader)
+      .expect(404);
+
+    const tenant1Resumo = await request(app.getHttpServer()).get('/financas/resumo').set(authHeader).expect(200);
+    expect(tenant1Resumo.body.contas).toHaveLength(2);
+  });
+
   it("disconnecting one tenant's connection wipes only that tenant's data", async () => {
     const conexoes = await request(app.getHttpServer()).get('/financas/conexoes').set(authHeader).expect(200);
     const connectionId = conexoes.body[0].id;

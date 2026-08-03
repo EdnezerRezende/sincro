@@ -15,7 +15,10 @@ export class FinanceAlertScheduler {
     private readonly notificationService: NotificationService,
   ) {}
 
-  @Cron('0 8 * * *')
+  // Fixamos o fuso: sem `timeZone` o cron roda no horário local do servidor, e num host
+  // deployado em UTC "08:00" viraria 05:00 no Brasil — notificação em cima de gente dormindo,
+  // exatamente o oposto do tom calmo que esse pilar propõe.
+  @Cron('0 8 * * *', { timeZone: 'America/Sao_Paulo' })
   async checkContasVencendo(): Promise<void> {
     if (this.running) {
       this.logger.warn('checkContasVencendo is already running; skipping this cron firing to avoid overlap');
@@ -24,13 +27,17 @@ export class FinanceAlertScheduler {
     this.running = true;
     try {
       const hoje = new Date();
+      // Piso em "hoje": sem ele, uma primeira sincronização trazendo anos de boletos vencidos
+      // (todos com notificadoEm null) viraria um único push "N contas estão vencendo nos
+      // próximos dias" — factualmente errado e punitivo.
+      const piso = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
       const limite = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + ALERT_WINDOW_DAYS));
 
       const boletos = await this.prisma.boletoDda.findMany({
-        where: { pago: false, notificadoEm: null, vencimento: { lte: limite } },
+        where: { pago: false, notificadoEm: null, vencimento: { gte: piso, lte: limite } },
       });
       const faturas = await this.prisma.financeAccount.findMany({
-        where: { tipo: 'CARTAO_CREDITO', notificadoEm: null, vencimentoFatura: { lte: limite } },
+        where: { tipo: 'CARTAO_CREDITO', notificadoEm: null, vencimentoFatura: { gte: piso, lte: limite } },
         include: { conexao: true },
       });
 

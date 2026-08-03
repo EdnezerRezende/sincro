@@ -3,7 +3,7 @@ import { FinanceSyncService } from './finance-sync.service';
 function buildDeps() {
   const prisma = {
     financeConnection: { findUnique: jest.fn(), findMany: jest.fn() },
-    financeAccount: { upsert: jest.fn() },
+    financeAccount: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null) },
     boletoDda: { upsert: jest.fn() },
   };
   const pluggyApiClient = {
@@ -48,6 +48,44 @@ describe('FinanceSyncService', () => {
         create: expect.objectContaining({ tipo: 'CARTAO_CREDITO', saldoOuFatura: 400, vencimentoFatura: new Date('2026-08-10') }),
       }),
     );
+  });
+
+  it('resets notificadoEm when the fatura billing cycle rolls over to a new vencimento', async () => {
+    const { prisma, pluggyApiClient, usersService } = buildDeps();
+    prisma.financeConnection.findUnique.mockResolvedValue({ id: 'conn-1', userId: 'u1', pluggyItemId: 'item-1' });
+    // Ciclo anterior já notificado, com vencimento em julho; a nova sincronização traz agosto.
+    prisma.financeAccount.findUnique.mockResolvedValue({ vencimentoFatura: new Date('2026-07-10') });
+    pluggyApiClient.listAccounts.mockResolvedValue([
+      { id: 'acc-2', type: 'CREDIT', name: 'Cartão', balance: 400, creditData: { balanceCloseDate: '2026-08-10' } },
+    ]);
+    const service = new FinanceSyncService(prisma as any, pluggyApiClient as any, usersService as any);
+
+    await service.syncConnection('conn-1');
+
+    expect(prisma.financeAccount.findUnique).toHaveBeenCalledWith({
+      where: { conexaoId_pluggyAccountId: { conexaoId: 'conn-1', pluggyAccountId: 'acc-2' } },
+      select: { vencimentoFatura: true },
+    });
+    expect(prisma.financeAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ notificadoEm: null }),
+      }),
+    );
+  });
+
+  it('leaves notificadoEm untouched when the fatura vencimento is unchanged', async () => {
+    const { prisma, pluggyApiClient, usersService } = buildDeps();
+    prisma.financeConnection.findUnique.mockResolvedValue({ id: 'conn-1', userId: 'u1', pluggyItemId: 'item-1' });
+    prisma.financeAccount.findUnique.mockResolvedValue({ vencimentoFatura: new Date('2026-08-10') });
+    pluggyApiClient.listAccounts.mockResolvedValue([
+      { id: 'acc-2', type: 'CREDIT', name: 'Cartão', balance: 400, creditData: { balanceCloseDate: '2026-08-10' } },
+    ]);
+    const service = new FinanceSyncService(prisma as any, pluggyApiClient as any, usersService as any);
+
+    await service.syncConnection('conn-1');
+
+    const updatePayload = prisma.financeAccount.upsert.mock.calls[0][0].update;
+    expect(updatePayload).not.toHaveProperty('notificadoEm');
   });
 
   it('upserts boletos scoped to the connection user', async () => {

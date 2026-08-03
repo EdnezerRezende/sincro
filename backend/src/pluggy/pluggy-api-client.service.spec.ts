@@ -69,6 +69,24 @@ describe('PluggyApiClient', () => {
     expect(authCalls).toHaveLength(2);
   });
 
+  it('handles a 204 No Content response without trying to parse an empty body', async () => {
+    // DELETE /items/{id} responde 204 sem corpo; chamar response.json() aí lança e faz o
+    // disconnect logar "Failed to delete Pluggy item" mesmo tendo dado certo.
+    const noContent = {
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+    } as unknown as Response;
+    const fetchMock = jest.fn().mockResolvedValueOnce(jsonResponse({ apiKey: 'key-1' })).mockResolvedValueOnce(noContent);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new PluggyApiClient();
+
+    await expect(client.deleteItem('item-1')).resolves.toBeUndefined();
+  });
+
   it('throws when PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET are not configured', async () => {
     delete process.env.PLUGGY_CLIENT_ID;
     const client = new PluggyApiClient();

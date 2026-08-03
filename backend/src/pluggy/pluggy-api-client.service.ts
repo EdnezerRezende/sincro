@@ -83,6 +83,9 @@ export class PluggyApiClient {
       return this.request<T>(path, init, true);
     }
     if (!response.ok) throw new Error(`Pluggy request failed: ${path} (${response.status})`);
+    // DELETE /items/{id} responde 204 sem corpo; chamar .json() aí lança e faria o disconnect
+    // logar "Failed to delete Pluggy item" mesmo tendo dado certo.
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 }

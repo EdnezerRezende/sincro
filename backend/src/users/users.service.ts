@@ -33,6 +33,7 @@ export class UsersService {
       nome: user.nome,
       hasSensoryProfile: sensoryProfile !== null,
       trustedContactCount,
+      diaRecebimento: user.diaRecebimento,
     };
   }
 

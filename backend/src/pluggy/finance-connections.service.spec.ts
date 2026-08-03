@@ -43,6 +43,7 @@ describe('FinanceConnectionsService', () => {
       where: { userId_pluggyItemId: { userId: 'u1', pluggyItemId: 'item-1' } },
       update: { status: 'UPDATED', instituicao: 'Banco Teste' },
       create: { userId: 'u1', pluggyItemId: 'item-1', instituicao: 'Banco Teste', status: 'UPDATED' },
+      select: { id: true, instituicao: true, status: true },
     });
     expect(result).toEqual({ id: 'conn-1', instituicao: 'Banco Teste', status: 'UPDATED' });
   });

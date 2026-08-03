@@ -8,5 +8,6 @@ import { SensoryProfileController } from './sensory-profile.controller';
   imports: [AuthModule, UsersModule],
   providers: [SensoryProfileService],
   controllers: [SensoryProfileController],
+  exports: [SensoryProfileService],
 })
 export class SensoryProfileModule {}

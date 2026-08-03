@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_providers.dart';
+import '../email_triage/email_triage_providers.dart';
 import '../onboarding/anamnese/anamnese_providers.dart';
 import '../onboarding/anamnese/anamnese_wizard_screen.dart';
 import '../trusted_contacts/trusted_contacts_screen.dart';
@@ -63,6 +64,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Future<void> _disconnectGmail() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desconectar Gmail?'),
+        content: const Text(
+          'O resumo da sua caixa de entrada será apagado. Você pode reconectar quando quiser.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Desconectar')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(gmailConnectionRepositoryProvider).disconnect();
+      ref.invalidate(gmailConnectionStatusProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gmail desconectado.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível desconectar o Gmail. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _signOut() async {
     try {
       await ref.read(authServiceProvider).signOut();
@@ -98,6 +133,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             leading: const Icon(Icons.people_outline),
             title: const Text('Gerenciar contatos de confiança'),
             onTap: _busy ? null : _manageContacts,
+          ),
+          ListTile(
+            leading: const Icon(Icons.mail_outline),
+            title: const Text('Desconectar Gmail'),
+            onTap: _busy ? null : _disconnectGmail,
           ),
           const Divider(),
           ListTile(

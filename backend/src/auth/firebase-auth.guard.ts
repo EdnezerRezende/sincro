@@ -1,10 +1,10 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { FIREBASE_ADMIN } from './firebase-admin.provider';
-import * as admin from 'firebase-admin';
+import type { FirebaseAdmin } from './firebase-admin.provider';
 
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
-  constructor(@Inject(FIREBASE_ADMIN) private readonly firebaseAdmin: typeof admin) {}
+  constructor(@Inject(FIREBASE_ADMIN) private readonly firebaseAdmin: FirebaseAdmin) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();

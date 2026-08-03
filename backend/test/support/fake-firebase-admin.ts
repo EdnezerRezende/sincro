@@ -8,5 +8,8 @@ export function buildFakeFirebaseAdmin() {
         return Promise.resolve({ uid: token.replace('test-uid:', '') });
       },
     }),
+    messaging: () => ({
+      send: async () => 'fake-message-id',
+    }),
   };
 }

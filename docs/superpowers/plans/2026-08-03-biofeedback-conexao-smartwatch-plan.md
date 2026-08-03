@@ -588,7 +588,7 @@ git commit -m "feat: add HealthKit/Health Connect data source wrapper"
 - Consumes: `BiofeedbackHealthService.lerFrequenciaCardiacaHoje()`/`lerVariabilidadeHoje()` (Task 4); `BiofeedbackCache.setResumo()` (Task 3); `BiofeedbackSummaryCalculator.calcular()` (Task 2).
 - Produces: `BiofeedbackSyncService(BiofeedbackHealthService, BiofeedbackCache, BiofeedbackSummaryCalculator)` with `sincronizar({DateTime? agora}): Future<void>`. Consumed by Task 6 (background callback), Task 7 (provider), Task 8 (Home card activation), Task 9 (pull-to-refresh).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `mobile/test/features/biofeedback/biofeedback_sync_service_test.dart`:
 
@@ -653,12 +653,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_sync_service_test.dart`
 Expected: FAIL — `Error: Couldn't resolve the package '.../biofeedback_sync_service.dart'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `mobile/lib/features/biofeedback/biofeedback_sync_service.dart`:
 
@@ -687,12 +687,12 @@ class BiofeedbackSyncService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_sync_service_test.dart`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_sync_service.dart mobile/test/features/biofeedback/biofeedback_sync_service_test.dart

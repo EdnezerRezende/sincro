@@ -873,7 +873,7 @@ git commit -m "feat: add biofeedback Riverpod providers"
 
 No automated test — this widget's only non-trivial logic is the activation flow, which calls through to the untested `health`/`workmanager` wrappers; verified via `flutter analyze` and the manual device check, consistent with how `_FinancasCard`'s Pluggy Connect flow was handled.
 
-- [ ] **Step 1: Add the import**
+- [x] **Step 1: Add the import**
 
 In `mobile/lib/features/home/home_screen.dart`, add:
 
@@ -881,7 +881,7 @@ In `mobile/lib/features/home/home_screen.dart`, add:
 import '../biofeedback/biofeedback_providers.dart';
 ```
 
-- [ ] **Step 2: Watch the activation state in `_HomeScreenState.build`**
+- [x] **Step 2: Watch the activation state in `_HomeScreenState.build`**
 
 Add this line alongside the existing `final financeConnectionsAsync = ...;` line:
 
@@ -909,7 +909,7 @@ to:
 
 (card order becomes: Gmail → Finanças → Biofeedback → the rest of the column, unchanged).
 
-- [ ] **Step 3: Add the `_BiofeedbackCard` and `_UltimaFcSubtitle` widgets**
+- [x] **Step 3: Add the `_BiofeedbackCard` and `_UltimaFcSubtitle` widgets**
 
 Add these two new classes at the end of `home_screen.dart` (after the existing `_SaldoLivreSubtitle` class, before `_NoContactsHint`):
 
@@ -1000,12 +1000,12 @@ class _UltimaFcSubtitle extends ConsumerWidget {
 }
 ```
 
-- [ ] **Step 4: Verify it compiles**
+- [x] **Step 4: Verify it compiles**
 
 Run: `cd mobile && flutter analyze lib/features/home/home_screen.dart`
 Expected: "No issues found!"
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/lib/features/home/home_screen.dart

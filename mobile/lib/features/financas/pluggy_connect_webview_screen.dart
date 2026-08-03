@@ -45,7 +45,15 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
             }
             return NavigationDecision.navigate;
           },
-          onWebResourceError: (_) => setState(() => _authBlocked = true),
+          onWebResourceError: (error) {
+            // `isForMainFrame` is platform-dependent (reliable on Android; often null on iOS).
+            // Only trip the fallback for an explicit main-frame failure — a failed subresource
+            // (image, font, tracking script) or an unreported (null) frame must NOT kick the
+            // user out of the in-app WebView, since in-app hosting is the primary path.
+            if (error.isForMainFrame == true) {
+              setState(() => _authBlocked = true);
+            }
+          },
         ),
       )
       ..loadRequest(_connectUrl);

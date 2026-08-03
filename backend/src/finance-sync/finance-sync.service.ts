@@ -58,7 +58,11 @@ export class FinanceSyncService {
       select: { id: true },
     });
     for (const { id } of connections) {
-      await this.syncConnection(id);
+      try {
+        await this.syncConnection(id);
+      } catch (error) {
+        this.logger.error(`Failed to sync finance connection ${id}`, error as Error);
+      }
     }
   }
 }

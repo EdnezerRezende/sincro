@@ -81,4 +81,24 @@ describe('FinanceSyncService', () => {
     expect(pluggyApiClient.listAccounts).toHaveBeenCalledWith('item-1');
     expect(pluggyApiClient.listAccounts).toHaveBeenCalledWith('item-2');
   });
+
+  it('isolates a failing connection so sibling connections still sync and syncAllForUser resolves', async () => {
+    const { prisma, pluggyApiClient, usersService } = buildDeps();
+    prisma.financeConnection.findMany.mockResolvedValue([{ id: 'conn-1' }, { id: 'conn-2' }]);
+    prisma.financeConnection.findUnique
+      .mockResolvedValueOnce({ id: 'conn-1', userId: 'u1', pluggyItemId: 'item-1' })
+      .mockResolvedValueOnce({ id: 'conn-2', userId: 'u1', pluggyItemId: 'item-2' });
+    pluggyApiClient.listAccounts.mockImplementation((pluggyItemId: string) => {
+      if (pluggyItemId === 'item-1') {
+        return Promise.reject(new Error('Pluggy API error'));
+      }
+      return Promise.resolve([]);
+    });
+    const service = new FinanceSyncService(prisma as any, pluggyApiClient as any, usersService as any);
+
+    await expect(service.syncAllForUser('fb1')).resolves.toBeUndefined();
+
+    expect(pluggyApiClient.listAccounts).toHaveBeenCalledWith('item-1');
+    expect(pluggyApiClient.listAccounts).toHaveBeenCalledWith('item-2');
+  });
 });

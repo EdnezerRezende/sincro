@@ -22,8 +22,15 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
   late final WebViewController _controller;
   bool _authBlocked = false;
 
-  Uri get _connectUrl => Uri.parse(
-        '$_pluggyConnectBaseUrl/?connectToken=${widget.connectToken}&redirectUrl=$_pluggyRedirectPrefix',
+  // Montado via Uri(...) para que connectToken e redirectUrl sejam percent-encoded
+  // corretamente — interpolar a URL de redirect crua na query string quebraria o parsing
+  // no primeiro `:` ou `/` que a Pluggy não esperasse.
+  Uri get _connectUrl => Uri.parse(_pluggyConnectBaseUrl).replace(
+        path: '/',
+        queryParameters: {
+          'connectToken': widget.connectToken,
+          'redirectUrl': _pluggyRedirectPrefix,
+        },
       );
 
   @override

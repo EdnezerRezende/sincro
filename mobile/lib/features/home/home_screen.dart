@@ -147,6 +147,9 @@ class _FinancasCard extends ConsumerWidget {
   final AsyncValue<List<FinanceConnection>> connectionsAsync;
 
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
+    // Capturado antes do finalize: o prompt de dia de recebimento só faz sentido na PRIMEIRA
+    // conta conectada, não a cada banco novo que o usuário adicionar depois.
+    final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
       final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
       if (!context.mounted) return;
@@ -156,12 +159,49 @@ class _FinancasCard extends ConsumerWidget {
       if (itemId == null) return;
       await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
       ref.invalidate(financeConnectionsProvider);
+      if (isFirstConnection && context.mounted) {
+        await _promptDiaRecebimento(context, ref);
+      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível conectar sua conta. Tente novamente.')),
         );
       }
+    }
+  }
+
+  /// Pergunta o dia de recebimento logo após a primeira conexão, já que ele é o que define o
+  /// ciclo do saldo livre. É um nice-to-have: recusar ou digitar algo inválido só segue o
+  /// fluxo em silêncio — o usuário pode definir depois em Configurações.
+  Future<void> _promptDiaRecebimento(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final dia = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Em que dia do mês você costuma receber?'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Ex: 5 (dia 5 de cada mês)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Agora não')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text.trim())),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (dia == null || dia < 1 || dia > 31) return;
+
+    try {
+      await ref.read(diaRecebimentoRepositoryProvider).update(dia);
+    } catch (_) {
+      // Silencioso de propósito: não transformar um extra em erro logo após conectar.
     }
   }
 
@@ -186,7 +226,7 @@ class _FinancasCard extends ConsumerWidget {
           child: ListTile(
             leading: const Icon(Icons.account_balance_outlined),
             title: const Text('💰 Finanças'),
-            subtitle: Text('${connections.length} conta(s) conectada(s)'),
+            subtitle: _SaldoLivreSubtitle(connectionCount: connections.length),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).pushNamed('/financas'),
           ),
@@ -194,6 +234,26 @@ class _FinancasCard extends ConsumerWidget {
       },
       loading: () => const Card(child: ListTile(title: Text('💰 Finanças'), subtitle: Text('Carregando...'))),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// Saldo livre é o número que justifica esse pilar inteiro, então ele vem para o card da Home.
+/// Enquanto o resumo carrega — ou se ele falhar — caímos na contagem de contas, que já veio do
+/// provider de conexões, para o card nunca parecer quebrado.
+class _SaldoLivreSubtitle extends ConsumerWidget {
+  const _SaldoLivreSubtitle({required this.connectionCount});
+
+  final int connectionCount;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(financeSummaryProvider);
+    final fallback = Text('$connectionCount conta(s) conectada(s)');
+    return summaryAsync.when(
+      data: (summary) => Text('Saldo livre: R\$ ${summary.saldoLivre.toStringAsFixed(2)}'),
+      loading: () => fallback,
+      error: (_, __) => fallback,
     );
   }
 }

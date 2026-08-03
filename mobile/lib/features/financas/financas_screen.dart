@@ -3,11 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
 
-class FinancasScreen extends ConsumerWidget {
+class FinancasScreen extends ConsumerStatefulWidget {
   const FinancasScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FinancasScreen> createState() => _FinancasScreenState();
+}
+
+class _FinancasScreenState extends ConsumerState<FinancasScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOnOpen());
+  }
+
+  /// Dispara uma sincronização ao abrir a tela, além do pull-to-refresh manual.
+  ///
+  /// Best-effort: se a Pluggy estiver lenta ou fora do ar, a tela continua mostrando
+  /// o que o backend já tem — sync nunca bloqueia nem quebra a tela.
+  Future<void> _syncOnOpen() async {
+    try {
+      await ref.read(financeSummaryRepositoryProvider).sync();
+    } catch (_) {
+      // Silencioso de propósito.
+    }
+    if (mounted) ref.invalidate(financeSummaryProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final summaryAsync = ref.watch(financeSummaryProvider);
 
     return Scaffold(

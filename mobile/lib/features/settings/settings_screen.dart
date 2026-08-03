@@ -6,7 +6,17 @@ import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../onboarding/anamnese/anamnese_providers.dart';
 import '../onboarding/anamnese/anamnese_wizard_screen.dart';
+import '../onboarding/onboarding_providers.dart';
 import '../trusted_contacts/trusted_contacts_screen.dart';
+
+/// Resultado do diálogo de dia de recebimento. Existe para separar "cancelou" (o `showDialog`
+/// devolve `null`) de "pediu para limpar" (devolve uma instância com `dia == null`).
+class _DiaRecebimentoEdicao {
+  const _DiaRecebimentoEdicao.salvar(int this.dia);
+  const _DiaRecebimentoEdicao.limpar() : dia = null;
+
+  final int? dia;
+}
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -101,40 +111,73 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _editDiaRecebimento() async {
-    final controller = TextEditingController();
-    final result = await showDialog<int?>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Dia de recebimento'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Ex: 5 (dia 5 de cada mês)'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, null), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text)),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    if (result < 1 || result > 31) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Informe um dia entre 1 e 31.')),
-        );
-      }
-      return;
+    // Lemos o valor atual para o campo já abrir preenchido — antes o diálogo sempre aparecia
+    // vazio, sem nenhuma forma de o usuário saber o que já estava configurado.
+    int? valorAtual;
+    try {
+      valorAtual = (await ref.read(usersRepositoryProvider).getMe()).diaRecebimento;
+    } catch (_) {
+      // Se a leitura falhar, o diálogo abre vazio — não vale bloquear a edição por isso.
     }
+    if (!mounted) return;
+
+    final controller = TextEditingController(text: valorAtual?.toString() ?? '');
+    final result = await showDialog<_DiaRecebimentoEdicao>(
+      context: context,
+      builder: (dialogContext) {
+        String? errorText;
+        // StatefulBuilder para o erro aparecer no próprio diálogo e o diálogo continuar
+        // aberto: antes, "Salvar" com o campo vazio devolvia o mesmo `null` de "Cancelar",
+        // então um erro de digitação simplesmente não fazia nada, sem nenhum retorno visual.
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Dia de recebimento'),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Ex: 5 (dia 5 de cada mês)',
+                errorText: errorText,
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, const _DiaRecebimentoEdicao.limpar()),
+                child: const Text('Limpar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final dia = int.tryParse(controller.text.trim());
+                  if (dia == null || dia < 1 || dia > 31) {
+                    setDialogState(() => errorText = 'Informe um dia entre 1 e 31.');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, _DiaRecebimentoEdicao.salvar(dia));
+                },
+                child: const Text('Salvar'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    if (result == null) return;
 
     setState(() => _busy = true);
     try {
-      await ref.read(diaRecebimentoRepositoryProvider).update(result);
+      await ref.read(diaRecebimentoRepositoryProvider).update(result.dia);
+      ref.invalidate(onboardingStatusProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dia de recebimento salvo.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.dia == null ? 'Dia de recebimento removido.' : 'Dia de recebimento salvo.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

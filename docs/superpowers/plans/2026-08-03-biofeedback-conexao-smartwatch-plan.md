@@ -803,7 +803,7 @@ git commit -m "feat: add workmanager-scheduled background biofeedback sync"
 
 No test for this file — it's pure dependency wiring with no logic of its own, consistent with how `finance_providers.dart`/`email_triage_providers.dart` aren't unit-tested elsewhere in this codebase.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Create `mobile/lib/features/biofeedback/biofeedback_providers.dart`:
 
@@ -849,12 +849,12 @@ final biofeedbackFrequenciaProvider = FutureProvider.autoDispose<int>((ref) {
 });
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `cd mobile && flutter analyze lib/features/biofeedback/biofeedback_providers.dart`
 Expected: "No issues found!"
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_providers.dart

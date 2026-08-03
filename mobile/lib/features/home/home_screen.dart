@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
+import '../biofeedback/biofeedback_providers.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../financas/pluggy_connect_webview_screen.dart';
@@ -43,6 +44,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final contactsAsync = ref.watch(trustedContactsListProvider);
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
+    final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -65,6 +67,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _GmailCard(statusAsync: gmailStatusAsync),
             const SizedBox(height: 16),
             _FinancasCard(connectionsAsync: financeConnectionsAsync),
+            const SizedBox(height: 16),
+            _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
             const SizedBox(height: 16),
             contactsAsync.when(
               data: (contacts) {
@@ -254,6 +258,91 @@ class _SaldoLivreSubtitle extends ConsumerWidget {
       data: (summary) => Text('Saldo livre: R\$ ${summary.saldoLivre.toStringAsFixed(2)}'),
       loading: () => fallback,
       error: (_, __) => fallback,
+    );
+  }
+}
+
+class _BiofeedbackCard extends ConsumerWidget {
+  const _BiofeedbackCard({required this.ativoAsync});
+
+  final AsyncValue<bool> ativoAsync;
+
+  Future<void> _ativar(BuildContext context, WidgetRef ref) async {
+    try {
+      final autorizado = await ref.read(biofeedbackHealthServiceProvider).solicitarPermissao();
+      if (!autorizado) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Permissão não concedida. Você pode tentar novamente quando quiser.'),
+            ),
+          );
+        }
+        return;
+      }
+      await ref.read(biofeedbackSyncServiceProvider).sincronizar();
+      await ref.read(biofeedbackCacheProvider).setAtivo(true);
+      final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
+      await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
+      ref.invalidate(biofeedbackAtivoProvider);
+      ref.invalidate(biofeedbackResumoProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível ativar o Biofeedback. Tente novamente.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ativoAsync.when(
+      data: (ativo) {
+        if (!ativo) {
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.favorite_border),
+              title: const Text('💓 Biofeedback'),
+              subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
+              trailing: ElevatedButton(
+                onPressed: () => _ativar(context, ref),
+                child: const Text('Ativar Biofeedback'),
+              ),
+            ),
+          );
+        }
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.favorite_border),
+            title: const Text('💓 Biofeedback'),
+            subtitle: const _UltimaFcSubtitle(),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/biofeedback'),
+          ),
+        );
+      },
+      loading: () => const Card(child: ListTile(title: Text('💓 Biofeedback'), subtitle: Text('Carregando...'))),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// Mostrada só quando o Biofeedback já está ativo (ver `_BiofeedbackCard.build`), então "nenhum
+/// dado disponível ainda" aqui significa "ativado mas sem smartwatch pareado", não "não ativado".
+class _UltimaFcSubtitle extends ConsumerWidget {
+  const _UltimaFcSubtitle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resumoAsync = ref.watch(biofeedbackResumoProvider);
+    return resumoAsync.when(
+      data: (resumo) {
+        if (resumo?.ultimaFc == null) return const Text('Nenhum dado disponível ainda');
+        return Text('${resumo!.ultimaFc!.round()} bpm agora');
+      },
+      loading: () => const Text('Carregando...'),
+      error: (_, __) => const Text('Nenhum dado disponível ainda'),
     );
   }
 }

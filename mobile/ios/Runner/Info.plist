@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O Sincro usa dados de frequência cardíaca do seu smartwatch para mostrar um resumo calmo do seu bem-estar.</string>
 </dict>
 </plist>

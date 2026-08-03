@@ -3,7 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
+import 'features/biofeedback/biofeedback_background_task.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'features/onboarding/onboarding_router.dart';
@@ -29,6 +31,8 @@ void _handleEmailTriageNotificationTap(RemoteMessage? message) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  Workmanager().initialize(biofeedbackCallbackDispatcher);
 
   // App backgrounded, not terminated: the Flutter engine is already running, so the navigator
   // is ready by the time this fires.

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_providers.dart';
+import 'dia_recebimento_repository.dart';
 import 'finance_connection.dart';
 import 'finance_connection_repository.dart';
 import 'finance_summary.dart';
@@ -19,4 +20,8 @@ final financeSummaryRepositoryProvider = Provider<FinanceSummaryRepository>((ref
 
 final financeSummaryProvider = FutureProvider.autoDispose<FinanceSummary>((ref) {
   return ref.watch(financeSummaryRepositoryProvider).getResumo();
+});
+
+final diaRecebimentoRepositoryProvider = Provider<DiaRecebimentoRepository>((ref) {
+  return DiaRecebimentoRepository(ref.watch(apiClientProvider).dio);
 });

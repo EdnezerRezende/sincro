@@ -24,7 +24,7 @@ export class FinanceAlertScheduler {
     this.running = true;
     try {
       const hoje = new Date();
-      const limite = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + ALERT_WINDOW_DAYS);
+      const limite = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + ALERT_WINDOW_DAYS));
 
       const boletos = await this.prisma.boletoDda.findMany({
         where: { pago: false, notificadoEm: null, vencimento: { lte: limite } },

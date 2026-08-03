@@ -35,8 +35,8 @@ External uncertainty is higher in this plan than in prior pillars, because it in
 
 **Files:**
 - Modify: `mobile/pubspec.yaml`
-- Modify: `ios/Runner/Info.plist`
-- Modify: `android/app/src/main/AndroidManifest.xml`
+- Modify: `mobile/ios/Runner/Info.plist`
+- Modify: `mobile/android/app/src/main/AndroidManifest.xml`
 - Create: `mobile/lib/features/biofeedback/health_reading.dart`
 - Create: `mobile/lib/features/biofeedback/biofeedback_summary.dart`
 - Create: `mobile/lib/features/biofeedback/biofeedback_frequencia.dart`
@@ -45,23 +45,23 @@ External uncertainty is higher in this plan than in prior pillars, because it in
 **Interfaces:**
 - Produces: `HealthReading { valor: double, timestamp: DateTime }`; `BiofeedbackSummary { ultimaFc: double?, mediaFcHoje: double?, mediaVfcHoje: double?, atualizadoEm: DateTime }` with `toJson()`/`fromJson()`; `BiofeedbackFrequencia` enum with `.duracao` (Duration) and `.label` (String). Consumed by every later task in this plan.
 
-- [ ] **Step 1: Add dependencies**
+- [x] **Step 1: Add dependencies**
 
 Run: `cd mobile && flutter pub add health workmanager shared_preferences`
 Expected: `mobile/pubspec.yaml` gains three new entries under `dependencies:` and `mobile/pubspec.lock` updates. Note the exact versions pub resolves — you'll need them if any later task's assumed API doesn't match (see Prerequisites 1-2).
 
-- [ ] **Step 2: Add the iOS HealthKit usage description**
+- [x] **Step 2: Add the iOS HealthKit usage description**
 
-Edit `ios/Runner/Info.plist` — add this key/value pair inside the top-level `<dict>` (alongside the existing keys, e.g. near `CFBundleName`):
+Edit `mobile/ios/Runner/Info.plist` — add this key/value pair inside the top-level `<dict>` (alongside the existing keys, e.g. near `CFBundleName`):
 
 ```xml
 	<key>NSHealthShareUsageDescription</key>
 	<string>O Sincro usa dados de frequência cardíaca do seu smartwatch para mostrar um resumo calmo do seu bem-estar.</string>
 ```
 
-- [ ] **Step 3: Add Android Health Connect permissions**
+- [x] **Step 3: Add Android Health Connect permissions**
 
-Edit `android/app/src/main/AndroidManifest.xml` — add these two permission declarations as siblings of any existing `<uses-permission>` entries (or, if there are none yet, as the first children of `<manifest>`, before `<application>`):
+Edit `mobile/android/app/src/main/AndroidManifest.xml` — add these two permission declarations as siblings of any existing `<uses-permission>` entries (or, if there are none yet, as the first children of `<manifest>`, before `<application>`):
 
 ```xml
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
@@ -70,7 +70,7 @@ Edit `android/app/src/main/AndroidManifest.xml` — add these two permission dec
 
 Per Prerequisite 3, confirm against the `health` package's own setup docs whether additional entries (a `<queries>` block, an activity-alias) are needed for the resolved package version, and add them here too if so.
 
-- [ ] **Step 4: Write the failing test**
+- [x] **Step 4: Write the failing test**
 
 Create `mobile/test/features/biofeedback/biofeedback_summary_test.dart`:
 
@@ -112,12 +112,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it fails**
+- [x] **Step 5: Run test to verify it fails**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_summary_test.dart`
 Expected: FAIL — `Error: Couldn't resolve the package 'sincro_mobile/features/biofeedback/biofeedback_summary.dart'`
 
-- [ ] **Step 6: Write the model files**
+- [x] **Step 6: Write the model files**
 
 Create `mobile/lib/features/biofeedback/health_reading.dart`:
 
@@ -180,15 +180,15 @@ enum BiofeedbackFrequencia {
 }
 ```
 
-- [ ] **Step 7: Run test to verify it passes**
+- [x] **Step 7: Run test to verify it passes**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_summary_test.dart`
 Expected: PASS (2 tests)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
-git add mobile/pubspec.yaml mobile/pubspec.lock ios/Runner/Info.plist android/app/src/main/AndroidManifest.xml mobile/lib/features/biofeedback mobile/test/features/biofeedback
+git add mobile/pubspec.yaml mobile/pubspec.lock mobile/ios/Runner/Info.plist mobile/android/app/src/main/AndroidManifest.xml mobile/lib/features/biofeedback mobile/test/features/biofeedback
 git commit -m "feat: add health/workmanager/shared_preferences deps and biofeedback models"
 ```
 

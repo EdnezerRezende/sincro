@@ -49,13 +49,13 @@ export class SaldoLivreCalculator {
 
   private calcularFimCiclo(diaRecebimento: number | null, hoje: Date): Date {
     if (diaRecebimento === null) {
-      return new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0));
+      return new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth() + 1, 0));
     }
-    const esteMs = this.diaClampeado(hoje.getUTCFullYear(), hoje.getUTCMonth(), diaRecebimento);
+    const esteMs = this.diaClampeado(hoje.getFullYear(), hoje.getMonth(), diaRecebimento);
     if (esteMs.getTime() >= this.startOfDay(hoje).getTime()) {
       return esteMs;
     }
-    return this.diaClampeado(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, diaRecebimento);
+    return this.diaClampeado(hoje.getFullYear(), hoje.getMonth() + 1, diaRecebimento);
   }
 
   private diaClampeado(year: number, month: number, dia: number): Date {
@@ -64,6 +64,6 @@ export class SaldoLivreCalculator {
   }
 
   private startOfDay(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   }
 }

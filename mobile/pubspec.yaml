@@ -41,6 +41,7 @@ dependencies:
   url_launcher: ^6.3.2
   google_sign_in: ^6.2.1
   firebase_messaging: ^16.4.3
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

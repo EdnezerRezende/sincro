@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
+import '../financas/finance_connection.dart';
+import '../financas/finance_providers.dart';
+import '../financas/pluggy_connect_webview_screen.dart';
 import 'emergency_button.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -39,6 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final contactsAsync = ref.watch(trustedContactsListProvider);
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -58,9 +62,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             const Text('🌿 Tudo em ordem por hoje.'),
             const SizedBox(height: 8),
-            const Text('Finanças chegam em breve.'),
-            const SizedBox(height: 16),
             _GmailCard(statusAsync: gmailStatusAsync),
+            const SizedBox(height: 16),
+            _FinancasCard(connectionsAsync: financeConnectionsAsync),
             const SizedBox(height: 16),
             contactsAsync.when(
               data: (contacts) {
@@ -132,6 +136,63 @@ class _GmailCard extends ConsumerWidget {
         );
       },
       loading: () => const Card(child: ListTile(title: Text('📬 Caixa de Entrada'), subtitle: Text('Carregando...'))),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _FinancasCard extends ConsumerWidget {
+  const _FinancasCard({required this.connectionsAsync});
+
+  final AsyncValue<List<FinanceConnection>> connectionsAsync;
+
+  Future<void> _connect(BuildContext context, WidgetRef ref) async {
+    try {
+      final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
+      if (!context.mounted) return;
+      final itemId = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => PluggyConnectWebviewScreen(connectToken: connectToken)),
+      );
+      if (itemId == null) return;
+      await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
+      ref.invalidate(financeConnectionsProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível conectar sua conta. Tente novamente.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return connectionsAsync.when(
+      data: (connections) {
+        if (connections.isEmpty) {
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_outlined),
+              title: const Text('💰 Finanças'),
+              subtitle: const Text('Conecte uma conta para ver seu saldo livre.'),
+              trailing: ElevatedButton(
+                onPressed: () => _connect(context, ref),
+                child: const Text('Conectar conta'),
+              ),
+            ),
+          );
+        }
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.account_balance_outlined),
+            title: const Text('💰 Finanças'),
+            subtitle: Text('${connections.length} conta(s) conectada(s)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/financas'),
+          ),
+        );
+      },
+      loading: () => const Card(child: ListTile(title: Text('💰 Finanças'), subtitle: Text('Carregando...'))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

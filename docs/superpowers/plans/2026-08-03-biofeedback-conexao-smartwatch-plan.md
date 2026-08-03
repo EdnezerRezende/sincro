@@ -713,7 +713,7 @@ git commit -m "feat: add biofeedback sync service (health -> calculator -> cache
 
 No automated test — `workmanager` needs platform channels unavailable under `flutter test`, same situation as Task 4. Verified via `flutter analyze` plus the manual device check.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Per Prerequisite 2, confirm `workmanager`'s actual API against what's resolved in `mobile/pubspec.lock` before treating this as final.
 
@@ -778,12 +778,12 @@ Update `mobile/lib/main.dart`:
 
 (This also needs `import 'package:workmanager/workmanager.dart';` added to `main.dart`.)
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `cd mobile && flutter analyze`
 Expected: "No issues found!" — if `workmanager`'s actual API differs from what's used above (per Prerequisite 2), fix the mismatches until this is clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_background_task.dart mobile/lib/main.dart

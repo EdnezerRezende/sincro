@@ -1026,7 +1026,7 @@ git commit -m "feat: add Biofeedback Home card and activation flow"
 
 No automated test — same reasoning as `financas_screen.dart`/`inbox_screen.dart`, this codebase doesn't widget-test its detail screens; verified via `flutter analyze` and manual run.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Create `mobile/lib/features/biofeedback/biofeedback_screen.dart`:
 
@@ -1140,12 +1140,12 @@ Update `mobile/lib/main.dart`:
 - Add the import `import 'features/biofeedback/biofeedback_screen.dart';`.
 - Add `'/biofeedback': (_) => const BiofeedbackScreen(),` to the `routes` map, after `'/financas'`.
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `cd mobile && flutter analyze`
 Expected: "No issues found!"
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_screen.dart mobile/lib/main.dart

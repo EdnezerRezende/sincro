@@ -29,6 +29,8 @@ External uncertainty is higher in this plan than in prior pillars, because it in
 4. Enable the "HealthKit" capability for the iOS target in Xcode (Signing & Capabilities → + Capability → HealthKit) — this is a manual Xcode project step, not achievable by editing a text file, and is required for `NSHealthShareUsageDescription` to actually grant HealthKit access at runtime.
 5. Confirm `android/app/build.gradle`'s `minSdkVersion` meets Health Connect's minimum requirement (check current `health`/Health Connect docs) and bump it if needed.
 
+**Resolved during implementation:** `workmanager: ^0.9.2`'s own dependency graph is internally inconsistent on this project's Flutter SDK (3.32.8) — `workmanager_android 0.9.3` requires `workmanager_platform_interface >=0.9.4` (for `ForegroundServiceConfig`), but `workmanager_apple 0.9.4` only implements `<=0.9.3`'s interface, and the fixed `workmanager_apple 0.9.10` requires `workmanager_platform_interface >=0.10.0`, which requires Flutter `>=3.38.0` (newer than this project's SDK). Without a fix the app fails to compile entirely (`flutter test` errors on `ForegroundServiceConfig`/`foregroundServiceConfig` mismatches). Fixed via `dependency_overrides` in `mobile/pubspec.yaml`, pinning `workmanager_platform_interface: 0.9.3` and `workmanager_android: 0.9.2` so both platform implementations agree on the same (older) interface version. Re-verify this override is still needed next time `workmanager`/Flutter SDK versions are bumped in this project.
+
 ---
 
 ## Task 1: Dependencies, platform manifests, and core models
@@ -1164,7 +1166,7 @@ git commit -m "feat: add biofeedback detail screen with pull-to-refresh"
 
 No automated test — same reasoning as the `dia_recebimento` dialog, this codebase doesn't widget-test its Settings dialogs; verified via `flutter analyze` and manual run.
 
-- [ ] **Step 1: Add imports**
+- [x] **Step 1: Add imports**
 
 In `mobile/lib/features/settings/settings_screen.dart`, add:
 
@@ -1173,7 +1175,7 @@ import '../biofeedback/biofeedback_frequencia.dart';
 import '../biofeedback/biofeedback_providers.dart';
 ```
 
-- [ ] **Step 2: Add the two new methods**
+- [x] **Step 2: Add the two new methods**
 
 Add these inside `_SettingsScreenState`, alongside the existing `_editDiaRecebimento`/`_disconnectFinanceConnection` methods:
 
@@ -1259,7 +1261,7 @@ Add these inside `_SettingsScreenState`, alongside the existing `_editDiaRecebim
   }
 ```
 
-- [ ] **Step 3: Wire the new tiles into `build()`**
+- [x] **Step 3: Wire the new tiles into `build()`**
 
 In `build()`, add this alongside the existing `final connectionsAsync = ref.watch(financeConnectionsProvider);` line:
 
@@ -1286,7 +1288,7 @@ Then add these two `ListTile`s to the `ListView`'s `children`, right after the e
             ),
 ```
 
-- [ ] **Step 4: Verify it compiles**
+- [x] **Step 4: Verify it compiles**
 
 Run: `cd mobile && flutter analyze lib/features/settings/settings_screen.dart`
 Expected: "No issues found!"
@@ -1294,7 +1296,7 @@ Expected: "No issues found!"
 Then run the full mobile test suite to confirm nothing else broke: `cd mobile && flutter test`
 Expected: PASS (all tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/lib/features/settings/settings_screen.dart

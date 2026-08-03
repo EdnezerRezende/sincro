@@ -340,7 +340,7 @@ git commit -m "feat: add pure biofeedback summary calculator"
 - Consumes: `BiofeedbackSummary` (Task 1).
 - Produces: `BiofeedbackCache` with `isAtivo(): Future<bool>`, `setAtivo(bool): Future<void>`, `getFrequenciaMinutos(): Future<int>` (default 30), `setFrequenciaMinutos(int): Future<void>`, `getResumo(): Future<BiofeedbackSummary?>`, `setResumo(BiofeedbackSummary): Future<void>`, `clear(): Future<void>`. Consumed by Tasks 5, 7, 8, 9, 10.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `mobile/test/features/biofeedback/biofeedback_cache_test.dart`:
 
@@ -425,12 +425,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_cache_test.dart`
 Expected: FAIL — `Error: Couldn't resolve the package '.../biofeedback_cache.dart'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `mobile/lib/features/biofeedback/biofeedback_cache.dart`:
 
@@ -486,12 +486,12 @@ class BiofeedbackCache {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_cache_test.dart`
 Expected: PASS (7 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_cache.dart mobile/test/features/biofeedback/biofeedback_cache_test.dart

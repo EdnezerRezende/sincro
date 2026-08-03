@@ -30,6 +30,9 @@ export class NotificationService {
         title: 'Sincro',
         body: count === 1 ? '1 e-mail precisa da sua atenção' : `${count} e-mails precisam da sua atenção`,
       },
+      // Discriminator so the mobile client knows this tap should navigate to /inbox — and only
+      // this kind of notification, not any future notification type added to the app.
+      data: { tipo: 'email_triage' },
     });
   }
 }

@@ -20,6 +20,7 @@ describe('NotificationService', () => {
     expect(send).toHaveBeenCalledWith({
       token: 'token-abc',
       notification: { title: 'Sincro', body: '3 e-mails precisam da sua atenção' },
+      data: { tipo: 'email_triage' },
     });
   });
 

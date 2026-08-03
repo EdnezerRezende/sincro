@@ -29,17 +29,25 @@ class InboxScreen extends ConsumerWidget {
             final precisamAtencao = summaries.where((s) => s.precisaAtencao).toList();
             final podemEsperar = summaries.where((s) => !s.precisaAtencao).toList();
 
-            return ListView(
-              children: [
-                if (precisamAtencao.isNotEmpty) ...[
-                  const _SectionHeader('Precisam de atenção'),
-                  ...precisamAtencao.map((s) => _EmailTile(summary: s)),
-                ],
-                if (podemEsperar.isNotEmpty) ...[
-                  const _SectionHeader('Podem esperar'),
-                  ...podemEsperar.map((s) => _EmailTile(summary: s)),
-                ],
+            final items = <_InboxListItem>[
+              if (precisamAtencao.isNotEmpty) ...[
+                const _InboxListItem.header('Precisam de atenção'),
+                ...precisamAtencao.map(_InboxListItem.email),
               ],
+              if (podemEsperar.isNotEmpty) ...[
+                const _InboxListItem.header('Podem esperar'),
+                ...podemEsperar.map(_InboxListItem.email),
+              ],
+            ];
+
+            return ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return item.isHeader
+                    ? _SectionHeader(item.title!)
+                    : _EmailTile(summary: item.summary!);
+              },
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -55,6 +63,23 @@ class InboxScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A single row for the lazily-built list: either a section header or an email tile. Keeping the
+/// section grouping as a flat, indexable list (instead of nested widget subtrees) is what lets
+/// ListView.builder build tiles on demand instead of the whole inbox eagerly.
+class _InboxListItem {
+  const _InboxListItem.header(this.title)
+      : summary = null,
+        isHeader = true;
+
+  const _InboxListItem.email(this.summary)
+      : title = null,
+        isHeader = false;
+
+  final String? title;
+  final EmailSummary? summary;
+  final bool isHeader;
 }
 
 class _SectionHeader extends StatelessWidget {

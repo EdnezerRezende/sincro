@@ -106,6 +106,54 @@ describe('EmailSyncService', () => {
     expect(deps.prisma.emailSummary.create).not.toHaveBeenCalled();
   });
 
+  it('does not abort the loop or skip the lastHistoryId update when create() hits a duplicate-key race', async () => {
+    const deps = buildDeps();
+    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
+    // The pre-filter finds nothing (simulating a concurrent run that inserted this row after the
+    // findUnique check but before create() below), so create() itself hits the unique constraint.
+    deps.prisma.emailSummary.findUnique.mockResolvedValue(null);
+    deps.prisma.emailSummary.create.mockRejectedValue(
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+    );
+    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+      emails: [
+        { gmailMessageId: 'raced', remetente: 'x@example.com', assunto: 'A', corpo: '', recebidoEm: new Date() },
+      ],
+      historyId: 'h1',
+    });
+    const service = buildService(deps);
+
+    const result = await service.syncUser('u1');
+
+    expect(result.novosPrecisamAtencao).toBe(0);
+    expect(deps.prisma.gmailConnection.update).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { lastHistoryId: 'h1', ultimaSincronizacao: expect.any(Date) },
+    });
+  });
+
+  it('does not abort the loop or skip the lastHistoryId update when create() throws an unrelated error', async () => {
+    const deps = buildDeps();
+    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
+    deps.prisma.emailSummary.findUnique.mockResolvedValue(null);
+    deps.prisma.emailSummary.create.mockRejectedValue(new Error('connection reset'));
+    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+      emails: [
+        { gmailMessageId: 'm1', remetente: 'x@example.com', assunto: 'A', corpo: '', recebidoEm: new Date() },
+      ],
+      historyId: 'h1',
+    });
+    const service = buildService(deps);
+
+    const result = await service.syncUser('u1');
+
+    expect(result.novosPrecisamAtencao).toBe(0);
+    expect(deps.prisma.gmailConnection.update).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { lastHistoryId: 'h1', ultimaSincronizacao: expect.any(Date) },
+    });
+  });
+
   it('uses the LLM classifier when the user is on plano pro', async () => {
     const deps = buildDeps();
     deps.prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', plano: 'pro' });
@@ -152,6 +200,16 @@ describe('EmailSyncService', () => {
     expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith({
       where: { userId: 'u1' },
       orderBy: { recebidoEm: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        gmailMessageId: true,
+        remetente: true,
+        assunto: true,
+        resumoCurto: true,
+        categoria: true,
+        recebidoEm: true,
+      },
     });
   });
 });

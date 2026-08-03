@@ -40,4 +40,9 @@ export class UsersService {
     const user = await this.getByFirebaseUidOrThrow(firebaseUid);
     await this.prisma.user.update({ where: { id: user.id }, data: { fcmToken } });
   }
+
+  async updateDiaRecebimento(firebaseUid: string, diaRecebimento: number | null): Promise<void> {
+    const user = await this.getByFirebaseUidOrThrow(firebaseUid);
+    await this.prisma.user.update({ where: { id: user.id }, data: { diaRecebimento } });
+  }
 }

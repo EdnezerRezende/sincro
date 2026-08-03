@@ -60,4 +60,24 @@ describe('UsersService', () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { fcmToken: 'token-xyz' } });
   });
+
+  describe('updateDiaRecebimento', () => {
+    it('updates the resolved user with the given day', async () => {
+      const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }), update: jest.fn() } };
+      const service = new UsersService(prisma as any);
+
+      await service.updateDiaRecebimento('fb1', 15);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { diaRecebimento: 15 } });
+    });
+
+    it('allows clearing the day by passing null', async () => {
+      const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }), update: jest.fn() } };
+      const service = new UsersService(prisma as any);
+
+      await service.updateDiaRecebimento('fb1', null);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { diaRecebimento: null } });
+    });
+  });
 });

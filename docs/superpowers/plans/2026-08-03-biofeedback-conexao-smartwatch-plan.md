@@ -204,7 +204,7 @@ git commit -m "feat: add health/workmanager/shared_preferences deps and biofeedb
 - Consumes: `HealthReading`, `BiofeedbackSummary` (Task 1).
 - Produces: `BiofeedbackSummaryCalculator.calcular({required List<HealthReading> leiturasFc, required List<HealthReading> leiturasVfc, required DateTime agora}): BiofeedbackSummary`. Consumed by Task 5 (sync service).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `mobile/test/features/biofeedback/biofeedback_summary_calculator_test.dart`:
 
@@ -273,12 +273,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_summary_calculator_test.dart`
 Expected: FAIL — `Error: Couldn't resolve the package '.../biofeedback_summary_calculator.dart'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `mobile/lib/features/biofeedback/biofeedback_summary_calculator.dart`:
 
@@ -316,12 +316,12 @@ class BiofeedbackSummaryCalculator {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd mobile && flutter test test/features/biofeedback/biofeedback_summary_calculator_test.dart`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/lib/features/biofeedback/biofeedback_summary_calculator.dart mobile/test/features/biofeedback/biofeedback_summary_calculator_test.dart

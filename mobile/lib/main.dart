@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
 import 'features/biofeedback/biofeedback_background_task.dart';
+import 'features/biofeedback/biofeedback_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'features/onboarding/onboarding_router.dart';
@@ -70,6 +71,7 @@ class SincroApp extends StatelessWidget {
         '/settings': (_) => const SettingsScreen(),
         '/inbox': (_) => const InboxScreen(),
         '/financas': (_) => const FinancasScreen(),
+        '/biofeedback': (_) => const BiofeedbackScreen(),
       },
     );
   }

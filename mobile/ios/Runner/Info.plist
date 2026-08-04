@@ -47,5 +47,18 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>O Sincro usa dados de frequência cardíaca do seu smartwatch para mostrar um resumo calmo do seu bem-estar.</string>
+	<!-- Sincronização em background do Biofeedback. No iOS o workmanager agenda um
+	     BGAppRefreshTask cujo identificador é o uniqueName usado em
+	     biofeedback_background_task.dart (`biofeedbackTaskName`). O identificador precisa estar
+	     listado aqui, senão o registro do launch handler lança uma exceção na inicialização. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>biofeedback-sync</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>

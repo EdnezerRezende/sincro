@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -33,7 +35,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  Workmanager().initialize(biofeedbackCallbackDispatcher);
+  // `workmanager` só tem implementação em Android e iOS; no desktop (Linux/Windows) a chamada
+  // lança uma MissingPluginException logo na inicialização do app.
+  if (Platform.isAndroid || Platform.isIOS) {
+    await Workmanager().initialize(biofeedbackCallbackDispatcher);
+  }
 
   // App backgrounded, not terminated: the Flutter engine is already running, so the navigator
   // is ready by the time this fires.

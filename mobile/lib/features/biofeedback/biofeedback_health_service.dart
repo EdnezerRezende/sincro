@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:health/health.dart';
 import 'health_reading.dart';
+import 'treino_intervalo.dart';
 
 /// Métrica de variabilidade cardíaca disponível em cada plataforma: o HealthKit expõe SDNN e o
 /// Health Connect expõe RMSSD (o `health` não oferece SDNN no Android, e a permissão declarada no
@@ -22,7 +23,8 @@ class BiofeedbackHealthService {
   /// para que chamadas concorrentes compartilhem a mesma configuração em vez de repeti-la.
   Future<void> _garantirConfigurado() => _configuracao ??= _health.configure();
 
-  List<HealthDataType> get _tipos => [HealthDataType.HEART_RATE, _tipoVfc];
+  List<HealthDataType> get _tipos =>
+      [HealthDataType.HEART_RATE, _tipoVfc, HealthDataType.STEPS, HealthDataType.WORKOUT];
 
   Future<bool> solicitarPermissao() async {
     await _garantirConfigurado();
@@ -39,6 +41,24 @@ class BiofeedbackHealthService {
 
   Future<List<HealthReading>> lerVariabilidadeHoje() {
     return _lerTipoHoje(_tipoVfc);
+  }
+
+  Future<List<HealthReading>> lerPassosHoje() {
+    return _lerTipoHoje(HealthDataType.STEPS);
+  }
+
+  Future<List<TreinoIntervalo>> lerTreinosHoje() async {
+    await _garantirConfigurado();
+    final agora = DateTime.now();
+    final inicioDoDia = DateTime(agora.year, agora.month, agora.day);
+    final pontos = await _health.getHealthDataFromTypes(
+      types: [HealthDataType.WORKOUT],
+      startTime: inicioDoDia,
+      endTime: agora,
+    );
+    return pontos
+        .map((p) => TreinoIntervalo(inicio: p.dateFrom, fim: p.dateTo))
+        .toList();
   }
 
   Future<List<HealthReading>> _lerTipoHoje(HealthDataType tipo) async {

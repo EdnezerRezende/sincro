@@ -3,6 +3,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_cache.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
+import 'package:sincro_mobile/features/biofeedback/dia_repouso.dart';
 import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 
 void main() {
@@ -84,5 +85,37 @@ void main() {
     expect(await cache.isAtivo(), false);
     expect(await cache.getFrequenciaMinutos(), 30);
     expect(await cache.getResumo(), isNull);
+  });
+
+  test('getHistoricoRepouso returns an empty list when nothing was ever saved', () async {
+    final cache = BiofeedbackCache();
+
+    expect(await cache.getHistoricoRepouso(), isEmpty);
+  });
+
+  test('setHistoricoRepouso then getHistoricoRepouso round-trips the list', () async {
+    final cache = BiofeedbackCache();
+    final historico = [
+      DiaRepouso(data: DateTime.utc(2026, 8, 1), mediaFcRepouso: 68, mediaVfcRepouso: 44),
+      DiaRepouso(data: DateTime.utc(2026, 8, 2), mediaFcRepouso: 70, mediaVfcRepouso: 45),
+    ];
+
+    await cache.setHistoricoRepouso(historico);
+    final lido = await cache.getHistoricoRepouso();
+
+    expect(lido, hasLength(2));
+    expect(lido[0].data, DateTime.utc(2026, 8, 1));
+    expect(lido[1].mediaFcRepouso, 70);
+  });
+
+  test('clear also removes the historico de repouso', () async {
+    final cache = BiofeedbackCache();
+    await cache.setHistoricoRepouso([
+      DiaRepouso(data: DateTime.utc(2026, 8, 1), mediaFcRepouso: 68, mediaVfcRepouso: 44),
+    ]);
+
+    await cache.clear();
+
+    expect(await cache.getHistoricoRepouso(), isEmpty);
   });
 }

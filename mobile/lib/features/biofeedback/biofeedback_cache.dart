@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'biofeedback_summary.dart';
+import 'dia_repouso.dart';
 
 const _chaveAtivo = 'biofeedback_ativo';
 const _chaveFrequenciaMinutos = 'biofeedback_frequencia_minutos';
 const _chaveResumo = 'biofeedback_resumo';
+const _chaveHistoricoRepouso = 'biofeedback_historico_repouso';
 const _frequenciaPadraoMinutos = 30;
 
 class BiofeedbackCache {
@@ -41,9 +43,22 @@ class BiofeedbackCache {
     return _prefs.setString(_chaveResumo, jsonEncode(resumo.toJson()));
   }
 
+  Future<List<DiaRepouso>> getHistoricoRepouso() async {
+    final raw = await _prefs.getString(_chaveHistoricoRepouso);
+    if (raw == null) return [];
+    final lista = jsonDecode(raw) as List<dynamic>;
+    return lista.map((e) => DiaRepouso.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> setHistoricoRepouso(List<DiaRepouso> historico) {
+    final lista = historico.map((d) => d.toJson()).toList();
+    return _prefs.setString(_chaveHistoricoRepouso, jsonEncode(lista));
+  }
+
   Future<void> clear() async {
     await _prefs.remove(_chaveAtivo);
     await _prefs.remove(_chaveFrequenciaMinutos);
     await _prefs.remove(_chaveResumo);
+    await _prefs.remove(_chaveHistoricoRepouso);
   }
 }

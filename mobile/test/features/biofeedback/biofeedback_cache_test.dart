@@ -3,6 +3,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_cache.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
+import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 
 void main() {
   // `BiofeedbackCache` usa `SharedPreferencesAsync` (ver o comentário lá sobre isolates), que
@@ -55,6 +56,7 @@ void main() {
       ultimaFc: 72,
       mediaFcHoje: 70,
       mediaVfcHoje: 45,
+      estadoEstresse: EstadoEstresse.coletandoDados,
       atualizadoEm: DateTime.utc(2026, 8, 3, 14, 0),
     );
 
@@ -73,6 +75,7 @@ void main() {
       ultimaFc: 72,
       mediaFcHoje: 70,
       mediaVfcHoje: 45,
+      estadoEstresse: EstadoEstresse.coletandoDados,
       atualizadoEm: DateTime.utc(2026, 8, 3, 14, 0),
     ));
 

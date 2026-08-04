@@ -1,4 +1,5 @@
 import 'biofeedback_summary.dart';
+import 'estado_estresse.dart';
 import 'health_reading.dart';
 
 class BiofeedbackSummaryCalculator {
@@ -11,6 +12,7 @@ class BiofeedbackSummaryCalculator {
       ultimaFc: _ultimoValor(leiturasFc),
       mediaFcHoje: _media(leiturasFc),
       mediaVfcHoje: _media(leiturasVfc),
+      estadoEstresse: EstadoEstresse.coletandoDados,
       atualizadoEm: agora,
     );
   }

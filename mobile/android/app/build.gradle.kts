@@ -10,7 +10,9 @@ plugins {
 
 android {
     namespace = "com.sincro.sincro_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // O androidx.health.connect:connect-client (dependência do plugin `health`) exige compilar
+    // contra a API 36; o padrão do Flutter 3.32 ainda é 35.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -27,7 +29,9 @@ android {
         applicationId = "com.sincro.sincro_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // O plugin `health` (Health Connect) declara minSdkVersion 26 na própria biblioteca;
+        // manter o padrão do Flutter (21) faz o merge de manifestos do AGP falhar o build.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

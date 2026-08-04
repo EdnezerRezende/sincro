@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
+import '../biofeedback/biofeedback_cache.dart';
 import '../biofeedback/biofeedback_providers.dart';
 import '../biofeedback/estado_estresse.dart';
 import '../financas/finance_connection.dart';
@@ -286,6 +287,13 @@ class _BiofeedbackCard extends ConsumerWidget {
       // pareada, chamada instável), a permissão já foi concedida e não faz sentido obrigar o
       // usuário a refazer tudo. O agendamento em background cuida das próximas tentativas.
       await ref.read(biofeedbackCacheProvider).setAtivo(true);
+      // A ativação já pediu TODAS as permissões da versão atual (`_tipos` inclui passos e
+      // treinos), então registramos a versão aqui para que a checagem de upgrade dentro de
+      // `sincronizar()` seja um no-op para quem está ativando agora — em vez de pedir de novo,
+      // sem motivo, logo na primeira sincronização.
+      await ref
+          .read(biofeedbackCacheProvider)
+          .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
       final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
       await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
       try {
@@ -295,6 +303,9 @@ class _BiofeedbackCard extends ConsumerWidget {
       }
       ref.invalidate(biofeedbackAtivoProvider);
       ref.invalidate(biofeedbackResumoProvider);
+      // A sincronização acima também grava o histórico de repouso, que alimenta o contador
+      // "(N de 7 dias)" da tela de detalhe.
+      ref.invalidate(biofeedbackDiasNoHistoricoProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -13,6 +13,8 @@ class BiofeedbackSyncService {
   final BiofeedbackStressDetector _detector;
 
   Future<void> sincronizar({DateTime? agora}) async {
+    await _garantirPermissoesAtualizadas();
+
     final agoraEfetivo = agora ?? DateTime.now();
     final leiturasFc = await _healthService.lerFrequenciaCardiacaHoje();
     final leiturasVfc = await _healthService.lerVariabilidadeHoje();
@@ -55,5 +57,33 @@ class BiofeedbackSyncService {
       ),
     );
     await _cache.setHistoricoRepouso(historicoAtualizado);
+  }
+
+  /// Pede as permissões que faltam para quem já usava o Biofeedback antes desta fase.
+  ///
+  /// `solicitarPermissao()` só roda na ativação, e quem ativou na Fase 1 já tem
+  /// `biofeedback_ativo = true` — ou seja, nunca mais passaria por lá. Como a Fase 2 acrescentou
+  /// PASSOS e TREINO ao conjunto pedido, esses usuários ficariam sem essas duas permissões, e a
+  /// falha é silenciosa: o plugin `health` devolve lista vazia para um tipo não autorizado, então
+  /// toda leitura pareceria "em repouso" e o dia inteiro (inclusive exercício) entraria na média
+  /// que a linha de base usa — exatamente o que o filtro de atividade existe para evitar.
+  ///
+  /// Roda antes de qualquer leitura de saúde e vale tanto para a sincronização em primeiro plano
+  /// quanto para a periódica em background, que é por onde a maioria dos usuários existentes
+  /// passa primeiro depois da atualização.
+  Future<void> _garantirPermissoesAtualizadas() async {
+    if (!await _cache.isAtivo()) return;
+    if (await _cache.getPermissoesVersao() >= BiofeedbackCache.versaoPermissoesAtual) return;
+
+    try {
+      await _healthService.solicitarPermissao();
+    } catch (_) {
+      // Best-effort, como o resto desta sincronização: uma falha ao pedir permissão não pode
+      // impedir que os dados já autorizados sejam lidos e o resumo atualizado.
+    }
+    // Gravamos a versão independentemente do resultado (concedido, negado ou erro): insistir a
+    // cada ciclo transformaria uma recusa deliberada em um pedido recorrente. Quem quiser
+    // conceder depois ainda pode fazê-lo pelas configurações do app de saúde.
+    await _cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
   }
 }

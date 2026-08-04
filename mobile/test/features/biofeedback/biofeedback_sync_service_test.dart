@@ -28,9 +28,15 @@ void main() {
     List<HealthReading> passos = const [],
     List<TreinoIntervalo> treinos = const [],
     List<DiaRepouso> historico = const [],
+    bool ativo = true,
+    int permissoesVersao = BiofeedbackCache.versaoPermissoesAtual,
   }) {
+    when(() => healthService.solicitarPermissao()).thenAnswer((_) async => true);
     when(() => healthService.lerPassosHoje()).thenAnswer((_) async => passos);
     when(() => healthService.lerTreinosHoje()).thenAnswer((_) async => treinos);
+    when(() => cache.isAtivo()).thenAnswer((_) async => ativo);
+    when(() => cache.getPermissoesVersao()).thenAnswer((_) async => permissoesVersao);
+    when(() => cache.setPermissoesVersao(any())).thenAnswer((_) async {});
     when(() => cache.getHistoricoRepouso()).thenAnswer((_) async => historico);
     when(() => cache.setHistoricoRepouso(any())).thenAnswer((_) async {});
     when(() => cache.setResumo(any())).thenAnswer((_) async {});
@@ -135,5 +141,90 @@ void main() {
     final captured = verify(() => cache.setResumo(captureAny())).captured;
     final salvo = captured.single as BiofeedbackSummary;
     expect(salvo.estadoEstresse, EstadoEstresse.elevado);
+  });
+
+  group('upgrade de permissões', () {
+    void stubLeiturasVazias(MockBiofeedbackHealthService healthService) {
+      when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
+      when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+    }
+
+    test('requests the new permissions once for a user activated on an older version', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      // Usuário da Fase 1: já ativo, mas sem nenhuma versão de permissão gravada.
+      final service = buildService(healthService, cache, permissoesVersao: 0);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verify(() => healthService.solicitarPermissao()).called(1);
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+    });
+
+    test('requests permissions before reading any health data', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache, permissoesVersao: 0);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      // Pedir depois de ler não adiantaria nada: as leituras desta rodada já teriam voltado
+      // vazias para os tipos ainda não autorizados.
+      verifyInOrder([
+        () => healthService.solicitarPermissao(),
+        () => healthService.lerFrequenciaCardiacaHoje(),
+      ]);
+    });
+
+    test('does not request permissions again once the current version is recorded', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verifyNever(() => healthService.solicitarPermissao());
+      verifyNever(() => cache.setPermissoesVersao(any()));
+    });
+
+    test('does not request permissions when biofeedback is not active', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache, ativo: false, permissoesVersao: 0);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verifyNever(() => healthService.solicitarPermissao());
+    });
+
+    test('records the version even when the permission request is denied', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache, permissoesVersao: 0);
+      when(() => healthService.solicitarPermissao()).thenAnswer((_) async => false);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      // Uma recusa deliberada não pode virar um pedido a cada ciclo de sincronização.
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+    });
+
+    test('still syncs, and records the version, when the permission request throws', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache, permissoesVersao: 0);
+      when(() => healthService.solicitarPermissao()).thenThrow(Exception('sem activity'));
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+      verify(() => cache.setResumo(any())).called(1);
+    });
   });
 }

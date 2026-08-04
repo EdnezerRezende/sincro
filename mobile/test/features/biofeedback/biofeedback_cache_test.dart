@@ -108,6 +108,31 @@ void main() {
     expect(lido[1].mediaFcRepouso, 70);
   });
 
+  test('getPermissoesVersao defaults to 0 when nothing was ever saved', () async {
+    final cache = BiofeedbackCache();
+
+    // Quem ativou o Biofeedback na Fase 1 nunca gravou esta chave — o 0 é justamente o que
+    // sinaliza "concedeu só as permissões antigas" e dispara o pedido das novas.
+    expect(await cache.getPermissoesVersao(), 0);
+  });
+
+  test('setPermissoesVersao persists the recorded version', () async {
+    final cache = BiofeedbackCache();
+
+    await cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
+
+    expect(await cache.getPermissoesVersao(), BiofeedbackCache.versaoPermissoesAtual);
+  });
+
+  test('clear also removes the permissoes versao', () async {
+    final cache = BiofeedbackCache();
+    await cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
+
+    await cache.clear();
+
+    expect(await cache.getPermissoesVersao(), 0);
+  });
+
   test('clear also removes the historico de repouso', () async {
     final cache = BiofeedbackCache();
     await cache.setHistoricoRepouso([

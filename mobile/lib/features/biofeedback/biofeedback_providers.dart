@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'biofeedback_background_task.dart';
 import 'biofeedback_cache.dart';
 import 'biofeedback_health_service.dart';
+import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary.dart';
 import 'biofeedback_summary_calculator.dart';
 import 'biofeedback_sync_service.dart';
@@ -19,6 +20,7 @@ final biofeedbackSyncServiceProvider = Provider<BiofeedbackSyncService>((ref) {
     ref.watch(biofeedbackHealthServiceProvider),
     ref.watch(biofeedbackCacheProvider),
     BiofeedbackSummaryCalculator(),
+    BiofeedbackStressDetector(),
   );
 });
 

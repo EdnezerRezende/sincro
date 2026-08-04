@@ -1,6 +1,7 @@
 import 'package:workmanager/workmanager.dart';
 import 'biofeedback_cache.dart';
 import 'biofeedback_health_service.dart';
+import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary_calculator.dart';
 import 'biofeedback_sync_service.dart';
 
@@ -16,6 +17,7 @@ void biofeedbackCallbackDispatcher() {
       BiofeedbackHealthService(),
       BiofeedbackCache(),
       BiofeedbackSummaryCalculator(),
+      BiofeedbackStressDetector(),
     );
     try {
       await syncService.sincronizar();

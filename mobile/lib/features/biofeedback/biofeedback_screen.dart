@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'biofeedback_providers.dart';
@@ -21,6 +23,9 @@ class BiofeedbackScreen extends ConsumerWidget {
             // Sincronização sob demanda é best-effort: se falhar, ainda mostramos os dados em cache.
           }
           ref.invalidate(biofeedbackResumoProvider);
+          // O histórico de repouso também muda na sincronização e é o que alimenta o contador
+          // "(N de 7 dias)" — sem invalidar aqui, ele ficaria preso no valor anterior.
+          ref.invalidate(biofeedbackDiasNoHistoricoProvider);
         },
         child: resumoAsync.when(
           data: (resumo) => _BiofeedbackContent(
@@ -69,14 +74,22 @@ class _BiofeedbackContent extends StatelessWidget {
     return (sufixoMedia: 'em $dia/$mes', prefixoAtualizacao: 'em $dia/$mes ');
   }
 
+  /// Dias de histórico necessários para a linha de base ficar pronta (ver
+  /// `BiofeedbackStressDetector`). O histórico em si guarda até 14 dias.
+  static const _diasParaLinhaDeBase = 7;
+
   static String _rotuloEstadoEstresse(EstadoEstresse estado, int diasNoHistorico) {
     switch (estado) {
       case EstadoEstresse.calmo:
-        return 'Calmo';
+        return 'Estado atual: Calmo';
       case EstadoEstresse.elevado:
-        return 'Elevado';
+        return 'Estado atual: Elevado';
       case EstadoEstresse.coletandoDados:
-        return 'Coletando dados ($diasNoHistorico de 7 dias)';
+        // O contador é limitado a 7 porque o histórico pode ter até 14 dias e ainda assim
+        // continuar "coletando dados" por outro motivo (nenhuma leitura em repouso hoje) —
+        // sem o limite, apareceria um "13 de 7 dias".
+        final dias = min(diasNoHistorico, _diasParaLinhaDeBase);
+        return 'Coletando dados ($dias de $_diasParaLinhaDeBase dias)';
     }
   }
 
@@ -140,7 +153,11 @@ class _BiofeedbackContent extends StatelessWidget {
         Text(
           diasNoHistoricoAsync.when(
             data: (dias) => _rotuloEstadoEstresse(atual.estadoEstresse, dias),
-            loading: () => 'Carregando...',
+            // Só "Coletando dados" usa a contagem de dias; para calmo/elevado o rótulo já está
+            // pronto e esperar pelo histórico só faria a linha piscar "Carregando..." à toa.
+            loading: () => atual.estadoEstresse == EstadoEstresse.coletandoDados
+                ? 'Carregando...'
+                : _rotuloEstadoEstresse(atual.estadoEstresse, 0),
             error: (_, __) => _rotuloEstadoEstresse(atual.estadoEstresse, 0),
           ),
           style: const TextStyle(fontSize: 14),

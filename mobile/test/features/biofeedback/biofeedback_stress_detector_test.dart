@@ -207,6 +207,38 @@ void main() {
       expect(estado, EstadoEstresse.elevado);
     });
 
+    test('uses population standard deviation (÷N), not sample (÷N-1), for the threshold', () {
+      // Teste discriminante: os demais casos passam com qualquer uma das duas convenções, então
+      // uma troca acidental de `/ valores.length` para `/ (valores.length - 1)` em `_estatisticas`
+      // não seria detectada. Aqui o valor de hoje cai exatamente na faixa entre os dois limiares.
+      //
+      // FC {66, 68, 70, 72, 74, 68, 70}: média 69.714, desvio populacional 2.4908 e amostral
+      // 2.6904 -> limiar de FC elevada 73.4505 (populacional) contra 73.7498 (amostral).
+      // A FC de hoje, 73.6, está entre os dois: dispara a condição só com variância populacional.
+      //
+      // A VFC de hoje (20) está muito abaixo do limiar de reduzida nas duas convenções (42.5495
+      // e 42.2502), então ela nunca é o fator decisivo — quem decide o resultado é só a FC.
+      final historico = [
+        DiaRepouso(data: DateTime(2026, 7, 20), mediaFcRepouso: 66, mediaVfcRepouso: 50),
+        DiaRepouso(data: DateTime(2026, 7, 21), mediaFcRepouso: 68, mediaVfcRepouso: 48),
+        DiaRepouso(data: DateTime(2026, 7, 22), mediaFcRepouso: 70, mediaVfcRepouso: 46),
+        DiaRepouso(data: DateTime(2026, 7, 23), mediaFcRepouso: 72, mediaVfcRepouso: 44),
+        DiaRepouso(data: DateTime(2026, 7, 24), mediaFcRepouso: 74, mediaVfcRepouso: 42),
+        DiaRepouso(data: DateTime(2026, 7, 25), mediaFcRepouso: 68, mediaVfcRepouso: 48),
+        DiaRepouso(data: DateTime(2026, 7, 26), mediaFcRepouso: 70, mediaVfcRepouso: 46),
+      ];
+
+      final estado = detector.detectar(
+        mediaFcRepousoHoje: 73.6,
+        mediaVfcRepousoHoje: 20,
+        historico: historico,
+        hoje: DateTime(2026, 8, 3),
+      );
+
+      // Com variância amostral este mesmo caso daria `calmo`.
+      expect(estado, EstadoEstresse.elevado);
+    });
+
     test('never triggers elevado from a metric whose baseline has zero standard deviation', () {
       // Todo o histórico com o mesmo valor de FC -> desvio-padrão zero -> a condição de FC
       // nunca é satisfeita, mesmo com um valor de hoje muito diferente.

@@ -51,4 +51,21 @@ void main() {
 
     expect(lido.estadoEstresse, EstadoEstresse.coletandoDados);
   });
+
+  test('fromJson falls back to coletandoDados on an unknown estadoEstresse instead of throwing', () {
+    // Cache corrompido ou gravado por uma versão futura com outros estados: perder o estado de
+    // estresse é aceitável, deixar o resumo inteiro ilegível não.
+    final jsonCorrompido = {
+      'ultimaFc': 72.0,
+      'mediaFcHoje': 68.5,
+      'mediaVfcHoje': 45.2,
+      'estadoEstresse': 'estadoQueNaoExiste',
+      'atualizadoEm': DateTime.utc(2026, 8, 3, 14, 30).toIso8601String(),
+    };
+
+    final lido = BiofeedbackSummary.fromJson(jsonCorrompido);
+
+    expect(lido.estadoEstresse, EstadoEstresse.coletandoDados);
+    expect(lido.ultimaFc, 72.0);
+  });
 }

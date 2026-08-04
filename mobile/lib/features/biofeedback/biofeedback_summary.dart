@@ -29,9 +29,15 @@ class BiofeedbackSummary {
       mediaFcHoje: (json['mediaFcHoje'] as num?)?.toDouble(),
       mediaVfcHoje: (json['mediaVfcHoje'] as num?)?.toDouble(),
       // Resumo gravado pela Fase 1 não tem esta chave — tratamos como "ainda coletando dados"
-      // em vez de quebrar a leitura de um cache pré-existente.
+      // em vez de quebrar a leitura de um cache pré-existente. Um valor presente mas
+      // desconhecido (cache corrompido, ou gravado por uma versão futura com outros estados)
+      // cai no mesmo padrão em vez de lançar: perder o estado de estresse é bem melhor do que
+      // deixar o resumo inteiro ilegível.
       estadoEstresse: json['estadoEstresse'] != null
-          ? EstadoEstresse.values.byName(json['estadoEstresse'] as String)
+          ? EstadoEstresse.values.firstWhere(
+              (e) => e.name == json['estadoEstresse'],
+              orElse: () => EstadoEstresse.coletandoDados,
+            )
           : EstadoEstresse.coletandoDados,
       atualizadoEm: DateTime.parse(json['atualizadoEm'] as String),
     );

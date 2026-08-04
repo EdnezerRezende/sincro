@@ -12,6 +12,8 @@ class BiofeedbackSummaryCalculator {
       ultimaFc: _ultimoValor(leiturasFc),
       mediaFcHoje: _media(leiturasFc),
       mediaVfcHoje: _media(leiturasVfc),
+      // Placeholder: `BiofeedbackSyncService` sobrescreve com o estado real detectado. O cálculo
+      // aqui não tem acesso ao detector nem ao histórico de repouso para decidir isso.
       estadoEstresse: EstadoEstresse.coletandoDados,
       atualizadoEm: agora,
     );

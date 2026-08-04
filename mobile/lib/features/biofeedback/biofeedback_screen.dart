@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'biofeedback_providers.dart';
 import 'biofeedback_summary.dart';
+import 'estado_estresse.dart';
 
 class BiofeedbackScreen extends ConsumerWidget {
   const BiofeedbackScreen({super.key});
@@ -22,7 +23,10 @@ class BiofeedbackScreen extends ConsumerWidget {
           ref.invalidate(biofeedbackResumoProvider);
         },
         child: resumoAsync.when(
-          data: (resumo) => _BiofeedbackContent(resumo: resumo),
+          data: (resumo) => _BiofeedbackContent(
+            resumo: resumo,
+            diasNoHistoricoAsync: ref.watch(biofeedbackDiasNoHistoricoProvider),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => ListView(
             children: const [
@@ -42,9 +46,10 @@ class BiofeedbackScreen extends ConsumerWidget {
 typedef _RotulosDeData = ({String sufixoMedia, String prefixoAtualizacao});
 
 class _BiofeedbackContent extends StatelessWidget {
-  const _BiofeedbackContent({required this.resumo});
+  const _BiofeedbackContent({required this.resumo, required this.diasNoHistoricoAsync});
 
   final BiofeedbackSummary? resumo;
+  final AsyncValue<int> diasNoHistoricoAsync;
 
   static bool _mesmoDia(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -62,6 +67,17 @@ class _BiofeedbackContent extends StatelessWidget {
     final dia = atualizadoEm.day.toString().padLeft(2, '0');
     final mes = atualizadoEm.month.toString().padLeft(2, '0');
     return (sufixoMedia: 'em $dia/$mes', prefixoAtualizacao: 'em $dia/$mes ');
+  }
+
+  static String _rotuloEstadoEstresse(EstadoEstresse estado, int diasNoHistorico) {
+    switch (estado) {
+      case EstadoEstresse.calmo:
+        return 'Calmo';
+      case EstadoEstresse.elevado:
+        return 'Elevado';
+      case EstadoEstresse.coletandoDados:
+        return 'Coletando dados ($diasNoHistorico de 7 dias)';
+    }
   }
 
   @override
@@ -119,6 +135,15 @@ class _BiofeedbackContent extends StatelessWidget {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          diasNoHistoricoAsync.when(
+            data: (dias) => _rotuloEstadoEstresse(atual.estadoEstresse, dias),
+            loading: () => 'Carregando...',
+            error: (_, __) => _rotuloEstadoEstresse(atual.estadoEstresse, 0),
+          ),
+          style: const TextStyle(fontSize: 14),
         ),
         const SizedBox(height: 16),
         Text(

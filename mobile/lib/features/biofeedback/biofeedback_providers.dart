@@ -35,3 +35,9 @@ final biofeedbackAtivoProvider = FutureProvider.autoDispose<bool>((ref) {
 final biofeedbackResumoProvider = FutureProvider.autoDispose<BiofeedbackSummary?>((ref) {
   return ref.watch(biofeedbackCacheProvider).getResumo();
 });
+
+final biofeedbackDiasNoHistoricoProvider = FutureProvider.autoDispose<int>((ref) async {
+  final historico = await ref.watch(biofeedbackCacheProvider).getHistoricoRepouso();
+  final hoje = DateTime.now();
+  return historico.where((d) => !(d.data.year == hoje.year && d.data.month == hoje.month && d.data.day == hoje.day)).length;
+});

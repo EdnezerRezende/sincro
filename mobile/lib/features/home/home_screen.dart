@@ -5,6 +5,7 @@ import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
 import '../biofeedback/biofeedback_providers.dart';
+import '../biofeedback/estado_estresse.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../financas/pluggy_connect_webview_screen.dart';
@@ -346,6 +347,19 @@ class _BiofeedbackCard extends ConsumerWidget {
 class _UltimaFcSubtitle extends ConsumerWidget {
   const _UltimaFcSubtitle();
 
+  static String _rotuloEstado(EstadoEstresse estado) {
+    switch (estado) {
+      case EstadoEstresse.calmo:
+        return 'Calmo';
+      case EstadoEstresse.elevado:
+        return 'Elevado';
+      case EstadoEstresse.coletandoDados:
+        // Não menciona "coletando dados" na Home — a tela de detalhe é o lugar para isso, para
+        // a Home (primeiro contato do app) não parecer ter uma pendência.
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final resumoAsync = ref.watch(biofeedbackResumoProvider);
@@ -353,7 +367,11 @@ class _UltimaFcSubtitle extends ConsumerWidget {
       data: (resumo) {
         if (resumo?.ultimaFc == null) return const Text('Nenhum dado disponível ainda');
         // Sem "agora": a última leitura pode ter horas, já que a sincronização é periódica.
-        return Text('${resumo!.ultimaFc!.round()} bpm');
+        final rotuloEstado = _rotuloEstado(resumo!.estadoEstresse);
+        final texto = rotuloEstado.isEmpty
+            ? '${resumo.ultimaFc!.round()} bpm'
+            : '${resumo.ultimaFc!.round()} bpm · $rotuloEstado';
+        return Text(texto);
       },
       loading: () => const Text('Carregando...'),
       error: (_, __) => const Text('Nenhum dado disponível ainda'),

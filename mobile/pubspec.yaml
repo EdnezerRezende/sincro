@@ -70,6 +70,9 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   mocktail: ^1.0.5
+  # Só para testes: dá acesso ao backend em memória (`InMemorySharedPreferencesAsync`) que o
+  # `SharedPreferencesAsync` usado por `BiofeedbackCache` exige em ambiente de teste.
+  shared_preferences_platform_interface: ^2.4.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

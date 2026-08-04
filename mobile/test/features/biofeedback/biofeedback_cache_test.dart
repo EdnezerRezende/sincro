@@ -1,11 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_cache.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
 
 void main() {
+  // `BiofeedbackCache` usa `SharedPreferencesAsync` (ver o comentário lá sobre isolates), que
+  // exige um backend de plataforma registrado; nos testes usamos o backend em memória oficial.
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+  });
+
+  tearDown(() {
+    SharedPreferencesAsyncPlatform.instance = null;
   });
 
   test('isAtivo defaults to false when nothing was ever saved', () async {

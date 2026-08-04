@@ -38,10 +38,31 @@ class BiofeedbackScreen extends ConsumerWidget {
   }
 }
 
+/// Rótulos temporais do resumo, derivados da data em que ele foi calculado.
+typedef _RotulosDeData = ({String sufixoMedia, String prefixoAtualizacao});
+
 class _BiofeedbackContent extends StatelessWidget {
   const _BiofeedbackContent({required this.resumo});
 
   final BiofeedbackSummary? resumo;
+
+  static bool _mesmoDia(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// O resumo em cache pode ser de outro dia (app reaberto depois da meia-noite, antes de a
+  /// próxima sincronização rodar). Chamar essas médias de "hoje" e mostrar só o horário faria um
+  /// dado velho parecer atual, então os rótulos são qualificados com o dia a que se referem.
+  static _RotulosDeData _rotulos(DateTime atualizadoEm, DateTime agora) {
+    if (_mesmoDia(atualizadoEm, agora)) {
+      return (sufixoMedia: 'hoje', prefixoAtualizacao: '');
+    }
+    if (_mesmoDia(atualizadoEm, agora.subtract(const Duration(days: 1)))) {
+      return (sufixoMedia: 'ontem', prefixoAtualizacao: 'ontem ');
+    }
+    final dia = atualizadoEm.day.toString().padLeft(2, '0');
+    final mes = atualizadoEm.month.toString().padLeft(2, '0');
+    return (sufixoMedia: 'em $dia/$mes', prefixoAtualizacao: 'em $dia/$mes ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +77,7 @@ class _BiofeedbackContent extends StatelessWidget {
         ],
       );
     }
+    final rotulos = _rotulos(atual.atualizadoEm, DateTime.now());
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -65,7 +87,10 @@ class _BiofeedbackContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Frequência cardíaca média hoje', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                Text(
+                  'Frequência cardíaca média ${rotulos.sufixoMedia}',
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   atual.mediaFcHoje != null ? '${atual.mediaFcHoje!.round()} bpm' : '—',
@@ -82,7 +107,10 @@ class _BiofeedbackContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Variabilidade média hoje', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                Text(
+                  'Variabilidade média ${rotulos.sufixoMedia}',
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   atual.mediaVfcHoje != null ? '${atual.mediaVfcHoje!.round()} ms' : '—',
@@ -94,7 +122,8 @@ class _BiofeedbackContent extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          'Atualizado às ${TimeOfDay.fromDateTime(atual.atualizadoEm).format(context)}',
+          'Atualizado ${rotulos.prefixoAtualizacao}às '
+          '${TimeOfDay.fromDateTime(atual.atualizadoEm).format(context)}',
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ],

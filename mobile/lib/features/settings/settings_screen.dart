@@ -274,7 +274,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text('Desativar Biofeedback?'),
         content: const Text(
           'Os dados de frequência cardíaca guardados no app serão apagados. '
-          'Você pode ativar novamente quando quiser.',
+          'Você pode ativar novamente quando quiser.\n\n'
+          'A permissão de acesso à saúde continua concedida no sistema: o app não consegue '
+          'revogá-la sozinho. Se quiser removê-la, faça isso no HealthKit (Ajustes > Saúde) ou '
+          'no Health Connect do seu aparelho.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
@@ -369,17 +372,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: _busy ? null : _editDiaRecebimento,
           ),
           ...financeConnectionTiles,
-          ListTile(
-            leading: const Icon(Icons.favorite_border),
-            title: const Text('Frequência do Biofeedback'),
-            onTap: _busy ? null : _editBiofeedbackFrequencia,
-          ),
-          if (biofeedbackAtivo)
+          // Ambos os itens só fazem sentido com o Biofeedback ativo: a frequência só governa o
+          // agendamento em background, que nem existe enquanto o pilar está desativado.
+          if (biofeedbackAtivo) ...[
+            ListTile(
+              leading: const Icon(Icons.favorite_border),
+              title: const Text('Frequência do Biofeedback'),
+              onTap: _busy ? null : _editBiofeedbackFrequencia,
+            ),
             ListTile(
               leading: const Icon(Icons.favorite_border),
               title: const Text('Desativar Biofeedback'),
               onTap: _busy ? null : _desativarBiofeedback,
             ),
+          ],
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),

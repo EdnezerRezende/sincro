@@ -33,7 +33,3 @@ final biofeedbackAtivoProvider = FutureProvider.autoDispose<bool>((ref) {
 final biofeedbackResumoProvider = FutureProvider.autoDispose<BiofeedbackSummary?>((ref) {
   return ref.watch(biofeedbackCacheProvider).getResumo();
 });
-
-final biofeedbackFrequenciaProvider = FutureProvider.autoDispose<int>((ref) {
-  return ref.watch(biofeedbackCacheProvider).getFrequenciaMinutos();
-});

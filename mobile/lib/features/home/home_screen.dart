@@ -280,10 +280,18 @@ class _BiofeedbackCard extends ConsumerWidget {
         }
         return;
       }
-      await ref.read(biofeedbackSyncServiceProvider).sincronizar();
+      // Persistimos a ativação e agendamos o background ANTES da primeira sincronização: se a
+      // primeira leitura falhar (Health Connect ainda inicializando, nenhuma fonte de dados
+      // pareada, chamada instável), a permissão já foi concedida e não faz sentido obrigar o
+      // usuário a refazer tudo. O agendamento em background cuida das próximas tentativas.
       await ref.read(biofeedbackCacheProvider).setAtivo(true);
       final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
       await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
+      try {
+        await ref.read(biofeedbackSyncServiceProvider).sincronizar();
+      } catch (_) {
+        // Primeira sincronização é best-effort — mesma postura do callback do background.
+      }
       ref.invalidate(biofeedbackAtivoProvider);
       ref.invalidate(biofeedbackResumoProvider);
     } catch (e) {
@@ -295,23 +303,25 @@ class _BiofeedbackCard extends ConsumerWidget {
     }
   }
 
+  Widget _cardInativo(BuildContext context, WidgetRef ref) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.favorite_border),
+        title: const Text('💓 Biofeedback'),
+        subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
+        trailing: ElevatedButton(
+          onPressed: () => _ativar(context, ref),
+          child: const Text('Ativar Biofeedback'),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ativoAsync.when(
       data: (ativo) {
-        if (!ativo) {
-          return Card(
-            child: ListTile(
-              leading: const Icon(Icons.favorite_border),
-              title: const Text('💓 Biofeedback'),
-              subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
-              trailing: ElevatedButton(
-                onPressed: () => _ativar(context, ref),
-                child: const Text('Ativar Biofeedback'),
-              ),
-            ),
-          );
-        }
+        if (!ativo) return _cardInativo(context, ref);
         return Card(
           child: ListTile(
             leading: const Icon(Icons.favorite_border),
@@ -323,7 +333,10 @@ class _BiofeedbackCard extends ConsumerWidget {
         );
       },
       loading: () => const Card(child: ListTile(title: Text('💓 Biofeedback'), subtitle: Text('Carregando...'))),
-      error: (_, __) => const SizedBox.shrink(),
+      // O card do Biofeedback nunca some da Home (restrição global do pilar): se não deu para
+      // ler o estado de ativação, mostramos o card inativo, que continua sendo um ponto de
+      // entrada válido — ativar de novo é idempotente.
+      error: (_, __) => _cardInativo(context, ref),
     );
   }
 }
@@ -339,7 +352,8 @@ class _UltimaFcSubtitle extends ConsumerWidget {
     return resumoAsync.when(
       data: (resumo) {
         if (resumo?.ultimaFc == null) return const Text('Nenhum dado disponível ainda');
-        return Text('${resumo!.ultimaFc!.round()} bpm agora');
+        // Sem "agora": a última leitura pode ter horas, já que a sincronização é periódica.
+        return Text('${resumo!.ultimaFc!.round()} bpm');
       },
       loading: () => const Text('Carregando...'),
       error: (_, __) => const Text('Nenhum dado disponível ainda'),

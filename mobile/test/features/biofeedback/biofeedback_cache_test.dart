@@ -143,4 +143,27 @@ void main() {
 
     expect(await cache.getHistoricoRepouso(), isEmpty);
   });
+
+  test('getAlertasAtivos defaults to true when nothing was ever saved', () async {
+    final cache = BiofeedbackCache();
+
+    expect(await cache.getAlertasAtivos(), true);
+  });
+
+  test('setAlertasAtivos persists the flag for later reads', () async {
+    final cache = BiofeedbackCache();
+
+    await cache.setAlertasAtivos(false);
+
+    expect(await cache.getAlertasAtivos(), false);
+  });
+
+  test('clear also resets alertasAtivos back to the default', () async {
+    final cache = BiofeedbackCache();
+    await cache.setAlertasAtivos(false);
+
+    await cache.clear();
+
+    expect(await cache.getAlertasAtivos(), true);
+  });
 }

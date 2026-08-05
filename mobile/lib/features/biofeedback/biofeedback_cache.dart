@@ -8,6 +8,7 @@ const _chaveFrequenciaMinutos = 'biofeedback_frequencia_minutos';
 const _chaveResumo = 'biofeedback_resumo';
 const _chaveHistoricoRepouso = 'biofeedback_historico_repouso';
 const _chavePermissoesVersao = 'biofeedback_permissoes_versao';
+const _chaveAlertasAtivos = 'biofeedback_alertas_ativos';
 const _frequenciaPadraoMinutos = 30;
 
 class BiofeedbackCache {
@@ -75,11 +76,20 @@ class BiofeedbackCache {
     return _prefs.setInt(_chavePermissoesVersao, versao);
   }
 
+  Future<bool> getAlertasAtivos() async {
+    return await _prefs.getBool(_chaveAlertasAtivos) ?? true;
+  }
+
+  Future<void> setAlertasAtivos(bool ativos) {
+    return _prefs.setBool(_chaveAlertasAtivos, ativos);
+  }
+
   Future<void> clear() async {
     await _prefs.remove(_chaveAtivo);
     await _prefs.remove(_chaveFrequenciaMinutos);
     await _prefs.remove(_chaveResumo);
     await _prefs.remove(_chaveHistoricoRepouso);
     await _prefs.remove(_chavePermissoesVersao);
+    await _prefs.remove(_chaveAlertasAtivos);
   }
 }

@@ -267,6 +267,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _alternarAlertasBiofeedback(bool valor) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(biofeedbackCacheProvider).setAlertasAtivos(valor);
+      ref.invalidate(biofeedbackAlertasAtivosProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível salvar. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _desativarBiofeedback() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -329,6 +345,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           data: (ativo) => ativo,
           orElse: () => false,
         );
+    final biofeedbackAlertasAtivos = ref.watch(biofeedbackAlertasAtivosProvider).maybeWhen(
+          data: (ativos) => ativos,
+          orElse: () => true,
+        );
     final financeConnectionTiles = connectionsAsync.maybeWhen(
       data: (connections) => connections
           .map(
@@ -379,6 +399,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               leading: const Icon(Icons.favorite_border),
               title: const Text('Frequência do Biofeedback'),
               onTap: _busy ? null : _editBiofeedbackFrequencia,
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('Alertas de estresse'),
+              value: biofeedbackAlertasAtivos,
+              onChanged: _busy ? null : _alternarAlertasBiofeedback,
             ),
             ListTile(
               leading: const Icon(Icons.favorite_border),

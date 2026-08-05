@@ -4,9 +4,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
+import 'features/biofeedback/biofeedback_alert_service.dart';
 import 'features/biofeedback/biofeedback_background_task.dart';
 import 'features/biofeedback/biofeedback_screen.dart';
 import 'features/auth/login_screen.dart';
@@ -20,6 +22,7 @@ import 'features/email_triage/inbox_screen.dart';
 import 'features/financas/financas_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 /// Only email-triage notifications should ever navigate to /inbox (a discriminator keeps this
 /// safe as other notification types are added later), and only while the app has a valid
@@ -31,6 +34,18 @@ void _handleEmailTriageNotificationTap(RemoteMessage? message) {
   navigatorKey.currentState?.pushNamed('/inbox');
 }
 
+/// Toque numa notificação de alerta do Biofeedback com o app aberto ou em background navega para
+/// a tela de detalhe. O discriminador de payload evita reagir a outros tipos de notificação local
+/// que este app venha a ter no futuro.
+///
+/// Não cobre cold-start (app terminado): `onDidReceiveNotificationResponse` nunca dispara nesse
+/// caso — ver o uso de `getNotificationAppLaunchDetails()` em `main()`, que trata esse cenário
+/// separadamente, no mesmo espírito do `getInitialMessage()` do FCM acima.
+void _handleBiofeedbackAlertTap(NotificationResponse response) {
+  if (response.payload != biofeedbackNotificationTapPayload) return;
+  navigatorKey.currentState?.pushNamed('/biofeedback');
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -39,6 +54,33 @@ Future<void> main() async {
   // lança uma MissingPluginException logo na inicialização do app.
   if (Platform.isAndroid || Platform.isIOS) {
     await Workmanager().initialize(biofeedbackCallbackDispatcher);
+  }
+
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ),
+    onDidReceiveNotificationResponse: _handleBiofeedbackAlertTap,
+  );
+  if (Platform.isAndroid) {
+    // POST_NOTIFICATIONS (Android 13+) precisa ser pedida em runtime; em versões mais antigas
+    // isto é um no-op.
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
+
+  // Cold-start via notificação local do Biofeedback: `onDidReceiveNotificationResponse` (acima)
+  // nunca dispara para esse caso — só `getNotificationAppLaunchDetails()` reporta. O navigator só
+  // está anexado após o primeiro frame, daí o addPostFrameCallback (mesmo padrão do
+  // getInitialMessage() do FCM logo abaixo).
+  final launchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+  if (launchDetails?.didNotificationLaunchApp ?? false) {
+    final response = launchDetails!.notificationResponse;
+    if (response != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleBiofeedbackAlertTap(response));
+    }
   }
 
   // App backgrounded, not terminated: the Flutter engine is already running, so the navigator

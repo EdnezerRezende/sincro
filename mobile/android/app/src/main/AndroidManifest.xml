@@ -3,6 +3,10 @@
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <!-- Requerida a partir do Android 13 (API 33) para exibir notificações locais dos alertas de
+         biofeedback. O próprio `flutter_local_notifications` já mescla esta permissão via seu
+         AndroidManifest.xml interno; declará-la aqui é redundante mas explícito. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="sincro_mobile"
         android:name="${applicationName}"

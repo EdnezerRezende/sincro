@@ -138,6 +138,8 @@ void main() {
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
     verifyNever(() => alertService.mostrarAlerta());
+    // Sem transição para elevado (já estava elevado), a leitura de rede nem deveria acontecer.
+    verifyNever(() => sensoryProfileRepository.get());
   });
 
   test('does not send the alert or read the sensory profile when the resulting state is not elevado', () async {

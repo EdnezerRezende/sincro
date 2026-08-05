@@ -2267,6 +2267,7 @@ git commit -m "feat: add admin professionals list and form screens"
 
 **Files:**
 - Modify: `mobile/lib/features/onboarding/onboarding_status.dart`
+- Modify: `mobile/test/features/onboarding/users_repository_test.dart`
 - Modify: `mobile/lib/features/settings/settings_screen.dart`
 - Modify: `mobile/lib/main.dart`
 
@@ -2304,12 +2305,47 @@ class OnboardingStatus {
       nome: json['nome'] as String,
       hasSensoryProfile: json['hasSensoryProfile'] as bool,
       trustedContactCount: json['trustedContactCount'] as int,
-      isAdmin: json['isAdmin'] as bool,
+      isAdmin: json['isAdmin'] as bool? ?? false,
       diaRecebimento: (json['diaRecebimento'] as num?)?.toInt(),
     );
   }
 }
 ```
+
+`isAdmin` parses as `json['isAdmin'] as bool? ?? false` (not a hard cast) because `mobile/test/features/onboarding/users_repository_test.dart` already has three passing tests whose JSON fixtures predate this field and don't include an `isAdmin` key — a hard cast would throw a type error on every one of them the moment this file changes, and it's a legitimate real-world case too (an old cached API response, or a future field on `GET /users/me` this code doesn't know about yet, must not crash parsing).
+
+- [ ] **Step 1.5: Add an isAdmin test to the existing repository test file**
+
+Modify `mobile/test/features/onboarding/users_repository_test.dart` — add this test to the existing `main()` block (the three existing tests are unaffected: their fixtures still parse, now with `isAdmin` defaulting to `false`):
+
+```dart
+  test('getMe parses isAdmin true when present', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.httpClientAdapter = _FakeAdapter(
+      '{"userId":"u1","nome":"Ana","hasSensoryProfile":true,"trustedContactCount":2,"diaRecebimento":5,"isAdmin":true}',
+    );
+    final repository = UsersRepository(dio);
+
+    final status = await repository.getMe();
+
+    expect(status.isAdmin, true);
+  });
+
+  test('getMe defaults isAdmin to false when the key is absent', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.httpClientAdapter = _FakeAdapter(
+      '{"userId":"u1","nome":"Ana","hasSensoryProfile":false,"trustedContactCount":0}',
+    );
+    final repository = UsersRepository(dio);
+
+    final status = await repository.getMe();
+
+    expect(status.isAdmin, false);
+  });
+```
+
+Run: `cd mobile && flutter test test/features/onboarding/users_repository_test.dart`
+Expected: PASS (5 tests — the 3 pre-existing plus these 2).
 
 - [ ] **Step 2: Gate a new Settings entry point on isAdmin**
 
@@ -2364,7 +2400,7 @@ Expected: no new analyzer errors; all tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add mobile/lib/features/onboarding/onboarding_status.dart mobile/lib/features/settings/settings_screen.dart mobile/lib/main.dart
+git add mobile/lib/features/onboarding/onboarding_status.dart mobile/test/features/onboarding/users_repository_test.dart mobile/lib/features/settings/settings_screen.dart mobile/lib/main.dart
 git commit -m "feat: gate professionals admin entry point on isAdmin, wire route"
 ```
 

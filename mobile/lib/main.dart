@@ -36,13 +36,16 @@ void _handleEmailTriageNotificationTap(RemoteMessage? message) {
 
 /// Toque numa notificação de alerta do Biofeedback com o app aberto ou em background navega para
 /// a tela de detalhe. O discriminador de payload evita reagir a outros tipos de notificação local
-/// que este app venha a ter no futuro.
+/// que este app venha a ter no futuro, e só navega com uma sessão válida — do contrário um toque
+/// deslogado (ex.: alerta disparado em background e só tocado depois de um logout) empurraria
+/// /biofeedback por cima de /login, igual ao guard de _handleEmailTriageNotificationTap acima.
 ///
 /// Não cobre cold-start (app terminado): `onDidReceiveNotificationResponse` nunca dispara nesse
 /// caso — ver o uso de `getNotificationAppLaunchDetails()` em `main()`, que trata esse cenário
 /// separadamente, no mesmo espírito do `getInitialMessage()` do FCM acima.
 void _handleBiofeedbackAlertTap(NotificationResponse response) {
   if (response.payload != biofeedbackNotificationTapPayload) return;
+  if (FirebaseAuth.instance.currentUser == null) return;
   navigatorKey.currentState?.pushNamed('/biofeedback');
 }
 

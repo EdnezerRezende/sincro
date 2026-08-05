@@ -1,9 +1,18 @@
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:workmanager/workmanager.dart';
+import 'biofeedback_alert_service.dart';
 import 'biofeedback_cache.dart';
 import 'biofeedback_health_service.dart';
 import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary_calculator.dart';
 import 'biofeedback_sync_service.dart';
+import '../../core/api_client.dart';
+import '../../core/api_providers.dart' show apiBaseUrl;
+import '../../firebase_options.dart';
+import '../onboarding/anamnese/sensory_profile_repository.dart';
 
 const biofeedbackTaskName = 'biofeedback-sync';
 
@@ -13,11 +22,34 @@ const biofeedbackTaskName = 'biofeedback-sync';
 void biofeedbackCallbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task != biofeedbackTaskName) return true;
+
+    // O motor de sincronização (permissões, leitura do plugin health, gravação em cache) nunca
+    // dependeu de Firebase e sempre funcionou neste isolate isolado do main(). O caminho de
+    // alerta, novo nesta fase, depende de rede autenticada (Firebase) — e este isolate nunca
+    // rodou main(), então Firebase.initializeApp() nunca foi chamado aqui. Isolamos essa
+    // inicialização (e a montagem do Dio autenticado que depende dela) num try/catch próprio,
+    // separado do try/catch de sincronizar() logo abaixo: se Firebase.initializeApp() falhar
+    // neste isolate específico, a sincronização inteira (inclusive leituras que nada têm a ver
+    // com alertas) não pode ser derrubada por isso. Na falha, caímos para um Dio sem token de
+    // autenticação — SensoryProfileRepository.get() falhará (401/erro de rede), mas
+    // BiofeedbackSyncService já trata essa falha como "não notificar" e segue o resto do ciclo.
+    Dio dio;
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      }
+      dio = ApiClient(baseUrl: apiBaseUrl, firebaseAuth: FirebaseAuth.instance).dio;
+    } catch (_) {
+      dio = Dio(BaseOptions(baseUrl: apiBaseUrl));
+    }
+
     final syncService = BiofeedbackSyncService(
       BiofeedbackHealthService(),
       BiofeedbackCache(),
       BiofeedbackSummaryCalculator(),
       BiofeedbackStressDetector(),
+      BiofeedbackAlertService(FlutterLocalNotificationsPlugin()),
+      SensoryProfileRepository(dio),
     );
     try {
       await syncService.sincronizar();

@@ -1,21 +1,35 @@
+import 'biofeedback_alert_decision.dart';
+import 'biofeedback_alert_service.dart';
 import 'biofeedback_cache.dart';
 import 'biofeedback_health_service.dart';
 import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary.dart';
 import 'biofeedback_summary_calculator.dart';
+import 'estado_estresse.dart';
+import '../onboarding/anamnese/sensory_profile_repository.dart';
 
 class BiofeedbackSyncService {
-  BiofeedbackSyncService(this._healthService, this._cache, this._calculator, this._detector);
+  BiofeedbackSyncService(
+    this._healthService,
+    this._cache,
+    this._calculator,
+    this._detector,
+    this._alertService,
+    this._sensoryProfileRepository,
+  );
 
   final BiofeedbackHealthService _healthService;
   final BiofeedbackCache _cache;
   final BiofeedbackSummaryCalculator _calculator;
   final BiofeedbackStressDetector _detector;
+  final BiofeedbackAlertService _alertService;
+  final SensoryProfileRepository _sensoryProfileRepository;
 
   Future<void> sincronizar({DateTime? agora}) async {
     await _garantirPermissoesAtualizadas();
 
     final agoraEfetivo = agora ?? DateTime.now();
+    final resumoAnterior = await _cache.getResumo();
     final leiturasFc = await _healthService.lerFrequenciaCardiacaHoje();
     final leiturasVfc = await _healthService.lerVariabilidadeHoje();
     final leiturasPassos = await _healthService.lerPassosHoje();
@@ -57,6 +71,45 @@ class BiofeedbackSyncService {
       ),
     );
     await _cache.setHistoricoRepouso(historicoAtualizado);
+
+    await _notificarSeNecessario(
+      estadoAnterior: resumoAnterior?.estadoEstresse,
+      estadoNovo: estado,
+    );
+  }
+
+  /// Só lê a rede (tolerância de notificação) quando as condições mais baratas já indicam uma
+  /// transição real para "elevado" com os alertas ligados — evita uma chamada de rede a cada
+  /// ciclo de sincronização quando não há nada para decidir.
+  Future<void> _notificarSeNecessario({
+    required EstadoEstresse? estadoAnterior,
+    required EstadoEstresse estadoNovo,
+  }) async {
+    final transicaoRelevante =
+        estadoAnterior != EstadoEstresse.elevado && estadoNovo == EstadoEstresse.elevado;
+    if (!transicaoRelevante) return;
+
+    final alertasAtivos = await _cache.getAlertasAtivos();
+    if (!alertasAtivos) return;
+
+    String? tolerancia;
+    try {
+      final dados = await _sensoryProfileRepository.get();
+      tolerancia = dados?['toleranciaNotificacao'] as String?;
+    } catch (_) {
+      // Falha ao ler a preferência é tratada como "não notificar" (silencioso por padrão),
+      // nunca como motivo para notificar mesmo sem saber a preferência do usuário.
+      tolerancia = null;
+    }
+
+    if (deveAlertar(
+      estadoAnterior: estadoAnterior,
+      estadoNovo: estadoNovo,
+      alertasAtivos: alertasAtivos,
+      tolerancia: tolerancia,
+    )) {
+      await _alertService.mostrarAlerta();
+    }
   }
 
   /// Pede as permissões que faltam para quem já usava o Biofeedback antes desta fase.

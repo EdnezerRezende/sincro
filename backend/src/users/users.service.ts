@@ -34,6 +34,7 @@ export class UsersService {
       hasSensoryProfile: sensoryProfile !== null,
       trustedContactCount,
       diaRecebimento: user.diaRecebimento,
+      isAdmin: user.isAdmin,
     };
   }
 

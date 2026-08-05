@@ -35,7 +35,7 @@ describe('UsersService', () => {
 
   it('builds onboarding status combining profile and contact count', async () => {
     const prisma = buildPrismaMock();
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: 5 });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: 5, isAdmin: false });
     prisma.sensoryProfile.findUnique.mockResolvedValue({ id: 'sp1' });
     prisma.trustedContact.count.mockResolvedValue(2);
     const service = new UsersService(prisma as any);
@@ -48,12 +48,13 @@ describe('UsersService', () => {
       hasSensoryProfile: true,
       trustedContactCount: 2,
       diaRecebimento: 5,
+      isAdmin: false,
     });
   });
 
   it('exposes a null diaRecebimento when the user never set one', async () => {
     const prisma = buildPrismaMock();
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: null });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: null, isAdmin: false });
     prisma.sensoryProfile.findUnique.mockResolvedValue(null);
     prisma.trustedContact.count.mockResolvedValue(0);
     const service = new UsersService(prisma as any);
@@ -61,6 +62,18 @@ describe('UsersService', () => {
     const status = await service.getOnboardingStatus('fb1');
 
     expect(status.diaRecebimento).toBeNull();
+  });
+
+  it('exposes isAdmin true for an admin user', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', nome: 'Ana', diaRecebimento: null, isAdmin: true });
+    prisma.sensoryProfile.findUnique.mockResolvedValue(null);
+    prisma.trustedContact.count.mockResolvedValue(0);
+    const service = new UsersService(prisma as any);
+
+    const status = await service.getOnboardingStatus('fb1');
+
+    expect(status.isAdmin).toBe(true);
   });
 
   it('registers an fcm token for the resolved user', async () => {

@@ -10,6 +10,7 @@ import { GmailModule } from './gmail/gmail.module';
 import { EmailSyncModule } from './email-sync/email-sync.module';
 import { PluggyModule } from './pluggy/pluggy.module';
 import { FinanceSyncModule } from './finance-sync/finance-sync.module';
+import { ProfessionalsModule } from './professionals/professionals.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FinanceSyncModule } from './finance-sync/finance-sync.module';
     EmailSyncModule,
     PluggyModule,
     FinanceSyncModule,
+    ProfessionalsModule,
   ],
 })
 export class AppModule {}

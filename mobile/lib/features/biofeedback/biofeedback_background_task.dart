@@ -33,10 +33,16 @@ void biofeedbackCallbackDispatcher() {
     // com alertas) não pode ser derrubada por isso. Na falha, caímos para um Dio sem token de
     // autenticação — SensoryProfileRepository.get() falhará (401/erro de rede), mas
     // BiofeedbackSyncService já trata essa falha como "não notificar" e segue o resto do ciclo.
+    //
+    // O timeout cobre o outro modo de falha desta chamada: além de lançar, `initializeApp()` pode
+    // simplesmente pendurar neste isolate. Sem ele, o ciclo inteiro (permissões, leitura do health,
+    // gravação em cache) — nada disso precisa de Firebase — ficaria bloqueado antes de começar.
+    // Um TimeoutException cai no mesmo `catch (_)` e usa o mesmo fallback sem autenticação.
     Dio dio;
     try {
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+            .timeout(const Duration(seconds: 10));
       }
       dio = ApiClient(baseUrl: apiBaseUrl, firebaseAuth: FirebaseAuth.instance).dio;
     } catch (_) {

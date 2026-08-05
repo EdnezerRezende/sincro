@@ -292,4 +292,210 @@ void main() {
     expect(salvo.mediaVfcHoje, 45);
     expect(salvo.atualizadoEm, agora);
   });
+
+  test('saves an all-null summary with coletandoDados when there are no readings yet', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+    final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+
+    await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+    final captured = verify(() => cache.setResumo(captureAny())).captured;
+    final salvo = captured.single as BiofeedbackSummary;
+    expect(salvo.ultimaFc, isNull);
+    expect(salvo.estadoEstresse, EstadoEstresse.coletandoDados);
+  });
+
+  test('discards readings during a workout when computing the resting history entry', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    final agora = DateTime(2026, 8, 3, 15, 0);
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+      (_) async => [
+        HealthReading(valor: 70, timestamp: DateTime(2026, 8, 3, 8, 0)), // em repouso
+        HealthReading(valor: 150, timestamp: DateTime(2026, 8, 3, 10, 0)), // durante treino
+      ],
+    );
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 45, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      treinos: [
+        TreinoIntervalo(inicio: DateTime(2026, 8, 3, 9, 45), fim: DateTime(2026, 8, 3, 10, 15)),
+      ],
+    );
+
+    await service.sincronizar(agora: agora);
+
+    final captured = verify(() => cache.setHistoricoRepouso(captureAny())).captured;
+    final historicoSalvo = captured.single as List<DiaRepouso>;
+    expect(historicoSalvo, hasLength(1));
+    // Só a leitura em repouso (70) entra na média do dia — a de 150 durante o treino é descartada.
+    expect(historicoSalvo.single.mediaFcRepouso, 70);
+  });
+
+  test('detects elevado when today is far outside a stable 7-day baseline', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    final agora = DateTime(2026, 8, 3, 15, 0);
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      historico: historicoEstavelElevando(),
+    );
+
+    await service.sincronizar(agora: agora);
+
+    final captured = verify(() => cache.setResumo(captureAny())).captured;
+    final salvo = captured.single as BiofeedbackSummary;
+    expect(salvo.estadoEstresse, EstadoEstresse.elevado);
+  });
+
+  group('upgrade de permissões', () {
+    void stubLeiturasVazias(MockBiofeedbackHealthService healthService) {
+      when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
+      when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+    }
+
+    test('requests the new permissions once for a user activated on an older version', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      // Usuário da Fase 1: já ativo, mas sem nenhuma versão de permissão gravada.
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        permissoesVersao: 0,
+      );
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verify(() => healthService.solicitarPermissao()).called(1);
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+    });
+
+    test('requests permissions before reading any health data', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        permissoesVersao: 0,
+      );
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      // Pedir depois de ler não adiantaria nada: as leituras desta rodada já teriam voltado
+      // vazias para os tipos ainda não autorizados.
+      verifyInOrder([
+        () => healthService.solicitarPermissao(),
+        () => healthService.lerFrequenciaCardiacaHoje(),
+      ]);
+    });
+
+    test('does not request permissions again once the current version is recorded', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verifyNever(() => healthService.solicitarPermissao());
+      verifyNever(() => cache.setPermissoesVersao(any()));
+    });
+
+    test('does not request permissions when biofeedback is not active', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        ativo: false,
+        permissoesVersao: 0,
+      );
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verifyNever(() => healthService.solicitarPermissao());
+    });
+
+    test('records the version even when the permission request is denied', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        permissoesVersao: 0,
+      );
+      when(() => healthService.solicitarPermissao()).thenAnswer((_) async => false);
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      // Uma recusa deliberada não pode virar um pedido a cada ciclo de sincronização.
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+    });
+
+    test('still syncs, and records the version, when the permission request throws', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      stubLeiturasVazias(healthService);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        permissoesVersao: 0,
+      );
+      when(() => healthService.solicitarPermissao()).thenThrow(Exception('sem activity'));
+
+      await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+      verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
+      verify(() => cache.setResumo(any())).called(1);
+    });
+  });
 }

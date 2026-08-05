@@ -59,30 +59,37 @@ Future<void> main() async {
     await Workmanager().initialize(biofeedbackCallbackDispatcher);
   }
 
-  await flutterLocalNotificationsPlugin.initialize(
-    settings: const InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(),
-    ),
-    onDidReceiveNotificationResponse: _handleBiofeedbackAlertTap,
-  );
-  if (Platform.isAndroid) {
-    // POST_NOTIFICATIONS (Android 13+) precisa ser pedida em runtime; em versões mais antigas
-    // isto é um no-op.
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-  }
+  // Os alertas do Biofeedback são um recurso só de Android e iOS, e `initialize()` do
+  // flutter_local_notifications lança ArgumentError no desktop (Linux/Windows/macOS) quando as
+  // settings da plataforma correspondente vêm nulas — como aqui, que só passa android:/iOS:.
+  // Mesmo guard usado pelo workmanager logo acima; inventar settings de desktop para um recurso
+  // que só existe no celular só criaria caminho morto.
+  if (Platform.isAndroid || Platform.isIOS) {
+    await flutterLocalNotificationsPlugin.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+      onDidReceiveNotificationResponse: _handleBiofeedbackAlertTap,
+    );
+    if (Platform.isAndroid) {
+      // POST_NOTIFICATIONS (Android 13+) precisa ser pedida em runtime; em versões mais antigas
+      // isto é um no-op.
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    }
 
-  // Cold-start via notificação local do Biofeedback: `onDidReceiveNotificationResponse` (acima)
-  // nunca dispara para esse caso — só `getNotificationAppLaunchDetails()` reporta. O navigator só
-  // está anexado após o primeiro frame, daí o addPostFrameCallback (mesmo padrão do
-  // getInitialMessage() do FCM logo abaixo).
-  final launchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
-  if (launchDetails?.didNotificationLaunchApp ?? false) {
-    final response = launchDetails!.notificationResponse;
-    if (response != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _handleBiofeedbackAlertTap(response));
+    // Cold-start via notificação local do Biofeedback: `onDidReceiveNotificationResponse` (acima)
+    // nunca dispara para esse caso — só `getNotificationAppLaunchDetails()` reporta. O navigator só
+    // está anexado após o primeiro frame, daí o addPostFrameCallback (mesmo padrão do
+    // getInitialMessage() do FCM logo abaixo).
+    final launchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      final response = launchDetails!.notificationResponse;
+      if (response != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _handleBiofeedbackAlertTap(response));
+      }
     }
   }
 

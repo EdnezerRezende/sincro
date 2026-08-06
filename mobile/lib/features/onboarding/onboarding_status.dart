@@ -4,6 +4,7 @@ class OnboardingStatus {
     required this.nome,
     required this.hasSensoryProfile,
     required this.trustedContactCount,
+    required this.isAdmin,
     this.diaRecebimento,
   });
 
@@ -11,6 +12,7 @@ class OnboardingStatus {
   final String nome;
   final bool hasSensoryProfile;
   final int trustedContactCount;
+  final bool isAdmin;
 
   /// Dia do mês em que o usuário costuma receber, ou `null` se ainda não definiu.
   final int? diaRecebimento;
@@ -21,6 +23,7 @@ class OnboardingStatus {
       nome: json['nome'] as String,
       hasSensoryProfile: json['hasSensoryProfile'] as bool,
       trustedContactCount: json['trustedContactCount'] as int,
+      isAdmin: json['isAdmin'] as bool? ?? false,
       diaRecebimento: (json['diaRecebimento'] as num?)?.toInt(),
     );
   }

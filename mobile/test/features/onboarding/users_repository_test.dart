@@ -44,6 +44,30 @@ void main() {
 
     expect(status.diaRecebimento, isNull);
   });
+
+  test('getMe parses isAdmin true when present', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.httpClientAdapter = _FakeAdapter(
+      '{"userId":"u1","nome":"Ana","hasSensoryProfile":true,"trustedContactCount":2,"diaRecebimento":5,"isAdmin":true}',
+    );
+    final repository = UsersRepository(dio);
+
+    final status = await repository.getMe();
+
+    expect(status.isAdmin, true);
+  });
+
+  test('getMe defaults isAdmin to false when the key is absent', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.httpClientAdapter = _FakeAdapter(
+      '{"userId":"u1","nome":"Ana","hasSensoryProfile":false,"trustedContactCount":0}',
+    );
+    final repository = UsersRepository(dio);
+
+    final status = await repository.getMe();
+
+    expect(status.isAdmin, false);
+  });
 }
 
 class _FakeAdapter implements HttpClientAdapter {

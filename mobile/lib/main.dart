@@ -11,6 +11,7 @@ import 'firebase_options.dart';
 import 'features/biofeedback/biofeedback_alert_service.dart';
 import 'features/biofeedback/biofeedback_background_task.dart';
 import 'features/biofeedback/biofeedback_screen.dart';
+import 'features/professionals/admin_professionals_list_screen.dart';
 import 'features/professionals/professionals_search_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/signup_screen.dart';
@@ -132,6 +133,7 @@ class SincroApp extends StatelessWidget {
         '/financas': (_) => const FinancasScreen(),
         '/biofeedback': (_) => const BiofeedbackScreen(),
         '/professionals': (_) => const ProfessionalsSearchScreen(),
+        '/admin/professionals': (_) => const AdminProfessionalsListScreen(),
       },
     );
   }

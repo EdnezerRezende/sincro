@@ -349,6 +349,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           data: (ativos) => ativos,
           orElse: () => true,
         );
+    final isAdmin = ref.watch(onboardingStatusProvider).maybeWhen(
+          data: (status) => status.isAdmin,
+          orElse: () => false,
+        );
     final financeConnectionTiles = connectionsAsync.maybeWhen(
       data: (connections) => connections
           .map(
@@ -412,6 +416,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: _busy ? null : _desativarBiofeedback,
             ),
           ],
+          if (isAdmin)
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('Gerenciar profissionais (admin)'),
+              onTap: _busy
+                  ? null
+                  : () => Navigator.of(context).pushNamed('/admin/professionals'),
+            ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sincro_mobile/features/professionals/admin_professional_form_screen.dart';
+import 'package:sincro_mobile/core/dio_error_message.dart';
 
 DioException _buildDioException({dynamic responseData, int statusCode = 400}) {
   final options = RequestOptions(path: '/admin/professionals');

@@ -121,6 +121,7 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
       return const Center(child: CircularProgressIndicator());
     }
     if (_permissao != null && _permissao != LocationPermissionResult.granted) {
+      final ehNegadaPermanentemente = _permissao == LocationPermissionResult.deniedForever;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -130,6 +131,13 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
               Text(mensagemPermissao(_permissao!), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton(onPressed: _iniciarBusca, child: const Text('Tentar novamente')),
+              if (ehNegadaPermanentemente) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => ref.read(locationServiceProvider).abrirConfiguracoesDoApp(),
+                  child: const Text('Abrir configurações'),
+                ),
+              ],
             ],
           ),
         ),

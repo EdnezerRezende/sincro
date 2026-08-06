@@ -27,4 +27,58 @@ void main() {
       );
     });
   });
+
+  group('validateTelefone', () {
+    test('accepts a phone number with country code and 10-15 digits', () {
+      expect(() => validateTelefone('+5511999999999'), returnsNormally);
+    });
+
+    test('throws when missing the leading plus', () {
+      expect(
+        () => validateTelefone('5511999999999'),
+        throwsA(isA<ProfessionalFormValidationException>()),
+      );
+    });
+
+    test('throws when there are fewer than 10 digits', () {
+      expect(
+        () => validateTelefone('+551199'),
+        throwsA(isA<ProfessionalFormValidationException>()),
+      );
+    });
+
+    test('throws for an empty value', () {
+      expect(
+        () => validateTelefone(''),
+        throwsA(isA<ProfessionalFormValidationException>()),
+      );
+    });
+  });
+
+  group('validateBio', () {
+    test('accepts a non-empty bio within 500 characters', () {
+      expect(() => validateBio('Especialista em TEA e TDAH.'), returnsNormally);
+    });
+
+    test('throws for an empty bio', () {
+      expect(() => validateBio('   '), throwsA(isA<ProfessionalFormValidationException>()));
+    });
+
+    test('throws for a bio longer than 500 characters', () {
+      expect(
+        () => validateBio('a' * 501),
+        throwsA(isA<ProfessionalFormValidationException>()),
+      );
+    });
+  });
+
+  group('validateTags', () {
+    test('accepts a non-empty tag list', () {
+      expect(() => validateTags(['TEA']), returnsNormally);
+    });
+
+    test('throws for an empty tag list', () {
+      expect(() => validateTags([]), throwsA(isA<ProfessionalFormValidationException>()));
+    });
+  });
 }

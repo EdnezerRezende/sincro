@@ -1,8 +1,26 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'admin_professional_form_validation.dart';
 import 'professional.dart';
 import 'professionals_providers.dart';
+
+/// Extracts a human-readable message from a Nest validation-error response
+/// shaped as `{ statusCode, message, error }`, where `message` may be a
+/// string or an array of strings.
+String extractServerErrorMessage(DioException e) {
+  final data = e.response?.data;
+  if (data is Map) {
+    final message = data['message'];
+    if (message is List) {
+      final joined = message.map((m) => m.toString()).join('; ');
+      if (joined.isNotEmpty) return joined;
+    } else if (message is String && message.isNotEmpty) {
+      return message;
+    }
+  }
+  return 'Não foi possível salvar. Tente novamente.';
+}
 
 class AdminProfessionalFormScreen extends ConsumerStatefulWidget {
   const AdminProfessionalFormScreen({super.key, this.profissional});
@@ -55,23 +73,25 @@ class _AdminProfessionalFormScreenState extends ConsumerState<AdminProfessionalF
     setState(() => _erro = null);
     final double latitude;
     final double longitude;
+    final List<String> tags;
     try {
       latitude = parseCoordenada(_latitudeController.text, min: -90, max: 90, campo: 'Latitude');
       longitude = parseCoordenada(_longitudeController.text, min: -180, max: 180, campo: 'Longitude');
+      tags = parseTags(_tagsController.text);
+      validateTags(tags);
+      validateTelefone(_telefoneController.text);
+      validateBio(_bioController.text);
     } on ProfessionalFormValidationException catch (e) {
       setState(() => _erro = e.message);
       return;
     }
-    if (_nomeController.text.trim().isEmpty ||
-        _cidadeController.text.trim().isEmpty ||
-        _telefoneController.text.trim().isEmpty) {
-      setState(() => _erro = 'Nome, cidade e telefone são obrigatórios.');
+    if (_nomeController.text.trim().isEmpty || _cidadeController.text.trim().isEmpty) {
+      setState(() => _erro = 'Nome e cidade são obrigatórios.');
       return;
     }
 
     setState(() => _salvando = true);
     try {
-      final tags = parseTags(_tagsController.text);
       if (_editando) {
         await ref.read(adminProfessionalsRepositoryProvider).update(
               widget.profissional!.id,
@@ -95,6 +115,8 @@ class _AdminProfessionalFormScreenState extends ConsumerState<AdminProfessionalF
             );
       }
       if (mounted) Navigator.of(context).pop(true);
+    } on DioException catch (e) {
+      if (mounted) setState(() => _erro = extractServerErrorMessage(e));
     } catch (_) {
       if (mounted) setState(() => _erro = 'Não foi possível salvar. Tente novamente.');
     } finally {

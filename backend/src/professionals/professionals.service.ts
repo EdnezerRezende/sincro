@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { haversineDistanceKm } from '../common/geo';
+import { CreateProfessionalDto } from './dto/create-professional.dto';
+import { UpdateProfessionalDto } from './dto/update-professional.dto';
 
 @Injectable()
 export class ProfessionalsService {
@@ -27,5 +29,21 @@ export class ProfessionalsService {
     const tagSet = new Set<string>();
     professionals.forEach((professional) => professional.tags.forEach((tag) => tagSet.add(tag)));
     return Array.from(tagSet).sort();
+  }
+
+  async adminList() {
+    return this.prisma.professional.findMany({ orderBy: { nome: 'asc' } });
+  }
+
+  async create(dto: CreateProfessionalDto) {
+    return this.prisma.professional.create({ data: { ...dto, ativo: true } });
+  }
+
+  async update(id: string, dto: UpdateProfessionalDto) {
+    return this.prisma.professional.update({ where: { id }, data: dto });
+  }
+
+  async deactivate(id: string): Promise<void> {
+    await this.prisma.professional.update({ where: { id }, data: { ativo: false } });
   }
 }

@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateGroundingCardDto } from './dto/create-grounding-card.dto';
+import { UpdateGroundingCardDto } from './dto/update-grounding-card.dto';
 
 @Injectable()
 export class GroundingCardsService {
@@ -30,5 +32,21 @@ export class GroundingCardsService {
 
   async desfavoritar(userId: string, cardId: string): Promise<void> {
     await this.prisma.cardFavorito.deleteMany({ where: { userId, cardId } });
+  }
+
+  async adminList() {
+    return this.prisma.groundingCard.findMany({ orderBy: { titulo: 'asc' } });
+  }
+
+  async create(dto: CreateGroundingCardDto) {
+    return this.prisma.groundingCard.create({ data: { ...dto, ativo: true } });
+  }
+
+  async update(id: string, dto: UpdateGroundingCardDto) {
+    return this.prisma.groundingCard.update({ where: { id }, data: dto });
+  }
+
+  async deactivate(id: string): Promise<void> {
+    await this.prisma.groundingCard.update({ where: { id }, data: { ativo: false } });
   }
 }

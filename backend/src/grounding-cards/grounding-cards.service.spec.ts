@@ -93,4 +93,54 @@ describe('GroundingCardsService', () => {
       expect(prisma.cardFavorito.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1', cardId: 'c1' } });
     });
   });
+
+  describe('adminList', () => {
+    it('returns all cards including inactive ones, ordered by title', async () => {
+      const prisma = buildPrismaMock();
+      prisma.groundingCard.findMany.mockResolvedValue([]);
+      const service = new GroundingCardsService(prisma as any);
+
+      await service.adminList();
+
+      expect(prisma.groundingCard.findMany).toHaveBeenCalledWith({ orderBy: { titulo: 'asc' } });
+    });
+  });
+
+  describe('create', () => {
+    it('creates an active card from the given data', async () => {
+      const prisma = buildPrismaMock();
+      prisma.groundingCard.create.mockResolvedValue(buildCard());
+      const service = new GroundingCardsService(prisma as any);
+      const dto = { titulo: 'Respiração 4-7-8', categoria: 'RESPIRACAO', conteudo: 'Inspire...' };
+
+      await service.create(dto as any);
+
+      expect(prisma.groundingCard.create).toHaveBeenCalledWith({ data: { ...dto, ativo: true } });
+    });
+  });
+
+  describe('update', () => {
+    it('updates a card by id with the given data', async () => {
+      const prisma = buildPrismaMock();
+      prisma.groundingCard.update.mockResolvedValue(buildCard());
+      const service = new GroundingCardsService(prisma as any);
+      const dto = { titulo: 'Novo título', categoria: 'MOVIMENTO', conteudo: 'Novo conteúdo' };
+
+      await service.update('c1', dto as any);
+
+      expect(prisma.groundingCard.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: dto });
+    });
+  });
+
+  describe('deactivate', () => {
+    it('soft-deletes by setting ativo to false', async () => {
+      const prisma = buildPrismaMock();
+      prisma.groundingCard.update.mockResolvedValue(buildCard({ ativo: false }));
+      const service = new GroundingCardsService(prisma as any);
+
+      await service.deactivate('c1');
+
+      expect(prisma.groundingCard.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { ativo: false } });
+    });
+  });
 });

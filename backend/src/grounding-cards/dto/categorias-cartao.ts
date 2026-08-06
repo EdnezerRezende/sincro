@@ -1,0 +1,7 @@
+export const CATEGORIAS_CARTAO = [
+  'RESPIRACAO',
+  'ATERRAMENTO_SENSORIAL',
+  'MOVIMENTO',
+  'ATENCAO_PLENA',
+  'OUTRO',
+] as const;

@@ -9,9 +9,12 @@ export class ProfessionalsController {
 
   @Get('search')
   async search(@Query('lat') latRaw: string, @Query('lng') lngRaw: string, @Query('tags') tagsRaw?: string) {
+    if (!latRaw?.trim() || !lngRaw?.trim()) {
+      throw new BadRequestException('lat e lng são obrigatórios e devem ser números');
+    }
     const lat = Number(latRaw);
     const lng = Number(lngRaw);
-    if (latRaw === undefined || lngRaw === undefined || Number.isNaN(lat) || Number.isNaN(lng)) {
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
       throw new BadRequestException('lat e lng são obrigatórios e devem ser números');
     }
     const tags = tagsRaw

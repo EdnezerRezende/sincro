@@ -20,6 +20,30 @@ describe('ProfessionalsController', () => {
     expect(service.search).not.toHaveBeenCalled();
   });
 
+  it('rejects a search with empty-string lat/lng instead of silently coercing to (0, 0)', async () => {
+    const service = { search: jest.fn() };
+    const controller = new ProfessionalsController(service as any);
+
+    await expect(controller.search('', '', undefined)).rejects.toThrow(BadRequestException);
+    expect(service.search).not.toHaveBeenCalled();
+  });
+
+  it('rejects a search with whitespace-only lat/lng', async () => {
+    const service = { search: jest.fn() };
+    const controller = new ProfessionalsController(service as any);
+
+    await expect(controller.search('   ', '  ', undefined)).rejects.toThrow(BadRequestException);
+    expect(service.search).not.toHaveBeenCalled();
+  });
+
+  it('rejects a search where only lng is an empty string', async () => {
+    const service = { search: jest.fn() };
+    const controller = new ProfessionalsController(service as any);
+
+    await expect(controller.search('-23.5', '', undefined)).rejects.toThrow(BadRequestException);
+    expect(service.search).not.toHaveBeenCalled();
+  });
+
   it('parses tags from a comma-separated query string, trimming and dropping empties', async () => {
     const service = { search: jest.fn().mockResolvedValue([]) };
     const controller = new ProfessionalsController(service as any);

@@ -74,6 +74,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 16),
             const _ProfessionalsCard(),
             const SizedBox(height: 16),
+            const _GroundingCardsCard(),
+            const SizedBox(height: 16),
             contactsAsync.when(
               data: (contacts) {
                 if (contacts.isEmpty) {
@@ -421,6 +423,23 @@ class _ProfessionalsCard extends StatelessWidget {
         subtitle: const Text('Busque profissionais neuroafirmativos perto de você.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).pushNamed('/professionals'),
+      ),
+    );
+  }
+}
+
+class _GroundingCardsCard extends StatelessWidget {
+  const _GroundingCardsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.self_improvement_outlined),
+        title: const Text('🌿 Alívio sensorial'),
+        subtitle: const Text('Técnicas de aterramento e alívio para o dia a dia.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
       ),
     );
   }

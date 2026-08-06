@@ -22,6 +22,7 @@ import 'features/home/home_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/email_triage/inbox_screen.dart';
 import 'features/financas/financas_screen.dart';
+import 'features/grounding_cards/grounding_cards_library_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -133,6 +134,7 @@ class SincroApp extends StatelessWidget {
         '/financas': (_) => const FinancasScreen(),
         '/biofeedback': (_) => const BiofeedbackScreen(),
         '/professionals': (_) => const ProfessionalsSearchScreen(),
+        '/grounding-cards': (_) => const GroundingCardsLibraryScreen(),
         '/admin/professionals': (_) => const AdminProfessionalsListScreen(),
       },
     );

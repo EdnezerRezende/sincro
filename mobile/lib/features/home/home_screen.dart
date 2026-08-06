@@ -72,6 +72,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 16),
             _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
             const SizedBox(height: 16),
+            const _ProfessionalsCard(),
+            const SizedBox(height: 16),
             contactsAsync.when(
               data: (contacts) {
                 if (contacts.isEmpty) {
@@ -402,6 +404,23 @@ class _NoContactsHint extends StatelessWidget {
           '💡 Adicione um contato de confiança para estar preparado em emergências.',
           style: TextStyle(fontSize: 13, color: Colors.grey),
         ),
+      ),
+    );
+  }
+}
+
+class _ProfessionalsCard extends StatelessWidget {
+  const _ProfessionalsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.medical_services_outlined),
+        title: const Text('🧑‍⚕️ Encontrar profissional'),
+        subtitle: const Text('Busque profissionais neuroafirmativos perto de você.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/professionals'),
       ),
     );
   }

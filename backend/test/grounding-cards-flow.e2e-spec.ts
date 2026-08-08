@@ -134,5 +134,18 @@ describe('Grounding cards (e2e)', () => {
 
     const adminList = await request(app.getHttpServer()).get('/admin/grounding-cards').set(adminAuthHeader).expect(200);
     expect(adminList.body.some((c: { id: string }) => c.id === cardId)).toBe(true);
+
+    const reactivated = await request(app.getHttpServer())
+      .patch(`/admin/grounding-cards/${cardId}`)
+      .set(adminAuthHeader)
+      .send({ ...cardPayload, ativo: true })
+      .expect(200);
+    expect(reactivated.body.ativo).toBe(true);
+
+    const publicListAfterReactivate = await request(app.getHttpServer())
+      .get('/grounding-cards')
+      .set(userAAuthHeader)
+      .expect(200);
+    expect(publicListAfterReactivate.body.some((c: { id: string }) => c.id === cardId)).toBe(true);
   });
 });

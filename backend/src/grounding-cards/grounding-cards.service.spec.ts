@@ -130,6 +130,17 @@ describe('GroundingCardsService', () => {
 
       expect(prisma.groundingCard.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: dto });
     });
+
+    it('can reactivate a card by including ativo: true in the dto', async () => {
+      const prisma = buildPrismaMock();
+      prisma.groundingCard.update.mockResolvedValue(buildCard({ ativo: true }));
+      const service = new GroundingCardsService(prisma as any);
+      const dto = { titulo: 'Título', categoria: 'RESPIRACAO', conteudo: 'Conteúdo', ativo: true };
+
+      await service.update('c1', dto as any);
+
+      expect(prisma.groundingCard.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: dto });
+    });
   });
 
   describe('deactivate', () => {

@@ -26,11 +26,13 @@ class AdminGroundingCardsRepository {
     required String titulo,
     required String categoria,
     required String conteudo,
+    bool? ativo,
   }) async {
     await _dio.patch('/admin/grounding-cards/$id', data: {
       'titulo': titulo,
       'categoria': categoria,
       'conteudo': conteudo,
+      if (ativo != null) 'ativo': ativo,
     });
   }
 

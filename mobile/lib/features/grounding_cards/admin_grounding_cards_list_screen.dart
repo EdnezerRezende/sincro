@@ -37,6 +37,25 @@ class AdminGroundingCardsListScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _reativar(BuildContext context, WidgetRef ref, GroundingCard card) async {
+    try {
+      await ref.read(adminGroundingCardsRepositoryProvider).update(
+            card.id,
+            titulo: card.titulo,
+            categoria: card.categoria,
+            conteudo: card.conteudo,
+            ativo: true,
+          );
+      ref.invalidate(adminGroundingCardsListProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível reativar. Tente novamente.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardsAsync = ref.watch(adminGroundingCardsListProvider);
@@ -61,7 +80,11 @@ class AdminGroundingCardsListScreen extends ConsumerWidget {
                         tooltip: 'Desativar',
                         onPressed: () => _desativar(context, ref, card),
                       )
-                    : null,
+                    : IconButton(
+                        icon: const Icon(Icons.visibility_outlined),
+                        tooltip: 'Reativar',
+                        onPressed: () => _reativar(context, ref, card),
+                      ),
                 onTap: () async {
                   final saved = await Navigator.of(context).push<bool>(
                     MaterialPageRoute(builder: (_) => AdminGroundingCardFormScreen(card: card)),

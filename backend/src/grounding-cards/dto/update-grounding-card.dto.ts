@@ -1,4 +1,4 @@
-import { IsIn, IsString, Length } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Length } from 'class-validator';
 import { CATEGORIAS_CARTAO } from './categorias-cartao';
 
 export class UpdateGroundingCardDto {
@@ -12,4 +12,8 @@ export class UpdateGroundingCardDto {
   @IsString()
   @Length(1, 2000)
   conteudo: string;
+
+  @IsOptional()
+  @IsBoolean()
+  ativo?: boolean;
 }

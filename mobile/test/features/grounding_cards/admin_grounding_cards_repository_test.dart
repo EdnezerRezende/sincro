@@ -35,6 +35,20 @@ void main() {
     expect(capturedPath, '/admin/grounding-cards/c1');
   });
 
+  test('update includes ativo in the payload when reactivating', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    Map<String, dynamic>? capturedData;
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      capturedData = options.data as Map<String, dynamic>;
+      handler.resolve(Response(requestOptions: options, statusCode: 200, data: {'id': 'c1'}));
+    }));
+    final repository = AdminGroundingCardsRepository(dio);
+
+    await repository.update('c1', titulo: 'Título', categoria: 'RESPIRACAO', conteudo: 'Conteúdo', ativo: true);
+
+    expect(capturedData!['ativo'], true);
+  });
+
   test('deactivate deletes the card by id', () async {
     final dio = Dio(BaseOptions(baseUrl: 'http://test'));
     String? capturedPath;

@@ -18,6 +18,7 @@ export class GroundingCardsService {
     const favoritos = await this.prisma.cardFavorito.findMany({
       where: { userId },
       include: { card: true },
+      orderBy: { card: { titulo: 'asc' } },
     });
     return favoritos.map((favorito) => favorito.card).filter((card) => card.ativo);
   }

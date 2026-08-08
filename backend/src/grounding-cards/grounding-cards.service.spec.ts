@@ -61,6 +61,7 @@ describe('GroundingCardsService', () => {
       expect(prisma.cardFavorito.findMany).toHaveBeenCalledWith({
         where: { userId: 'u1' },
         include: { card: true },
+        orderBy: { card: { titulo: 'asc' } },
       });
       expect(result.map((c) => c.id)).toEqual(['c1']);
     });

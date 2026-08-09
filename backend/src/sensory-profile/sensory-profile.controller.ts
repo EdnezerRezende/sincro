@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Put, UseGuards } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { CurrentFirebaseUid } from '../common/current-firebase-uid.decorator';
 import { SensoryProfileService } from './sensory-profile.service';
@@ -11,7 +12,7 @@ export class SensoryProfileController {
 
   @Put()
   async upsert(@CurrentFirebaseUid() firebaseUid: string, @Body() dto: UpsertSensoryProfileDto) {
-    return this.service.upsert(firebaseUid, dto.dados);
+    return this.service.upsert(firebaseUid, dto.dados as Prisma.InputJsonValue);
   }
 
   @Get()

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 
@@ -9,7 +10,7 @@ export class SensoryProfileService {
     private readonly usersService: UsersService,
   ) {}
 
-  async upsert(firebaseUid: string, dados: Record<string, unknown>) {
+  async upsert(firebaseUid: string, dados: Prisma.InputJsonValue) {
     const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
     return this.prisma.sensoryProfile.upsert({
       where: { userId: user.id },

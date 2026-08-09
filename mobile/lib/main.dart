@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,7 +58,7 @@ Future<void> main() async {
 
   // `workmanager` só tem implementação em Android e iOS; no desktop (Linux/Windows) a chamada
   // lança uma MissingPluginException logo na inicialização do app.
-  if (Platform.isAndroid || Platform.isIOS) {
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     await Workmanager().initialize(biofeedbackCallbackDispatcher);
   }
 
@@ -66,7 +67,7 @@ Future<void> main() async {
   // settings da plataforma correspondente vêm nulas — como aqui, que só passa android:/iOS:.
   // Mesmo guard usado pelo workmanager logo acima; inventar settings de desktop para um recurso
   // que só existe no celular só criaria caminho morto.
-  if (Platform.isAndroid || Platform.isIOS) {
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     await flutterLocalNotificationsPlugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),

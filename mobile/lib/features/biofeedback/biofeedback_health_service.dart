@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:health/health.dart';
 import 'health_reading.dart';
 import 'treino_intervalo.dart';
@@ -10,7 +11,11 @@ import 'treino_intervalo.dart';
 /// métricas diferentes e não são diretamente comparáveis entre si; aqui as duas são tratadas
 /// simplesmente como "vfc" em milissegundos, o que é aceitável porque o app só mostra um resumo
 /// calmo do próprio usuário, sem comparar um aparelho com o outro.
-HealthDataType get _tipoVfc => Platform.isIOS
+///
+/// `!kIsWeb &&` vem antes por curto-circuito: `Platform.isIOS` lança em runtime no Flutter Web
+/// (mesmo caso do guard em main.dart). O plugin `health` não é suportado no web de qualquer forma,
+/// então o valor RMSSD aqui é só para nunca crashar — nunca é de fato usado nessa plataforma.
+HealthDataType get _tipoVfc => !kIsWeb && Platform.isIOS
     ? HealthDataType.HEART_RATE_VARIABILITY_SDNN
     : HealthDataType.HEART_RATE_VARIABILITY_RMSSD;
 

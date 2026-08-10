@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 model User {
@@ -145,4 +147,30 @@ model Professional {
 
   @@index([ativo])
   @@map("profissionais")
+}
+
+model KnowledgeDocument {
+  id        String           @id @default(uuid())
+  titulo    String
+  arquivo   String
+  tipo      String
+  categoria String
+  criadoEm  DateTime         @default(now()) @map("criado_em")
+  chunks    KnowledgeChunk[]
+
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id          String            @id @default(uuid())
+  documentoId String            @map("documento_id")
+  documento   KnowledgeDocument @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  conteudo    String
+  indiceChunk Int               @map("indice_chunk")
+  embedding   Unsupported("vector(1536)")?
+  metadados   Json?
+  criadoEm    DateTime          @default(now()) @map("criado_em")
+
+  @@index([documentoId])
+  @@map("knowledge_chunks")
 }

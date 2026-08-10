@@ -11,6 +11,7 @@ import { EmailSyncModule } from './email-sync/email-sync.module';
 import { PluggyModule } from './pluggy/pluggy.module';
 import { FinanceSyncModule } from './finance-sync/finance-sync.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProfessionalsModule } from './professionals/professionals.module';
     PluggyModule,
     FinanceSyncModule,
     ProfessionalsModule,
+    RagModule,
   ],
 })
 export class AppModule {}

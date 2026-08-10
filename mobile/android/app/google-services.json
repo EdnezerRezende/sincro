@@ -12,7 +12,12 @@
           "package_name": "com.sincro.sincro_mobile"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "393611506422-6r1faed2rndqk5h8cnaj7rq96e58va9p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB04cvj0TEdac1-wfHbMbmoCRTq4XVbg_U"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "393611506422-6r1faed2rndqk5h8cnaj7rq96e58va9p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

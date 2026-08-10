@@ -12,6 +12,7 @@ import { PluggyModule } from './pluggy/pluggy.module';
 import { FinanceSyncModule } from './finance-sync/finance-sync.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
 import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
     FinanceSyncModule,
     ProfessionalsModule,
     GroundingCardsModule,
+    RagModule,
   ],
 })
 export class AppModule {}

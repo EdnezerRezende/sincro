@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sincro
+      POSTGRES_PASSWORD: sincro_dev_password
+      POSTGRES_DB: sincro_dev
+    # Published on 5433 (not 5432) so this doesn't collide with the Postgres
+    # already used by SDD worktrees via backend/docker-compose.yml — the
+    # backend service below talks to this container over the internal
+    # Docker network on 5432 regardless of the host port mapping.
+    ports:
+      - "5433:5432"
+    volumes:
+      - sincro_full_stack_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sincro -d sincro_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Picks up FIREBASE_*/TOKEN_ENCRYPTION_KEY/etc. from your local
+    # backend/.env (gitignored, not committed). DATABASE_URL below always
+    # overrides whatever's in that file, so it points at the postgres
+    # service in this compose instead of localhost.
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://sincro:sincro_dev_password@postgres:5432/sincro_dev
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mobile-web:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  sincro_full_stack_postgres_data:

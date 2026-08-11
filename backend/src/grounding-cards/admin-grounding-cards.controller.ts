@@ -1,14 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { AdminGuard } from '../common/admin.guard';
-import { ProfessionalsService } from './professionals.service';
-import { CreateProfessionalDto } from './dto/create-professional.dto';
-import { UpdateProfessionalDto } from './dto/update-professional.dto';
+import { GroundingCardsService } from './grounding-cards.service';
+import { CreateGroundingCardDto } from './dto/create-grounding-card.dto';
+import { UpdateGroundingCardDto } from './dto/update-grounding-card.dto';
 
 @UseGuards(FirebaseAuthGuard, AdminGuard)
-@Controller('admin/professionals')
-export class AdminProfessionalsController {
-  constructor(private readonly service: ProfessionalsService) {}
+@Controller('admin/grounding-cards')
+export class AdminGroundingCardsController {
+  constructor(private readonly service: GroundingCardsService) {}
 
   @Get()
   async list() {
@@ -16,12 +16,12 @@ export class AdminProfessionalsController {
   }
 
   @Post()
-  async create(@Body() dto: CreateProfessionalDto) {
+  async create(@Body() dto: CreateGroundingCardDto) {
     return this.service.create(dto);
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateProfessionalDto) {
+  async update(@Param('id') id: string, @Body() dto: UpdateGroundingCardDto) {
     return this.service.update(id, dto);
   }
 

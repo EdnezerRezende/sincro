@@ -11,6 +11,7 @@ import { EmailSyncModule } from './email-sync/email-sync.module';
 import { PluggyModule } from './pluggy/pluggy.module';
 import { FinanceSyncModule } from './finance-sync/finance-sync.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
+import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
 import { RagModule } from './rag/rag.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { RagModule } from './rag/rag.module';
     PluggyModule,
     FinanceSyncModule,
     ProfessionalsModule,
+    GroundingCardsModule,
     RagModule,
   ],
 })

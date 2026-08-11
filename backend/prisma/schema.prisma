@@ -23,6 +23,7 @@ model User {
   emailSummaries  EmailSummary[]
   financeConnections FinanceConnection[]
   boletosDda      BoletoDda[]
+  cardFavoritos   CardFavorito[]
 
   @@map("usuarios")
 }
@@ -147,6 +148,33 @@ model Professional {
 
   @@index([ativo])
   @@map("profissionais")
+}
+
+model GroundingCard {
+  id           String         @id @default(uuid())
+  titulo       String
+  categoria    String
+  conteudo     String
+  ativo        Boolean        @default(true)
+  criadoEm     DateTime       @default(now()) @map("criado_em")
+  atualizadoEm DateTime       @default(now()) @updatedAt @map("atualizado_em")
+  favoritos    CardFavorito[]
+
+  @@index([ativo])
+  @@map("cartoes_aterramento")
+}
+
+model CardFavorito {
+  id       String        @id @default(uuid())
+  userId   String        @map("user_id")
+  user     User          @relation(fields: [userId], references: [id])
+  cardId   String        @map("card_id")
+  card     GroundingCard @relation(fields: [cardId], references: [id])
+  criadoEm DateTime      @default(now()) @map("criado_em")
+
+  @@unique([userId, cardId])
+  @@index([userId])
+  @@map("cartoes_favoritos")
 }
 
 model KnowledgeDocument {

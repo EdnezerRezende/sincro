@@ -424,6 +424,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ? null
                   : () => Navigator.of(context).pushNamed('/admin/professionals'),
             ),
+          if (isAdmin)
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('Gerenciar cartões de aterramento (admin)'),
+              onTap: _busy
+                  ? null
+                  : () => Navigator.of(context).pushNamed('/admin/grounding-cards'),
+            ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),

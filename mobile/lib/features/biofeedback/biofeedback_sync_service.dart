@@ -5,7 +5,10 @@ import 'biofeedback_health_service.dart';
 import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary.dart';
 import 'biofeedback_summary_calculator.dart';
+import 'escolher_card_sugerido.dart';
 import 'estado_estresse.dart';
+import '../grounding_cards/grounding_card.dart';
+import '../grounding_cards/grounding_cards_repository.dart';
 import '../onboarding/anamnese/sensory_profile_repository.dart';
 
 class BiofeedbackSyncService {
@@ -16,6 +19,7 @@ class BiofeedbackSyncService {
     this._detector,
     this._alertService,
     this._sensoryProfileRepository,
+    this._groundingCardsRepository,
   );
 
   final BiofeedbackHealthService _healthService;
@@ -24,6 +28,7 @@ class BiofeedbackSyncService {
   final BiofeedbackStressDetector _detector;
   final BiofeedbackAlertService _alertService;
   final SensoryProfileRepository _sensoryProfileRepository;
+  final GroundingCardsRepository _groundingCardsRepository;
 
   Future<void> sincronizar({DateTime? agora}) async {
     await _garantirPermissoesAtualizadas();
@@ -102,13 +107,51 @@ class BiofeedbackSyncService {
       tolerancia = null;
     }
 
-    if (deveAlertar(
+    if (!deveAlertar(
       estadoAnterior: estadoAnterior,
       estadoNovo: estadoNovo,
       alertasAtivos: alertasAtivos,
       tolerancia: tolerancia,
     )) {
-      await _alertService.mostrarAlerta();
+      return;
+    }
+
+    final cardSugerido = await _buscarCardSugerido();
+    await _alertService.mostrarAlerta(cardSugerido: cardSugerido);
+  }
+
+  /// Escolhe um grounding card para sugerir junto do alerta (favoritos > categoria Respiração >
+  /// qualquer card ativo). Cada busca é best-effort — uma falha em qualquer uma delas vira lista
+  /// vazia, nunca uma exceção que impediria o alerta em si de disparar.
+  Future<GroundingCard?> _buscarCardSugerido() async {
+    final favoritos = await _listaSeguraDeCards(_groundingCardsRepository.listFavoritos);
+    final respiracaoAtivos = await _listaSeguraDeCards(
+      () => _groundingCardsRepository.list(categoria: 'RESPIRACAO'),
+    );
+    final todosAtivos = await _listaSeguraDeCards(_groundingCardsRepository.list);
+
+    final cardId = escolherCardSugerido(
+      favoritos: favoritos,
+      respiracaoAtivos: respiracaoAtivos,
+      todosAtivos: todosAtivos,
+      sortear: sortearIndiceAleatorio,
+    );
+    if (cardId == null) return null;
+
+    return [...favoritos, ...respiracaoAtivos, ...todosAtivos]
+        .firstWhere((card) => card.id == cardId);
+  }
+
+  Future<List<GroundingCard>> _listaSeguraDeCards(
+    Future<List<GroundingCard>> Function() buscar,
+  ) async {
+    try {
+      // Estas buscas rodam depois que deveAlertar() já decidiu disparar o alerta — um socket
+      // pendurado aqui atrasaria ou derrubaria a notificação em si, então o timeout degrada para
+      // o mesmo "trata como lista vazia" que uma exceção já recebe no catch abaixo.
+      return await buscar().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return const [];
     }
   }
 

@@ -52,7 +52,13 @@ void _handleEmailTriageNotificationTap(RemoteMessage? message) {
 /// caso — ver o uso de `getNotificationAppLaunchDetails()` em `main()`, que trata esse cenário
 /// separadamente, no mesmo espírito do `getInitialMessage()` do FCM acima.
 void _handleBiofeedbackAlertTap(NotificationResponse response) {
-  if (!(response.payload?.startsWith(biofeedbackNotificationTapPayload) ?? false)) return;
+  final payload = response.payload;
+  // Compara com o valor exato ou com o prefixo seguido de ':' (não só startsWith) para não
+  // confundir este tipo de alerta com um payload futuro que só compartilhe o mesmo prefixo
+  // textual (ex.: "biofeedback_alerta_semanal") mas seja, na prática, outro tipo de notificação.
+  final isThisAlertType = payload == biofeedbackNotificationTapPayload ||
+      (payload?.startsWith('$biofeedbackNotificationTapPayload:') ?? false);
+  if (!isThisAlertType) return;
   if (FirebaseAuth.instance.currentUser == null) return;
 
   final cardId = BiofeedbackAlertService.extrairCardIdDoPayload(response.payload);

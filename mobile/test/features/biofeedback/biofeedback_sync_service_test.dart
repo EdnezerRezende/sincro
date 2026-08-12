@@ -8,7 +8,6 @@ import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary_calculator.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_sync_service.dart';
 import 'package:sincro_mobile/features/biofeedback/dia_repouso.dart';
-import 'package:sincro_mobile/features/biofeedback/escolher_card_sugerido.dart';
 import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 import 'package:sincro_mobile/features/biofeedback/health_reading.dart';
 import 'package:sincro_mobile/features/biofeedback/treino_intervalo.dart';

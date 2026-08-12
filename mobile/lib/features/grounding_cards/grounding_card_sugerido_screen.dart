@@ -17,6 +17,16 @@ class GroundingCardSugeridoScreen extends ConsumerWidget {
     final cardsAsync = ref.watch(groundingCardsProvider(null));
     final favoritosAsync = ref.watch(groundingCardFavoritosProvider);
 
+    // Aguarda os favoritos também estarem prontos antes de renderizar o detalhe: como
+    // GroundingCardDetailScreen copia favoritadoInicial para estado local só em initState (sem
+    // didUpdateWidget), renderizar mais cedo com favoritosAsync ainda carregando fixaria o
+    // coração como "não favoritado" permanentemente, mesmo que os favoritos cheguem em seguida.
+    // Um erro na busca de favoritos, por outro lado, já degrada graciosamente para "não
+    // favoritado" via o maybeWhen abaixo — não precisa bloquear a renderização.
+    if (favoritosAsync.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return cardsAsync.when(
       data: (cards) {
         final card = resolverCardSugerido(cards: cards, id: cardId);

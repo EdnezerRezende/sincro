@@ -146,7 +146,10 @@ class BiofeedbackSyncService {
     Future<List<GroundingCard>> Function() buscar,
   ) async {
     try {
-      return await buscar();
+      // Estas buscas rodam depois que deveAlertar() já decidiu disparar o alerta — um socket
+      // pendurado aqui atrasaria ou derrubaria a notificação em si, então o timeout degrada para
+      // o mesmo "trata como lista vazia" que uma exceção já recebe no catch abaixo.
+      return await buscar().timeout(const Duration(seconds: 5));
     } catch (_) {
       return const [];
     }

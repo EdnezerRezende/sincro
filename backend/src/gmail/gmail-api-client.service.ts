@@ -85,4 +85,61 @@ export class GmailApiClient {
     }
     return emails;
   }
+
+  /** Full plain-text body for drafting a reply — `fetchInitialUnread`/`fetchIncremental` above
+   *  only ever read the short `snippet` via `format: 'metadata'`; generating a coherent draft
+   *  needs the real text. */
+  async fetchFullBody(refreshToken: string, gmailMessageId: string): Promise<string> {
+    const gmail = this.gmailFor(refreshToken);
+    const message = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+    return this.extractPlainTextBody(message.data.payload) ?? message.data.snippet ?? '';
+  }
+
+  private extractPlainTextBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+    if (!payload) return null;
+    if (payload.mimeType === 'text/plain' && payload.body?.data) {
+      return Buffer.from(payload.body.data, 'base64url').toString('utf8');
+    }
+    for (const part of payload.parts ?? []) {
+      const found = this.extractPlainTextBody(part);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /** Sends a real reply in the original thread. `params.para` is the original `remetente` field
+   *  verbatim (e.g. `"Carlos <carlos@example.com>"`) — valid directly as a `To:` header per
+   *  RFC 5322, no parsing needed. */
+  async sendReply(
+    refreshToken: string,
+    params: { gmailMessageId: string; para: string; assunto: string; texto: string },
+  ): Promise<void> {
+    const gmail = this.gmailFor(refreshToken);
+    const original = await gmail.users.messages.get({
+      userId: 'me',
+      id: params.gmailMessageId,
+      format: 'metadata',
+      metadataHeaders: ['Message-Id', 'References'],
+    });
+    const headers = original.data.payload?.headers ?? [];
+    const messageIdHeader = headers.find((h) => h.name === 'Message-Id')?.value ?? '';
+    const referencesHeader = headers.find((h) => h.name === 'References')?.value ?? '';
+    const references = [referencesHeader, messageIdHeader].filter(Boolean).join(' ');
+
+    const raw = [
+      `To: ${params.para}`,
+      `Subject: Re: ${params.assunto}`,
+      `In-Reply-To: ${messageIdHeader}`,
+      `References: ${references}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      params.texto,
+    ].join('\r\n');
+    const encoded = Buffer.from(raw).toString('base64url');
+
+    await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw: encoded, threadId: original.data.threadId ?? undefined },
+    });
+  }
 }

@@ -25,6 +25,7 @@ import 'features/settings/settings_screen.dart';
 import 'features/email_triage/inbox_screen.dart';
 import 'features/financas/financas_screen.dart';
 import 'features/grounding_cards/grounding_cards_library_screen.dart';
+import 'features/grounding_cards/grounding_card_sugerido_screen.dart';
 import 'features/grounding_cards/admin_grounding_cards_list_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -41,18 +42,25 @@ void _handleEmailTriageNotificationTap(RemoteMessage? message) {
 }
 
 /// Toque numa notificação de alerta do Biofeedback com o app aberto ou em background navega para
-/// a tela de detalhe. O discriminador de payload evita reagir a outros tipos de notificação local
-/// que este app venha a ter no futuro, e só navega com uma sessão válida — do contrário um toque
-/// deslogado (ex.: alerta disparado em background e só tocado depois de um logout) empurraria
-/// /biofeedback por cima de /login, igual ao guard de _handleEmailTriageNotificationTap acima.
+/// o card de aterramento sugerido (quando o alerta veio com um) ou para a tela de detalhe do
+/// Biofeedback (quando não veio, ou o payload é de outro tipo de notificação local que este app
+/// venha a ter no futuro). Só navega com uma sessão válida — do contrário um toque deslogado (ex.:
+/// alerta disparado em background e só tocado depois de um logout) empurraria uma dessas rotas por
+/// cima de /login, igual ao guard de _handleEmailTriageNotificationTap acima.
 ///
 /// Não cobre cold-start (app terminado): `onDidReceiveNotificationResponse` nunca dispara nesse
 /// caso — ver o uso de `getNotificationAppLaunchDetails()` em `main()`, que trata esse cenário
 /// separadamente, no mesmo espírito do `getInitialMessage()` do FCM acima.
 void _handleBiofeedbackAlertTap(NotificationResponse response) {
-  if (response.payload != biofeedbackNotificationTapPayload) return;
+  if (!(response.payload?.startsWith(biofeedbackNotificationTapPayload) ?? false)) return;
   if (FirebaseAuth.instance.currentUser == null) return;
-  navigatorKey.currentState?.pushNamed('/biofeedback');
+
+  final cardId = BiofeedbackAlertService.extrairCardIdDoPayload(response.payload);
+  if (cardId == null) {
+    navigatorKey.currentState?.pushNamed('/biofeedback');
+    return;
+  }
+  navigatorKey.currentState?.pushNamed('/grounding-cards/sugerido', arguments: cardId);
 }
 
 Future<void> main() async {
@@ -141,6 +149,7 @@ class SincroApp extends StatelessWidget {
         '/biofeedback': (_) => const BiofeedbackScreen(),
         '/professionals': (_) => const ProfessionalsSearchScreen(),
         '/grounding-cards': (_) => const GroundingCardsLibraryScreen(),
+        '/grounding-cards/sugerido': (_) => const GroundingCardSugeridoScreen(),
         '/admin/professionals': (_) => const AdminProfessionalsListScreen(),
         '/admin/grounding-cards': (_) => const AdminGroundingCardsListScreen(),
       },

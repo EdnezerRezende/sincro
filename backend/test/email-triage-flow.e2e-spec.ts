@@ -67,7 +67,12 @@ describe('Email triage flow (e2e)', () => {
       .expect(201);
 
     const status = await request(app.getHttpServer()).get('/gmail/connection').set(authHeader).expect(200);
-    expect(status.body).toEqual({ connected: true, gmailEmail: 'usuario.teste@gmail.com' });
+    expect(status.body).toEqual({
+      connected: true,
+      gmailEmail: 'usuario.teste@gmail.com',
+      temEscopoEnvio: true,
+      temEscopoAgenda: true,
+    });
 
     const user1 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid1 } });
     await emailSyncService.syncUser(user1.id);
@@ -124,7 +129,12 @@ describe('Email triage flow (e2e)', () => {
       .get('/gmail/connection')
       .set(authHeader)
       .expect(200);
-    expect(connectionAfterDisconnect.body).toEqual({ connected: false, gmailEmail: null });
+    expect(connectionAfterDisconnect.body).toEqual({
+      connected: false,
+      gmailEmail: null,
+      temEscopoEnvio: false,
+      temEscopoAgenda: false,
+    });
 
     // The other tenant's connection and summaries must survive tenant 1's disconnect.
     const tenant2Summaries = await request(app.getHttpServer()).get('/resumos-email').set(otherAuthHeader).expect(200);
@@ -133,6 +143,11 @@ describe('Email triage flow (e2e)', () => {
       .get('/gmail/connection')
       .set(otherAuthHeader)
       .expect(200);
-    expect(tenant2Connection.body).toEqual({ connected: true, gmailEmail: 'usuario.teste@gmail.com' });
+    expect(tenant2Connection.body).toEqual({
+      connected: true,
+      gmailEmail: 'usuario.teste@gmail.com',
+      temEscopoEnvio: true,
+      temEscopoAgenda: true,
+    });
   });
 });

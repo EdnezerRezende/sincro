@@ -632,6 +632,7 @@ care about them):
     List<GroundingCard> favoritosSugeridos = const [],
     List<GroundingCard> respiracaoAtivosSugeridos = const [],
     List<GroundingCard> todosAtivosSugeridos = const [],
+    bool falharBuscaDeCards = false,
   }) {
     when(() => healthService.solicitarPermissao()).thenAnswer((_) async => true);
     when(() => healthService.lerPassosHoje()).thenAnswer((_) async => passos);
@@ -648,12 +649,19 @@ care about them):
     when(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')))
         .thenAnswer((_) async {});
     final groundingCardsRepository = MockGroundingCardsRepository();
-    when(() => groundingCardsRepository.listFavoritos())
-        .thenAnswer((_) async => favoritosSugeridos);
-    when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO'))
-        .thenAnswer((_) async => respiracaoAtivosSugeridos);
-    when(() => groundingCardsRepository.list())
-        .thenAnswer((_) async => todosAtivosSugeridos);
+    if (falharBuscaDeCards) {
+      final erro = Exception('rede indisponível');
+      when(() => groundingCardsRepository.listFavoritos()).thenThrow(erro);
+      when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO')).thenThrow(erro);
+      when(() => groundingCardsRepository.list()).thenThrow(erro);
+    } else {
+      when(() => groundingCardsRepository.listFavoritos())
+          .thenAnswer((_) async => favoritosSugeridos);
+      when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO'))
+          .thenAnswer((_) async => respiracaoAtivosSugeridos);
+      when(() => groundingCardsRepository.list())
+          .thenAnswer((_) async => todosAtivosSugeridos);
+    }
     return BiofeedbackSyncService(
       healthService,
       cache,
@@ -738,48 +746,27 @@ permissões', ...)` block:
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    final groundingCardsRepository = MockGroundingCardsRepository();
-    when(() => healthService.solicitarPermissao()).thenAnswer((_) async => true);
-    when(() => healthService.lerPassosHoje()).thenAnswer((_) async => []);
-    when(() => healthService.lerTreinosHoje()).thenAnswer((_) async => []);
     when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => cache.isAtivo()).thenAnswer((_) async => true);
-    when(() => cache.getPermissoesVersao())
-        .thenAnswer((_) async => BiofeedbackCache.versaoPermissoesAtual);
-    when(() => cache.getHistoricoRepouso()).thenAnswer((_) async => historicoEstavelElevando());
-    when(() => cache.setHistoricoRepouso(any())).thenAnswer((_) async {});
-    when(() => cache.getResumo()).thenAnswer(
-      (_) async => BiofeedbackSummary(
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      historico: historicoEstavelElevando(),
+      resumoAnterior: BiofeedbackSummary(
         ultimaFc: 70,
         mediaFcHoje: 70,
         mediaVfcHoje: 45,
         estadoEstresse: EstadoEstresse.calmo,
         atualizadoEm: DateTime(2026, 8, 3, 14, 0),
       ),
-    );
-    when(() => cache.setResumo(any())).thenAnswer((_) async {});
-    when(() => cache.getAlertasAtivos()).thenAnswer((_) async => true);
-    when(() => sensoryProfileRepository.get())
-        .thenAnswer((_) async => {'toleranciaNotificacao': 'PADRAO'});
-    when(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')))
-        .thenAnswer((_) async {});
-    when(() => groundingCardsRepository.listFavoritos()).thenThrow(Exception('rede indisponível'));
-    when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO'))
-        .thenThrow(Exception('rede indisponível'));
-    when(() => groundingCardsRepository.list()).thenThrow(Exception('rede indisponível'));
-    final service = BiofeedbackSyncService(
-      healthService,
-      cache,
-      BiofeedbackSummaryCalculator(),
-      BiofeedbackStressDetector(),
-      alertService,
-      sensoryProfileRepository,
-      groundingCardsRepository,
+      perfilSensorial: {'toleranciaNotificacao': 'PADRAO'},
+      falharBuscaDeCards: true,
     );
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
@@ -1191,10 +1178,9 @@ show.
   Task 2; navigation resolution → Task 3 + Task 6; sync-service wiring → Task 4 + Task 5). The
   spec's "Testes" section maps 1:1 to the test steps in Tasks 1-4 plus the manual checklist in
   Task 7.
-- **Placeholder scan:** no TBD/TODO; every code step has literal, complete code. Task 4's
-  "every lookup fails" test builds `BiofeedbackSyncService` directly instead of through
-  `buildService`, since it needs to own the `MockGroundingCardsRepository` instance to re-stub its
-  three methods to throw.
+- **Placeholder scan:** no TBD/TODO; every code step has literal, complete code. `buildService`
+  gained a `falharBuscaDeCards` flag specifically so the "every lookup fails" test in Task 4 can
+  reuse it like every other test instead of duplicating its ~15 lines of unrelated stubbing.
 - **Type consistency:** `escolherCardSugerido`'s `sortear` parameter, `GroundingCardsRepository`'s
   `list`/`listFavoritos` signatures, `GroundingCard.id`/`.titulo`, and
   `BiofeedbackAlertService.mostrarAlerta`'s `cardSugerido` parameter name are used identically

@@ -4,7 +4,12 @@ function buildDeps() {
   const prisma = {
     gmailConnection: { findUnique: jest.fn(), update: jest.fn() },
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', plano: 'simples' }) },
-    emailSummary: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn() },
+    emailSummary: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
   const gmailApiClient = { fetchInitialUnread: jest.fn(), fetchIncremental: jest.fn() };
   const connectionsService = { getDecryptedRefreshToken: jest.fn().mockResolvedValue('rt-123') };
@@ -256,6 +261,32 @@ describe('EmailSyncService', () => {
         categoria: true,
         recebidoEm: true,
       },
+    });
+  });
+
+  describe('getOwned', () => {
+    it('returns the summary when it belongs to the authenticated user', async () => {
+      const deps = buildDeps();
+      const summary = { id: 'summary-1', userId: 'u1', gmailMessageId: 'msg-1' };
+      deps.prisma.emailSummary.findFirst.mockResolvedValue(summary);
+      const service = buildService(deps);
+
+      const result = await service.getOwned('fb1', 'summary-1');
+
+      expect(result).toEqual(summary);
+      expect(deps.prisma.emailSummary.findFirst).toHaveBeenCalledWith({
+        where: { id: 'summary-1', userId: 'u1' },
+      });
+    });
+
+    it('throws NotFoundException when the summary does not exist or belongs to another user', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findFirst.mockResolvedValue(null);
+      const service = buildService(deps);
+
+      await expect(service.getOwned('fb1', 'someone-elses-summary')).rejects.toThrow(
+        'E-mail não encontrado.',
+      );
     });
   });
 });

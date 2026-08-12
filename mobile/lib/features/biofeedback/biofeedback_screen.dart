@@ -101,7 +101,7 @@ class _BiofeedbackContent extends StatelessWidget {
         children: const [
           Padding(
             padding: EdgeInsets.all(24),
-            child: Text('Nenhum dado disponível ainda. 🌿'),
+            child: Text('Nenhum dado disponível ainda.'),
           ),
         ],
       );

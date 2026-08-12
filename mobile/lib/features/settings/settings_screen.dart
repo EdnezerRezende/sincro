@@ -6,6 +6,8 @@ import '../biofeedback/biofeedback_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
+import '../home/home_layout_mode.dart';
+import '../home/home_providers.dart';
 import '../onboarding/anamnese/anamnese_providers.dart';
 import '../onboarding/anamnese/anamnese_wizard_screen.dart';
 import '../onboarding/onboarding_providers.dart';
@@ -69,6 +71,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _editHomeLayout() async {
+    final atual = await ref.read(homeLayoutPreferenceProvider).getModo();
+    if (!mounted) return;
+
+    final escolhido = await showDialog<HomeLayoutMode>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Layout da tela inicial'),
+        children: HomeLayoutMode.values.map((m) {
+          return RadioListTile<HomeLayoutMode>(
+            title: Text(m.label),
+            value: m,
+            groupValue: atual,
+            onChanged: (v) => Navigator.pop(dialogContext, v),
+          );
+        }).toList(),
+      ),
+    );
+    if (escolhido == null) return;
+
+    await ref.read(homeLayoutPreferenceProvider).setModo(escolhido);
+    ref.invalidate(homeLayoutModeProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Layout atualizado.')),
+      );
     }
   }
 
@@ -366,25 +397,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       orElse: () => <Widget>[],
     );
 
+    final destructiveColor = Theme.of(context).colorScheme.error;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Configurações')),
       body: ListView(
         children: [
+          const _SectionHeader('Perfil & Preferências'),
           ListTile(
             leading: const Icon(Icons.edit_outlined),
             title: const Text('Editar perfil sensorial'),
             onTap: _busy ? null : _editSensoryProfile,
           ),
           ListTile(
-            leading: const Icon(Icons.delete_outline),
-            title: const Text('Apagar perfil sensorial'),
-            onTap: _busy ? null : _deleteSensoryProfile,
+            leading: const Icon(Icons.dashboard_customize_outlined),
+            title: const Text('Layout da tela inicial'),
+            onTap: _busy ? null : _editHomeLayout,
           ),
           ListTile(
             leading: const Icon(Icons.people_outline),
             title: const Text('Gerenciar contatos de confiança'),
             onTap: _busy ? null : _manageContacts,
           ),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: destructiveColor),
+            title: const Text('Apagar perfil sensorial'),
+            onTap: _busy ? null : _deleteSensoryProfile,
+          ),
+          const _SectionHeader('Conexões'),
           ListTile(
             leading: const Icon(Icons.mail_outline),
             title: const Text('Desconectar Gmail'),
@@ -399,6 +439,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // Ambos os itens só fazem sentido com o Biofeedback ativo: a frequência só governa o
           // agendamento em background, que nem existe enquanto o pilar está desativado.
           if (biofeedbackAtivo) ...[
+            const _SectionHeader('Biofeedback'),
             ListTile(
               leading: const Icon(Icons.favorite_border),
               title: const Text('Frequência do Biofeedback'),
@@ -411,12 +452,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: _busy ? null : _alternarAlertasBiofeedback,
             ),
             ListTile(
-              leading: const Icon(Icons.favorite_border),
+              leading: Icon(Icons.favorite_border, color: destructiveColor),
               title: const Text('Desativar Biofeedback'),
               onTap: _busy ? null : _desativarBiofeedback,
             ),
           ],
-          if (isAdmin)
+          if (isAdmin) ...[
+            const _SectionHeader('Administração'),
             ListTile(
               leading: const Icon(Icons.admin_panel_settings_outlined),
               title: const Text('Gerenciar profissionais (admin)'),
@@ -424,7 +466,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ? null
                   : () => Navigator.of(context).pushNamed('/admin/professionals'),
             ),
-          if (isAdmin)
             ListTile(
               leading: const Icon(Icons.admin_panel_settings_outlined),
               title: const Text('Gerenciar cartões de aterramento (admin)'),
@@ -432,13 +473,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ? null
                   : () => Navigator.of(context).pushNamed('/admin/grounding-cards'),
             ),
-          const Divider(),
+          ],
+          const _SectionHeader('Conta'),
           ListTile(
-            leading: const Icon(Icons.logout),
+            leading: Icon(Icons.logout, color: destructiveColor),
             title: const Text('Sair'),
             onTap: _busy ? null : _signOut,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
       ),
     );
   }

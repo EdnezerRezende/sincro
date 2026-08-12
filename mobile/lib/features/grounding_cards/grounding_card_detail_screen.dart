@@ -54,7 +54,14 @@ class _GroundingCardDetailScreenState extends ConsumerState<GroundingCardDetailS
         title: Text(widget.card.titulo),
         actions: [
           IconButton(
-            icon: Icon(_favoritado ? Icons.favorite : Icons.favorite_border),
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+              child: Icon(
+                _favoritado ? Icons.favorite : Icons.favorite_border,
+                key: ValueKey(_favoritado),
+              ),
+            ),
             tooltip: _favoritado ? 'Remover dos favoritos' : 'Favoritar',
             onPressed: _salvando ? null : _alternarFavorito,
           ),

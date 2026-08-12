@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/theme.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
 
@@ -95,27 +96,33 @@ class _FinancasContent extends StatelessWidget {
           .map((c) => _ItemAVencer(nome: c.nome, valor: c.saldoOuFatura, vencimento: c.vencimentoFatura!)),
     ]..sort((a, b) => a.vencimento.compareTo(b.vencimento));
 
+    final theme = Theme.of(context);
+    final sincroColors = context.sincroColors;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Saldo livre', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                Text('Saldo livre', style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 4),
                 Text(
                   'R\$ ${summary.saldoLivre.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        const Text('Contas conectadas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        Text('Contas conectadas', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
         ...summary.contas.map(
           (conta) => Card(
             child: ListTile(
@@ -125,19 +132,41 @@ class _FinancasContent extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        const Text('A vencer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        Text('A vencer', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
         if (itensAVencer.isEmpty)
-          const Padding(padding: EdgeInsets.all(8), child: Text('Nada por aqui. 🌿')),
-        ...itensAVencer.map(
-          (item) => Card(
-            child: ListTile(
-              title: Text(item.nome),
-              subtitle: Text(_formatVencimento(item.vencimento)),
-              trailing: Text('R\$ ${item.valor.toStringAsFixed(2)}'),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Icon(Icons.spa_outlined, size: 18, color: sincroColors.success),
+                const SizedBox(width: 8),
+                const Text('Nada por aqui.'),
+              ],
             ),
           ),
-        ),
+        ...itensAVencer.map((item) {
+          // Tom não punitivo: indicador de paz quando o saldo livre cobre o item, tom neutro de
+          // atenção (nunca vermelho) quando não cobre — nunca um alarme.
+          final coberto = summary.saldoLivre >= item.valor;
+          final cor = coberto ? sincroColors.success : sincroColors.caution;
+          final rotulo = coberto ? 'Saldo suficiente' : 'Fora do saldo livre atual';
+          return Card(
+            child: ListTile(
+              title: Text(item.nome),
+              subtitle: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(coberto ? Icons.check_circle_outline : Icons.info_outline, size: 16, color: cor),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text('${_formatVencimento(item.vencimento)} · $rotulo')),
+                ],
+              ),
+              trailing: Text('R\$ ${item.valor.toStringAsFixed(2)}'),
+            ),
+          );
+        }),
       ],
     );
   }

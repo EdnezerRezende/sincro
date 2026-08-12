@@ -9,6 +9,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
+import 'core/theme.dart';
 import 'features/biofeedback/biofeedback_alert_service.dart';
 import 'features/biofeedback/biofeedback_background_task.dart';
 import 'features/biofeedback/biofeedback_screen.dart';
@@ -123,6 +124,9 @@ class SincroApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Sincro',
+      theme: sincroLightTheme,
+      darkTheme: sincroDarkTheme,
+      themeMode: ThemeMode.system,
       initialRoute: '/login',
       routes: {
         '/login': (_) => const LoginScreen(),

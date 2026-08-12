@@ -11,6 +11,8 @@ import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../financas/pluggy_connect_webview_screen.dart';
 import 'emergency_button.dart';
+import 'home_layout_mode.dart';
+import 'home_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -43,10 +45,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final contactsAsync = ref.watch(trustedContactsListProvider);
-    final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
-    final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
+    // Sem spinner na tela principal: `resumo` já é o próprio default do provider, então cair
+    // nele enquanto a preferência carrega não troca de layout visivelmente depois.
+    final modo = ref.watch(homeLayoutModeProvider).maybeWhen(
+          data: (m) => m,
+          orElse: () => HomeLayoutMode.resumo,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -59,42 +63,132 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('🌿 Tudo em ordem por hoje.'),
-            const SizedBox(height: 8),
-            _GmailCard(statusAsync: gmailStatusAsync),
-            const SizedBox(height: 16),
-            _FinancasCard(connectionsAsync: financeConnectionsAsync),
-            const SizedBox(height: 16),
-            _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
-            const SizedBox(height: 16),
-            const _ProfessionalsCard(),
-            const SizedBox(height: 16),
-            const _GroundingCardsCard(),
-            const SizedBox(height: 16),
-            contactsAsync.when(
-              data: (contacts) {
-                if (contacts.isEmpty) {
-                  return const Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _NoContactsHint(),
-                      SizedBox(height: 16),
-                      EmergencyButton(),
-                    ],
-                  );
-                }
-                return const EmergencyButton();
-              },
-              loading: () => const EmergencyButton(),
-              error: (_, __) => const EmergencyButton(),
+      body: switch (modo) {
+        HomeLayoutMode.resumo => const _HomeResumoView(),
+        HomeLayoutMode.abas => const _HomeAbasView(),
+      },
+    );
+  }
+}
+
+/// Botão de emergência + aviso de "sem contatos", compartilhado pelos dois layouts. No layout de
+/// abas isso fica sempre visível, fora do `TabBarView` — a emergência precisa estar alcançável
+/// independente de qual aba a pessoa está olhando.
+class _EmergencySection extends ConsumerWidget {
+  const _EmergencySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contactsAsync = ref.watch(trustedContactsListProvider);
+    return contactsAsync.when(
+      data: (contacts) {
+        if (contacts.isEmpty) {
+          return const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _NoContactsHint(),
+              SizedBox(height: 16),
+              EmergencyButton(),
+            ],
+          );
+        }
+        return const EmergencyButton();
+      },
+      loading: () => const EmergencyButton(),
+      error: (_, __) => const EmergencyButton(),
+    );
+  }
+}
+
+class _HomeResumoView extends ConsumerWidget {
+  const _HomeResumoView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
+    final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Tudo em ordem por hoje.', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _GmailCard(statusAsync: gmailStatusAsync),
+          const SizedBox(height: 16),
+          _FinancasCard(connectionsAsync: financeConnectionsAsync),
+          const SizedBox(height: 16),
+          _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
+          const SizedBox(height: 16),
+          const _ProfessionalsCard(),
+          const SizedBox(height: 16),
+          const _GroundingCardsCard(),
+          const SizedBox(height: 16),
+          const _EmergencySection(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Layout alternativo para quem prefere mais informação organizada por contexto em vez de um
+/// único scroll longo. Reusa exatamente os mesmos widgets de card do layout `resumo` — só muda o
+/// agrupamento ao redor.
+class _HomeAbasView extends ConsumerWidget {
+  const _HomeAbasView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
+    final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          const TabBar(
+            tabs: [
+              Tab(text: 'Hoje'),
+              Tab(text: 'Finanças'),
+              Tab(text: 'Apoio'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _GmailCard(statusAsync: gmailStatusAsync),
+                    const SizedBox(height: 16),
+                    _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
+                  ],
+                ),
+                ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _FinancasCard(connectionsAsync: financeConnectionsAsync),
+                  ],
+                ),
+                ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: const [
+                    _ProfessionalsCard(),
+                    SizedBox(height: 16),
+                    _GroundingCardsCard(),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: _EmergencySection(),
+          ),
+        ],
       ),
     );
   }
@@ -126,7 +220,7 @@ class _GmailCard extends ConsumerWidget {
           return Card(
             child: ListTile(
               leading: const Icon(Icons.mail_outline),
-              title: const Text('📬 Caixa de Entrada'),
+              title: const Text('Caixa de Entrada'),
               subtitle: const Text('Conecte seu Gmail para ver um resumo calmo dos seus e-mails.'),
               trailing: ElevatedButton(
                 onPressed: () => _connect(context, ref),
@@ -138,14 +232,14 @@ class _GmailCard extends ConsumerWidget {
         return Card(
           child: ListTile(
             leading: const Icon(Icons.mail_outline),
-            title: const Text('📬 Caixa de Entrada'),
+            title: const Text('Caixa de Entrada'),
             subtitle: Text('Conectado como ${status.gmailEmail}'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).pushNamed('/inbox'),
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('📬 Caixa de Entrada'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(child: ListTile(title: Text('Caixa de Entrada'), subtitle: Text('Carregando...'))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -223,7 +317,7 @@ class _FinancasCard extends ConsumerWidget {
           return Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance_outlined),
-              title: const Text('💰 Finanças'),
+              title: const Text('Finanças'),
               subtitle: const Text('Conecte uma conta para ver seu saldo livre.'),
               trailing: ElevatedButton(
                 onPressed: () => _connect(context, ref),
@@ -235,14 +329,14 @@ class _FinancasCard extends ConsumerWidget {
         return Card(
           child: ListTile(
             leading: const Icon(Icons.account_balance_outlined),
-            title: const Text('💰 Finanças'),
+            title: const Text('Finanças'),
             subtitle: _SaldoLivreSubtitle(connectionCount: connections.length),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).pushNamed('/financas'),
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('💰 Finanças'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(child: ListTile(title: Text('Finanças'), subtitle: Text('Carregando...'))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -323,7 +417,7 @@ class _BiofeedbackCard extends ConsumerWidget {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.favorite_border),
-        title: const Text('💓 Biofeedback'),
+        title: const Text('Biofeedback'),
         subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
         trailing: ElevatedButton(
           onPressed: () => _ativar(context, ref),
@@ -341,14 +435,14 @@ class _BiofeedbackCard extends ConsumerWidget {
         return Card(
           child: ListTile(
             leading: const Icon(Icons.favorite_border),
-            title: const Text('💓 Biofeedback'),
+            title: const Text('Biofeedback'),
             subtitle: const _UltimaFcSubtitle(),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).pushNamed('/biofeedback'),
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('💓 Biofeedback'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(child: ListTile(title: Text('Biofeedback'), subtitle: Text('Carregando...'))),
       // O card do Biofeedback nunca some da Home (restrição global do pilar): se não deu para
       // ler o estado de ativação, mostramos o card inativo, que continua sendo um ponto de
       // entrada válido — ativar de novo é idempotente.
@@ -399,12 +493,21 @@ class _NoContactsHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    final colors = Theme.of(context).colorScheme;
+    return Card(
       child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Text(
-          '💡 Adicione um contato de confiança para estar preparado em emergências.',
-          style: TextStyle(fontSize: 13, color: Colors.grey),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, size: 18, color: colors.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Adicione um contato de confiança para estar preparado em emergências.',
+                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -419,7 +522,7 @@ class _ProfessionalsCard extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.medical_services_outlined),
-        title: const Text('🧑‍⚕️ Encontrar profissional'),
+        title: const Text('Encontrar profissional'),
         subtitle: const Text('Busque profissionais neuroafirmativos perto de você.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).pushNamed('/professionals'),
@@ -436,7 +539,7 @@ class _GroundingCardsCard extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.self_improvement_outlined),
-        title: const Text('🌿 Alívio sensorial'),
+        title: const Text('Alívio sensorial'),
         subtitle: const Text('Técnicas de aterramento e alívio para o dia a dia.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),

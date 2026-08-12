@@ -21,7 +21,7 @@ class InboxScreen extends ConsumerWidget {
                 children: const [
                   Padding(
                     padding: EdgeInsets.all(24),
-                    child: Text('Nenhum e-mail novo por aqui. 🌿'),
+                    child: Text('Nenhum e-mail novo por aqui.'),
                   ),
                 ],
               );
@@ -103,8 +103,12 @@ class _EmailTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return ListTile(
-      leading: Icon(summary.precisaAtencao ? Icons.priority_high : Icons.check_circle_outline),
+      leading: Icon(
+        summary.precisaAtencao ? Icons.mark_email_unread_outlined : Icons.check_circle_outline,
+        color: summary.precisaAtencao ? colors.secondary : colors.onSurfaceVariant,
+      ),
       title: Text(summary.assunto),
       subtitle: Text(summary.resumoCurto),
     );

@@ -8,9 +8,12 @@ import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary_calculator.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_sync_service.dart';
 import 'package:sincro_mobile/features/biofeedback/dia_repouso.dart';
+import 'package:sincro_mobile/features/biofeedback/escolher_card_sugerido.dart';
 import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 import 'package:sincro_mobile/features/biofeedback/health_reading.dart';
 import 'package:sincro_mobile/features/biofeedback/treino_intervalo.dart';
+import 'package:sincro_mobile/features/grounding_cards/grounding_card.dart';
+import 'package:sincro_mobile/features/grounding_cards/grounding_cards_repository.dart';
 import 'package:sincro_mobile/features/onboarding/anamnese/sensory_profile_repository.dart';
 
 class MockBiofeedbackHealthService extends Mock implements BiofeedbackHealthService {}
@@ -21,11 +24,16 @@ class MockBiofeedbackAlertService extends Mock implements BiofeedbackAlertServic
 
 class MockSensoryProfileRepository extends Mock implements SensoryProfileRepository {}
 
+class MockGroundingCardsRepository extends Mock implements GroundingCardsRepository {}
+
+class FakeGroundingCard extends Fake implements GroundingCard {}
+
 class FakeBiofeedbackSummary extends Fake implements BiofeedbackSummary {}
 
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeBiofeedbackSummary());
+    registerFallbackValue(FakeGroundingCard());
   });
 
   BiofeedbackSyncService buildService(
@@ -41,6 +49,10 @@ void main() {
     int permissoesVersao = BiofeedbackCache.versaoPermissoesAtual,
     bool alertasAtivos = true,
     Map<String, dynamic>? perfilSensorial,
+    List<GroundingCard> favoritosSugeridos = const [],
+    List<GroundingCard> respiracaoAtivosSugeridos = const [],
+    List<GroundingCard> todosAtivosSugeridos = const [],
+    bool falharBuscaDeCards = false,
   }) {
     when(() => healthService.solicitarPermissao()).thenAnswer((_) async => true);
     when(() => healthService.lerPassosHoje()).thenAnswer((_) async => passos);
@@ -54,7 +66,22 @@ void main() {
     when(() => cache.setResumo(any())).thenAnswer((_) async {});
     when(() => cache.getAlertasAtivos()).thenAnswer((_) async => alertasAtivos);
     when(() => sensoryProfileRepository.get()).thenAnswer((_) async => perfilSensorial);
-    when(() => alertService.mostrarAlerta()).thenAnswer((_) async {});
+    when(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')))
+        .thenAnswer((_) async {});
+    final groundingCardsRepository = MockGroundingCardsRepository();
+    if (falharBuscaDeCards) {
+      final erro = Exception('rede indisponível');
+      when(() => groundingCardsRepository.listFavoritos()).thenThrow(erro);
+      when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO')).thenThrow(erro);
+      when(() => groundingCardsRepository.list()).thenThrow(erro);
+    } else {
+      when(() => groundingCardsRepository.listFavoritos())
+          .thenAnswer((_) async => favoritosSugeridos);
+      when(() => groundingCardsRepository.list(categoria: 'RESPIRACAO'))
+          .thenAnswer((_) async => respiracaoAtivosSugeridos);
+      when(() => groundingCardsRepository.list())
+          .thenAnswer((_) async => todosAtivosSugeridos);
+    }
     return BiofeedbackSyncService(
       healthService,
       cache,
@@ -62,6 +89,7 @@ void main() {
       BiofeedbackStressDetector(),
       alertService,
       sensoryProfileRepository,
+      groundingCardsRepository,
     );
   }
 
@@ -105,7 +133,7 @@ void main() {
 
     await service.sincronizar(agora: agora);
 
-    verify(() => alertService.mostrarAlerta()).called(1);
+    verify(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido'))).called(1);
   });
 
   test('does not send the alert when already elevado before this cycle', () async {
@@ -137,7 +165,7 @@ void main() {
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
-    verifyNever(() => alertService.mostrarAlerta());
+    verifyNever(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')));
     // Sem transição para elevado (já estava elevado), a leitura de rede nem deveria acontecer.
     verifyNever(() => sensoryProfileRepository.get());
   });
@@ -166,7 +194,7 @@ void main() {
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
-    verifyNever(() => alertService.mostrarAlerta());
+    verifyNever(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')));
     // Sem transição para elevado, a leitura de rede nem deveria acontecer.
     verifyNever(() => sensoryProfileRepository.get());
   });
@@ -201,7 +229,7 @@ void main() {
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
-    verifyNever(() => alertService.mostrarAlerta());
+    verifyNever(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')));
     verifyNever(() => sensoryProfileRepository.get());
   });
 
@@ -234,7 +262,7 @@ void main() {
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
-    verifyNever(() => alertService.mostrarAlerta());
+    verifyNever(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')));
   });
 
   test('treats a failed sensory-profile read as no-alert rather than throwing', () async {
@@ -266,7 +294,7 @@ void main() {
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
 
-    verifyNever(() => alertService.mostrarAlerta());
+    verifyNever(() => alertService.mostrarAlerta(cardSugerido: any(named: 'cardSugerido')));
   });
 
   test('still saves the summary and history correctly alongside the alert logic', () async {
@@ -369,6 +397,86 @@ void main() {
     final captured = verify(() => cache.setResumo(captureAny())).captured;
     final salvo = captured.single as BiofeedbackSummary;
     expect(salvo.estadoEstresse, EstadoEstresse.elevado);
+  });
+
+  test('includes a favorited card in the alert body when the state transitions into elevado', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    final favorito = GroundingCard(
+      id: 'fav-1',
+      titulo: 'Respiração 4-7-8',
+      categoria: 'RESPIRACAO',
+      conteudo: 'Conteúdo',
+      ativo: true,
+    );
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      historico: historicoEstavelElevando(),
+      resumoAnterior: BiofeedbackSummary(
+        ultimaFc: 70,
+        mediaFcHoje: 70,
+        mediaVfcHoje: 45,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime(2026, 8, 3, 14, 0),
+      ),
+      perfilSensorial: {'toleranciaNotificacao': 'PADRAO'},
+      favoritosSugeridos: [favorito],
+    );
+
+    await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+    final captured =
+        verify(() => alertService.mostrarAlerta(cardSugerido: captureAny(named: 'cardSugerido')))
+            .captured;
+    final cardSugerido = captured.single as GroundingCard?;
+    expect(cardSugerido?.id, 'fav-1');
+  });
+
+  test('alerts with no suggested card when every grounding-card lookup fails', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
+    );
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      historico: historicoEstavelElevando(),
+      resumoAnterior: BiofeedbackSummary(
+        ultimaFc: 70,
+        mediaFcHoje: 70,
+        mediaVfcHoje: 45,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime(2026, 8, 3, 14, 0),
+      ),
+      perfilSensorial: {'toleranciaNotificacao': 'PADRAO'},
+      falharBuscaDeCards: true,
+    );
+
+    await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
+
+    final captured =
+        verify(() => alertService.mostrarAlerta(cardSugerido: captureAny(named: 'cardSugerido')))
+            .captured;
+    expect(captured.single, isNull);
   });
 
   group('upgrade de permissões', () {

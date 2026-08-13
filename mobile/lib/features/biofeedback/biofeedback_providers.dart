@@ -9,6 +9,7 @@ import 'biofeedback_summary.dart';
 import 'biofeedback_summary_calculator.dart';
 import 'biofeedback_sync_service.dart';
 import '../onboarding/anamnese/anamnese_providers.dart' show sensoryProfileRepositoryProvider;
+import '../grounding_cards/grounding_cards_providers.dart' show groundingCardsRepositoryProvider;
 
 final biofeedbackHealthServiceProvider = Provider<BiofeedbackHealthService>((ref) {
   return BiofeedbackHealthService();
@@ -30,6 +31,7 @@ final biofeedbackSyncServiceProvider = Provider<BiofeedbackSyncService>((ref) {
     BiofeedbackStressDetector(),
     ref.watch(biofeedbackAlertServiceProvider),
     ref.watch(sensoryProfileRepositoryProvider),
+    ref.watch(groundingCardsRepositoryProvider),
   );
 });
 

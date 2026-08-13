@@ -13,6 +13,7 @@ import '../../core/api_client.dart';
 import '../../core/api_providers.dart' show apiBaseUrl;
 import '../../firebase_options.dart';
 import '../onboarding/anamnese/sensory_profile_repository.dart';
+import '../grounding_cards/grounding_cards_repository.dart';
 
 const biofeedbackTaskName = 'biofeedback-sync';
 
@@ -56,6 +57,7 @@ void biofeedbackCallbackDispatcher() {
       BiofeedbackStressDetector(),
       BiofeedbackAlertService(FlutterLocalNotificationsPlugin()),
       SensoryProfileRepository(dio),
+      GroundingCardsRepository(dio),
     );
     try {
       await syncService.sincronizar();

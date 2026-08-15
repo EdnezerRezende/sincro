@@ -2,15 +2,24 @@ import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class GmailConnectionStatus {
-  const GmailConnectionStatus({required this.connected, this.gmailEmail});
+  const GmailConnectionStatus({
+    required this.connected,
+    this.gmailEmail,
+    this.temEscopoEnvio = false,
+    this.temEscopoAgenda = false,
+  });
 
   final bool connected;
   final String? gmailEmail;
+  final bool temEscopoEnvio;
+  final bool temEscopoAgenda;
 
   factory GmailConnectionStatus.fromJson(Map<String, dynamic> json) {
     return GmailConnectionStatus(
       connected: json['connected'] as bool,
       gmailEmail: json['gmailEmail'] as String?,
+      temEscopoEnvio: json['temEscopoEnvio'] as bool? ?? false,
+      temEscopoAgenda: json['temEscopoAgenda'] as bool? ?? false,
     );
   }
 }

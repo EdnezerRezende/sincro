@@ -7,12 +7,14 @@ import 'fcm_token_repository.dart';
 import 'gmail_connection_repository.dart';
 
 const _gmailReadonlyScope = 'https://www.googleapis.com/auth/gmail.readonly';
+const _gmailSendScope = 'https://www.googleapis.com/auth/gmail.send';
+const _calendarEventsScope = 'https://www.googleapis.com/auth/calendar.events';
 
 const _googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 
 final googleSignInProvider = Provider<GoogleSignIn>((ref) {
   return GoogleSignIn(
-    scopes: const [_gmailReadonlyScope],
+    scopes: const [_gmailReadonlyScope, _gmailSendScope, _calendarEventsScope],
     serverClientId: _googleWebClientId.isEmpty ? null : _googleWebClientId,
   );
 });

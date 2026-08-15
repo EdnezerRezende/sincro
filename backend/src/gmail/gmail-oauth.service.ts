@@ -7,7 +7,7 @@ export class GmailOAuthService {
     return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
   }
 
-  async exchangeServerAuthCode(serverAuthCode: string): Promise<{ refreshToken: string }> {
+  async exchangeServerAuthCode(serverAuthCode: string): Promise<{ refreshToken: string; scope: string }> {
     const client = this.buildClient();
     const { tokens } = await client.getToken(serverAuthCode);
     if (!tokens.refresh_token) {
@@ -17,7 +17,7 @@ export class GmailOAuthService {
           'e tente conectar novamente.',
       );
     }
-    return { refreshToken: tokens.refresh_token };
+    return { refreshToken: tokens.refresh_token, scope: tokens.scope ?? '' };
   }
 
   authenticatedClientFor(refreshToken: string) {

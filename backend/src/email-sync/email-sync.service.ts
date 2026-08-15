@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailApiClient } from '../gmail/gmail-api-client.service';
 import { GmailConnectionsService } from '../gmail/gmail-connections.service';
@@ -150,5 +150,14 @@ export class EmailSyncService {
         recebidoEm: true,
       },
     });
+  }
+
+  async getOwned(firebaseUid: string, id: string) {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    const summary = await this.prisma.emailSummary.findFirst({ where: { id, userId: user.id } });
+    if (!summary) {
+      throw new NotFoundException('E-mail não encontrado.');
+    }
+    return summary;
   }
 }

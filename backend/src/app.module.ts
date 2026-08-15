@@ -13,6 +13,8 @@ import { FinanceSyncModule } from './finance-sync/finance-sync.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
 import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
 import { RagModule } from './rag/rag.module';
+import { CalendarModule } from './calendar/calendar.module';
+import { EmailReplyModule } from './email-reply/email-reply.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { RagModule } from './rag/rag.module';
     ProfessionalsModule,
     GroundingCardsModule,
     RagModule,
+    CalendarModule,
+    EmailReplyModule,
   ],
 })
 export class AppModule {}

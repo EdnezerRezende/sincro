@@ -1,5 +1,10 @@
 import { GmailConnectionsService } from './gmail-connections.service';
 
+const FULL_SCOPE =
+  'https://www.googleapis.com/auth/gmail.readonly ' +
+  'https://www.googleapis.com/auth/gmail.send ' +
+  'https://www.googleapis.com/auth/calendar.events';
+
 function buildDeps() {
   const prisma = {
     gmailConnection: {
@@ -15,7 +20,7 @@ function buildDeps() {
     decrypt: jest.fn((v: string) => v.replace('encrypted(', '').replace(')', '')),
   };
   const oauthService = {
-    exchangeServerAuthCode: jest.fn().mockResolvedValue({ refreshToken: 'rt-123' }),
+    exchangeServerAuthCode: jest.fn().mockResolvedValue({ refreshToken: 'rt-123', scope: FULL_SCOPE }),
     getEmailAddress: jest.fn().mockResolvedValue('ana@example.com'),
     revoke: jest.fn().mockResolvedValue(undefined),
   };
@@ -34,30 +39,111 @@ describe('GmailConnectionsService', () => {
     expect(tokenCrypto.encrypt).toHaveBeenCalledWith('rt-123');
     expect(prisma.gmailConnection.upsert).toHaveBeenCalledWith({
       where: { userId: 'u1' },
-      update: { refreshTokenCriptografado: 'encrypted(rt-123)', gmailEmail: 'ana@example.com' },
-      create: { userId: 'u1', refreshTokenCriptografado: 'encrypted(rt-123)', gmailEmail: 'ana@example.com' },
+      update: {
+        refreshTokenCriptografado: 'encrypted(rt-123)',
+        gmailEmail: 'ana@example.com',
+        temEscopoEnvio: true,
+        temEscopoAgenda: true,
+      },
+      create: {
+        userId: 'u1',
+        refreshTokenCriptografado: 'encrypted(rt-123)',
+        gmailEmail: 'ana@example.com',
+        temEscopoEnvio: true,
+        temEscopoAgenda: true,
+      },
     });
   });
 
-  it('reports connection status scoped to the resolved user', async () => {
+  it('persists temEscopoEnvio false when only calendar.events is granted', async () => {
     const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
-    prisma.gmailConnection.findUnique.mockResolvedValue({ gmailEmail: 'ana@example.com' });
+    oauthService.exchangeServerAuthCode.mockResolvedValue({
+      refreshToken: 'rt-123',
+      scope:
+        'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
+    });
+    prisma.gmailConnection.upsert.mockResolvedValue({ id: 'gc1' });
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    await service.connect('fb1', 'auth-code-abc');
+
+    expect(prisma.gmailConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ temEscopoEnvio: false, temEscopoAgenda: true }),
+      }),
+    );
+  });
+
+  it('persists both flags false when neither new scope is granted', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    oauthService.exchangeServerAuthCode.mockResolvedValue({
+      refreshToken: 'rt-123',
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    });
+    prisma.gmailConnection.upsert.mockResolvedValue({ id: 'gc1' });
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    await service.connect('fb1', 'auth-code-abc');
+
+    expect(prisma.gmailConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ temEscopoEnvio: false, temEscopoAgenda: false }),
+      }),
+    );
+  });
+
+  it('reports connection status scoped to the resolved user, including scope flags', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    prisma.gmailConnection.findUnique.mockResolvedValue({
+      gmailEmail: 'ana@example.com',
+      temEscopoEnvio: true,
+      temEscopoAgenda: false,
+    });
     const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
 
     const status = await service.status('fb1');
 
     expect(prisma.gmailConnection.findUnique).toHaveBeenCalledWith({ where: { userId: 'u1' } });
-    expect(status).toEqual({ connected: true, gmailEmail: 'ana@example.com' });
+    expect(status).toEqual({
+      connected: true,
+      gmailEmail: 'ana@example.com',
+      temEscopoEnvio: true,
+      temEscopoAgenda: false,
+    });
   });
 
-  it('reports not connected when there is no row', async () => {
+  it('reports not connected, with both scope flags false, when there is no row', async () => {
     const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
     prisma.gmailConnection.findUnique.mockResolvedValue(null);
     const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
 
     const status = await service.status('fb1');
 
-    expect(status).toEqual({ connected: false, gmailEmail: null });
+    expect(status).toEqual({
+      connected: false,
+      gmailEmail: null,
+      temEscopoEnvio: false,
+      temEscopoAgenda: false,
+    });
+  });
+
+  it('getConnectionOrThrow returns the connection row when one exists', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    const connection = { userId: 'u1', temEscopoEnvio: true, temEscopoAgenda: true };
+    prisma.gmailConnection.findUnique.mockResolvedValue(connection);
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    const result = await service.getConnectionOrThrow('u1');
+
+    expect(result).toEqual(connection);
+  });
+
+  it('getConnectionOrThrow throws ForbiddenException when there is no connection', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    prisma.gmailConnection.findUnique.mockResolvedValue(null);
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    await expect(service.getConnectionOrThrow('u1')).rejects.toThrow('Gmail não conectado.');
   });
 
   it('disconnect revokes the token with Google and deletes both the connection and its summaries', async () => {

@@ -62,6 +62,8 @@ model GmailConnection {
   gmailEmail                String    @map("gmail_email")
   lastHistoryId             String?   @map("last_history_id")
   ultimaSincronizacao       DateTime? @map("ultima_sincronizacao")
+  temEscopoEnvio            Boolean   @default(false) @map("tem_escopo_envio")
+  temEscopoAgenda           Boolean   @default(false) @map("tem_escopo_agenda")
   criadoEm                  DateTime  @default(now()) @map("criado_em")
 
   @@map("conexoes_gmail")

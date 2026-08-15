@@ -25,12 +25,14 @@ describe('GmailOAuthService', () => {
   it('exchanges a serverAuthCode for a refresh token', async () => {
     const { google } = jest.requireMock('googleapis');
     const mockClient = google.auth.OAuth2();
-    mockClient.getToken.mockResolvedValue({ tokens: { refresh_token: 'rt-123', access_token: 'at-123' } });
+    mockClient.getToken.mockResolvedValue({
+      tokens: { refresh_token: 'rt-123', access_token: 'at-123', scope: 'https://www.googleapis.com/auth/gmail.readonly' },
+    });
 
     const service = new GmailOAuthService();
     const result = await service.exchangeServerAuthCode('code-abc');
 
-    expect(result).toEqual({ refreshToken: 'rt-123' });
+    expect(result).toEqual({ refreshToken: 'rt-123', scope: 'https://www.googleapis.com/auth/gmail.readonly' });
     expect(mockClient.getToken).toHaveBeenCalledWith('code-abc');
   });
 

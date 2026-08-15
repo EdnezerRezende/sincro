@@ -59,6 +59,24 @@ void main() {
     expect(status.gmailEmail, 'ana@example.com');
   });
 
+  test('status parses the two new scope flags, defaulting to false when absent', () async {
+    final mockGoogleSignIn = MockGoogleSignIn();
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: {'connected': true, 'gmailEmail': 'ana@example.com', 'temEscopoEnvio': true, 'temEscopoAgenda': false},
+      ));
+    }));
+
+    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final status = await repository.status();
+
+    expect(status.temEscopoEnvio, true);
+    expect(status.temEscopoAgenda, false);
+  });
+
   test('disconnect calls the delete endpoint and signs out of Google', () async {
     final mockGoogleSignIn = MockGoogleSignIn();
     when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async => null);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'email_detail_screen.dart';
 import 'email_summary.dart';
 import 'email_triage_providers.dart';
 
@@ -111,6 +112,9 @@ class _EmailTile extends StatelessWidget {
       ),
       title: Text(summary.assunto),
       subtitle: Text(summary.resumoCurto),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => EmailDetailScreen(summary: summary)),
+      ),
     );
   }
 }

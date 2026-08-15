@@ -55,6 +55,7 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
         _rascunhos = rascunhos;
         _textoController.text = rascunhos.padrao;
         _estado = _EstadoDetalheEmail.editando;
+        _erro = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -164,7 +165,10 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
               OutlinedButton(onPressed: _carregarRascunhos, child: const Text('Tentar novamente')),
               const SizedBox(height: 8),
               ElevatedButton(
-                onPressed: () => setState(() => _estado = _EstadoDetalheEmail.editando),
+                onPressed: () => setState(() {
+                  _estado = _EstadoDetalheEmail.editando;
+                  _erro = null;
+                }),
                 child: const Text('Escrever do zero'),
               ),
             ],

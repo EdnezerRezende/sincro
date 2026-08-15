@@ -66,7 +66,10 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
   }
 
   Future<void> _enviar() async {
-    setState(() => _estado = _EstadoDetalheEmail.enviando);
+    setState(() {
+      _estado = _EstadoDetalheEmail.enviando;
+      _erro = null;
+    });
     try {
       final resultado =
           await ref.read(emailReplyRepositoryProvider).enviar(widget.summary.id, _textoController.text);
@@ -102,6 +105,7 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
   Future<void> _reconectar() async {
     try {
       await ref.read(gmailConnectionRepositoryProvider).connect();
+      if (!mounted) return;
       ref.invalidate(gmailConnectionStatusProvider);
     } catch (_) {
       if (!mounted) return;
@@ -118,9 +122,11 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.summary.assunto)),
       body: connectionStatus.when(
-        data: (status) => status.temEscopoEnvio ? _corpo(context) : _semEscopoEnvio(context),
+        data: (status) => status.temEscopoEnvio
+            ? _corpo(context, temEscopoAgenda: status.temEscopoAgenda)
+            : _semEscopoEnvio(context),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => _corpo(context),
+        error: (_, __) => _corpo(context, temEscopoAgenda: false),
       ),
     );
   }
@@ -143,7 +149,7 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
     );
   }
 
-  Widget _corpo(BuildContext context) {
+  Widget _corpo(BuildContext context, {required bool temEscopoAgenda}) {
     switch (_estado) {
       case _EstadoDetalheEmail.carregandoRascunhos:
         return const Center(child: CircularProgressIndicator());
@@ -196,7 +202,14 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                 controller: _textoController,
                 maxLines: 8,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
+                onChanged: (_) {
+                  if (_erro != null) setState(() => _erro = null);
+                },
               ),
+              if (_erro != null) ...[
+                const SizedBox(height: 8),
+                Text(_erro!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: enviando || _textoController.text.trim().isEmpty ? null : _enviar,
@@ -228,7 +241,7 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                         const SizedBox(height: 16),
                         if (_compromissoConfirmado)
                           const Text('Agendado ✓')
-                        else
+                        else if (temEscopoAgenda)
                           Row(
                             children: [
                               ElevatedButton(
@@ -239,6 +252,18 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                               TextButton(
                                 onPressed: () => setState(() => _compromissoSugerido = null),
                                 child: const Text('Não agendar'),
+                              ),
+                            ],
+                          )
+                        else
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Reconecte para agendar automaticamente.'),
+                              const SizedBox(height: 8),
+                              OutlinedButton(
+                                onPressed: _reconectar,
+                                child: const Text('Reconectar Gmail'),
                               ),
                             ],
                           ),

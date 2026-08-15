@@ -20,8 +20,21 @@ class CompromissoSugerido {
   Map<String, dynamic> toJson() {
     return {
       'tituloCompromisso': tituloCompromisso,
-      'dataHoraLimite': dataHoraLimite.toIso8601String(),
+      'dataHoraLimite': iso8601ComFuso(dataHoraLimite),
       'antecedenciaMinutos': antecedenciaMinutos,
     };
   }
+}
+
+/// `DateTime.toIso8601String()` só inclui o fuso quando o valor é UTC ("Z"); para um horário local
+/// ele devolve uma string ingênua, sem offset. Enviar essa string ingênua faz o backend resolvê-la
+/// no fuso do SERVIDOR, criando o evento no instante errado (um "15h" brasileiro virava 12h BRT em
+/// servidor UTC). Aqui o offset do dispositivo é anexado explicitamente.
+String iso8601ComFuso(DateTime dataHora) {
+  if (dataHora.isUtc) return dataHora.toIso8601String(); // já termina em "Z"
+  final offset = dataHora.timeZoneOffset;
+  final sinal = offset.isNegative ? '-' : '+';
+  final horas = offset.inHours.abs().toString().padLeft(2, '0');
+  final minutos = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+  return '${dataHora.toIso8601String()}$sinal$horas:$minutos';
 }

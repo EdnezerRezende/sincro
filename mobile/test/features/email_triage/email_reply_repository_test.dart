@@ -87,10 +87,37 @@ void main() {
     ));
 
     expect(capturedPath, '/resumos-email/compromissos/confirmar');
-    expect(capturedData, {
-      'tituloCompromisso': 'Enviar relatório',
-      'dataHoraLimite': '2026-09-01T15:00:00.000',
-      'antecedenciaMinutos': 1440,
-    });
+    final enviado = capturedData as Map<String, dynamic>;
+    expect(enviado['tituloCompromisso'], 'Enviar relatório');
+    expect(enviado['antecedenciaMinutos'], 1440);
+
+    // A hora de parede é preservada e vem acompanhada de um offset explícito — sem ele o backend
+    // resolveria a data no fuso do servidor e criaria o evento no instante errado.
+    final dataHoraLimite = enviado['dataHoraLimite'] as String;
+    expect(dataHoraLimite, startsWith('2026-09-01T15:00:00.000'));
+    expect(
+      RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(dataHoraLimite),
+      isTrue,
+      reason: 'dataHoraLimite precisa carregar o fuso do dispositivo: $dataHoraLimite',
+    );
+    expect(DateTime.parse(dataHoraLimite).toLocal(), DateTime.parse('2026-09-01T15:00:00'));
+  });
+
+  test('confirmarCompromisso serializa um horário UTC com o sufixo Z, sem duplicar offset', () async {
+    Object? capturedData;
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      capturedData = options.data;
+      handler.resolve(Response(requestOptions: options, statusCode: 201, data: {'agendado': true}));
+    }));
+
+    final repository = EmailReplyRepository(dio);
+    await repository.confirmarCompromisso(CompromissoSugerido(
+      tituloCompromisso: 'Enviar relatório',
+      dataHoraLimite: DateTime.utc(2026, 9, 1, 18, 0, 0),
+      antecedenciaMinutos: 60,
+    ));
+
+    expect((capturedData as Map<String, dynamic>)['dataHoraLimite'], '2026-09-01T18:00:00.000Z');
   });
 }

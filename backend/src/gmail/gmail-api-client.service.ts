@@ -107,6 +107,34 @@ export class GmailApiClient {
     return null;
   }
 
+  /** Valores de cabeçalho vêm de um e-mail RECEBIDO (remetente/assunto persistidos como o Gmail os
+   *  entregou), não de algo digitado pelo usuário. Um CR/LF cru vindo de um e-mail hostil quebraria
+   *  a linha do cabeçalho e injetaria cabeçalhos arbitrários (um `Bcc:` escondido, por exemplo) na
+   *  mensagem enviada da conta do PRÓPRIO usuário. */
+  private static sanitizarValorDeCabecalho(valor: string): string {
+    return valor.replace(/[\r\n]+/g, ' ').trim();
+  }
+
+  /** Cabeçalhos MIME só admitem US-ASCII. Este app é em português — "Reunião"/"Confirmação" são o
+   *  caso comum —, então qualquer caractere fora do ASCII imprimível vira encoded-word RFC 2047.
+   *  O texto é fatiado para nenhum encoded-word passar de 75 caracteres (RFC 2047 §2), com as
+   *  partes dobradas em linhas de continuação (CRLF + espaço). */
+  private static codificarCabecalhoRfc2047(valor: string): string {
+    if (/^[\x20-\x7E]*$/.test(valor)) return valor;
+    const MAX_BYTES_POR_PALAVRA = 45; // base64(45 bytes) = 60 chars; + "=?UTF-8?B?" e "?=" = 72
+    const bytes = Buffer.from(valor, 'utf8');
+    const palavras: string[] = [];
+    let inicio = 0;
+    while (inicio < bytes.length) {
+      let fim = Math.min(inicio + MAX_BYTES_POR_PALAVRA, bytes.length);
+      // Nunca cortar no meio de uma sequência UTF-8 multibyte.
+      while (fim < bytes.length && (bytes[fim] & 0xc0) === 0x80) fim--;
+      palavras.push(`=?UTF-8?B?${bytes.subarray(inicio, fim).toString('base64')}?=`);
+      inicio = fim;
+    }
+    return palavras.join('\r\n ');
+  }
+
   /** Sends a real reply in the original thread. `params.para` is the original `remetente` field
    *  verbatim (e.g. `"Carlos <carlos@example.com>"`) — valid directly as a `To:` header per
    *  RFC 5322, no parsing needed. */
@@ -122,20 +150,26 @@ export class GmailApiClient {
       metadataHeaders: ['Message-Id', 'References'],
     });
     const headers = original.data.payload?.headers ?? [];
-    const messageIdHeader = headers.find((h) => h.name === 'Message-Id')?.value ?? '';
-    const referencesHeader = headers.find((h) => h.name === 'References')?.value ?? '';
+    const sanitizar = GmailApiClient.sanitizarValorDeCabecalho;
+    const messageIdHeader = sanitizar(headers.find((h) => h.name === 'Message-Id')?.value ?? '');
+    const referencesHeader = sanitizar(headers.find((h) => h.name === 'References')?.value ?? '');
     const references = [referencesHeader, messageIdHeader].filter(Boolean).join(' ');
+    const para = sanitizar(params.para);
+    const assunto = GmailApiClient.codificarCabecalhoRfc2047(`Re: ${sanitizar(params.assunto)}`);
 
+    // Só os CABEÇALHOS são higienizados/codificados; `params.texto` — exatamente o que o usuário
+    // leu e editou na tela — vai para o corpo byte a byte, sem nenhum pós-processamento.
     const raw = [
-      `To: ${params.para}`,
-      `Subject: Re: ${params.assunto}`,
+      'MIME-Version: 1.0',
+      `To: ${para}`,
+      `Subject: ${assunto}`,
       `In-Reply-To: ${messageIdHeader}`,
       `References: ${references}`,
       'Content-Type: text/plain; charset="UTF-8"',
       '',
       params.texto,
     ].join('\r\n');
-    const encoded = Buffer.from(raw).toString('base64url');
+    const encoded = Buffer.from(raw, 'utf8').toString('base64url');
 
     await gmail.users.messages.send({
       userId: 'me',

@@ -110,6 +110,18 @@ describe('Email reply flow (e2e)', () => {
       .send(sendResult.body.compromissoSugerido)
       .expect(201);
     expect(confirmResult.body).toEqual({ agendado: true });
+
+    // O app envia a data com o offset do dispositivo (é isso que evita o evento cair no fuso do
+    // servidor); a validação do DTO precisa aceitar essa forma.
+    const confirmComFuso = await request(app.getHttpServer())
+      .post('/resumos-email/compromissos/confirmar')
+      .set(authHeader)
+      .send({
+        ...sendResult.body.compromissoSugerido,
+        dataHoraLimite: '2026-09-01T15:00:00.000-03:00',
+      })
+      .expect(201);
+    expect(confirmComFuso.body).toEqual({ agendado: true });
   });
 
   it('rejects drafts/send for a tenant without the send scope, and confirm without the calendar scope', async () => {

@@ -110,7 +110,12 @@ describe('Email triage flow (e2e)', () => {
     const user2 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid2 } });
     await emailSyncService.syncUser(user2.id);
 
-    const totalRowsInDb = await prisma.emailSummary.count();
+    // Scoped to the two tenants under test: other e2e specs write emailSummary rows of their own,
+    // so a global count would assert on an empty database rather than on this test's own data.
+    const user1 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid1 } });
+    const totalRowsInDb = await prisma.emailSummary.count({
+      where: { userId: { in: [user1.id, user2.id] } },
+    });
     expect(totalRowsInDb).toBe(4);
 
     const tenant1Summaries = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);

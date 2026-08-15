@@ -37,13 +37,31 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _carregarRascunhos());
+    // O botão "Enviar" só fica habilitado quando há texto, e um TextEditingController não
+    // reconstrói o widget sozinho: sem este listener, digitar em um campo vazio ("Escrever do
+    // zero") nunca reabilitaria o botão, e apagar um rascunho carregado o deixaria habilitado.
+    _textoController.addListener(_aoMudarTexto);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Sem o escopo de envio o backend responde 403 na hora: a tela já mostra o painel de
+      // reconexão, então não vale disparar a requisição condenada.
+      final status = ref.read(gmailConnectionStatusProvider).asData?.value;
+      if (status != null && !status.temEscopoEnvio) return;
+      _carregarRascunhos();
+    });
   }
 
   @override
   void dispose() {
+    _textoController.removeListener(_aoMudarTexto);
     _textoController.dispose();
     super.dispose();
+  }
+
+  /// Reconstrói a tela a cada mudança de texto (mantendo o estado do botão "Enviar" correto) e,
+  /// de quebra, limpa o erro anterior — o que antes era feito pelo `onChanged` do TextField.
+  void _aoMudarTexto() {
+    if (!mounted) return;
+    setState(() => _erro = null);
   }
 
   Future<void> _carregarRascunhos() async {
@@ -51,9 +69,10 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
     try {
       final rascunhos = await ref.read(emailReplyRepositoryProvider).gerarRascunhos(widget.summary.id);
       if (!mounted) return;
+      // Fora do setState: a atribuição já notifica o listener do controller, que reconstrói a tela.
+      _textoController.text = rascunhos.padrao;
       setState(() {
         _rascunhos = rascunhos;
-        _textoController.text = rascunhos.padrao;
         _estado = _EstadoDetalheEmail.editando;
         _erro = null;
       });
@@ -108,6 +127,14 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
       await ref.read(gmailConnectionRepositoryProvider).connect();
       if (!mounted) return;
       ref.invalidate(gmailConnectionStatusProvider);
+      // Sem isto a tela continuaria exibindo o erro "reconecte o Gmail" gerado ANTES da reconexão,
+      // sem nenhum gesto disponível para o usuário recarregar os rascunhos. Só recarrega enquanto
+      // não há nada a perder: com texto já editado ou e-mail já enviado (o botão de reconexão da
+      // agenda vive nessa tela), recarregar apagaria o trabalho do usuário.
+      if (_estado == _EstadoDetalheEmail.carregandoRascunhos ||
+          _estado == _EstadoDetalheEmail.falhaRascunhos) {
+        await _carregarRascunhos();
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -188,15 +215,15 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                   children: [
                     ActionChip(
                       label: const Text('Direto'),
-                      onPressed: () => setState(() => _textoController.text = _rascunhos!.direto),
+                      onPressed: () => _textoController.text = _rascunhos!.direto,
                     ),
                     ActionChip(
                       label: const Text('Formal'),
-                      onPressed: () => setState(() => _textoController.text = _rascunhos!.formal),
+                      onPressed: () => _textoController.text = _rascunhos!.formal,
                     ),
                     ActionChip(
                       label: const Text('Padrão'),
-                      onPressed: () => setState(() => _textoController.text = _rascunhos!.padrao),
+                      onPressed: () => _textoController.text = _rascunhos!.padrao,
                     ),
                   ],
                 ),
@@ -206,9 +233,6 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                 controller: _textoController,
                 maxLines: 8,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
-                onChanged: (_) {
-                  if (_erro != null) setState(() => _erro = null);
-                },
               ),
               if (_erro != null) ...[
                 const SizedBox(height: 8),

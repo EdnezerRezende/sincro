@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 
@@ -52,20 +53,18 @@ export class HybridSearchService {
     categoria?: string,
   ): Promise<RawChunkRow[]> {
     const categoryFilter = categoria
-      ? `AND kd.categoria = '${categoria}'`
-      : '';
+      ? Prisma.sql`AND kd.categoria = ${categoria}`
+      : Prisma.empty;
 
-    const rows = await this.prisma.$queryRawUnsafe<RawChunkRow[]>(`
+    return this.prisma.$queryRaw<RawChunkRow[]>`
       SELECT kc.id, kc.documento_id, kc.conteudo, kc.indice_chunk, kc.metadados
       FROM knowledge_chunks kc
       INNER JOIN knowledge_documents kd ON kd.id = kc.documento_id
       WHERE kc.embedding IS NOT NULL
         ${categoryFilter}
-      ORDER BY kc.embedding <=> '${embeddingStr}'::vector
+      ORDER BY kc.embedding <=> ${embeddingStr}::vector
       LIMIT ${limit}
-    `);
-
-    return rows;
+    `;
   }
 
   private async fullTextSearch(
@@ -73,22 +72,19 @@ export class HybridSearchService {
     limit: number,
     categoria?: string,
   ): Promise<RawChunkRow[]> {
-    const sanitized = query.replace(/'/g, "''");
     const categoryFilter = categoria
-      ? `AND kd.categoria = '${categoria}'`
-      : '';
+      ? Prisma.sql`AND kd.categoria = ${categoria}`
+      : Prisma.empty;
 
-    const rows = await this.prisma.$queryRawUnsafe<RawChunkRow[]>(`
+    return this.prisma.$queryRaw<RawChunkRow[]>`
       SELECT kc.id, kc.documento_id, kc.conteudo, kc.indice_chunk, kc.metadados
       FROM knowledge_chunks kc
       INNER JOIN knowledge_documents kd ON kd.id = kc.documento_id
-      WHERE to_tsvector('portuguese', kc.conteudo) @@ plainto_tsquery('portuguese', '${sanitized}')
+      WHERE to_tsvector('portuguese', kc.conteudo) @@ plainto_tsquery('portuguese', ${query})
         ${categoryFilter}
-      ORDER BY ts_rank(to_tsvector('portuguese', kc.conteudo), plainto_tsquery('portuguese', '${sanitized}')) DESC
+      ORDER BY ts_rank(to_tsvector('portuguese', kc.conteudo), plainto_tsquery('portuguese', ${query})) DESC
       LIMIT ${limit}
-    `);
-
-    return rows;
+    `;
   }
 
   private rrfFusion(

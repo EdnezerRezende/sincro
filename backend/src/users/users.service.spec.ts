@@ -3,7 +3,7 @@ import { UsersService } from './users.service';
 
 function buildPrismaMock() {
   return {
-    user: { upsert: jest.fn(), findUnique: jest.fn() },
+    user: { upsert: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     sensoryProfile: { findUnique: jest.fn() },
     trustedContact: { count: jest.fn() },
   };

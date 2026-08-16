@@ -135,6 +135,19 @@ export class GmailApiClient {
     return palavras.join('\r\n ');
   }
 
+  /** `To:` não é texto livre como `Subject:` — é `display-name <addr-spec>` (RFC 5322 §3.4).
+   *  Um encoded-word RFC 2047 não pode conter `<`, `>` ou `@`, então codificar a string inteira
+   *  destruiria o endereço dentro do blob base64. Codifica só o nome de exibição e deixa o
+   *  `<endereco>` intacto. */
+  private static codificarEnderecoPara(valor: string): string {
+    const match = valor.match(/^(.*)(<[^<>]+>)\s*$/);
+    if (!match) return GmailApiClient.codificarCabecalhoRfc2047(valor);
+    const [, nome, endereco] = match;
+    const nomeTrim = nome.trim();
+    if (!nomeTrim) return endereco;
+    return `${GmailApiClient.codificarCabecalhoRfc2047(nomeTrim)} ${endereco}`;
+  }
+
   /** Sends a real reply in the original thread. `params.para` is the original `remetente` field
    *  verbatim (e.g. `"Carlos <carlos@example.com>"`) — valid directly as a `To:` header per
    *  RFC 5322, no parsing needed. */
@@ -154,7 +167,7 @@ export class GmailApiClient {
     const messageIdHeader = sanitizar(headers.find((h) => h.name === 'Message-Id')?.value ?? '');
     const referencesHeader = sanitizar(headers.find((h) => h.name === 'References')?.value ?? '');
     const references = [referencesHeader, messageIdHeader].filter(Boolean).join(' ');
-    const para = sanitizar(params.para);
+    const para = GmailApiClient.codificarEnderecoPara(sanitizar(params.para));
     const assunto = GmailApiClient.codificarCabecalhoRfc2047(`Re: ${sanitizar(params.assunto)}`);
 
     // Só os CABEÇALHOS são higienizados/codificados; `params.texto` — exatamente o que o usuário

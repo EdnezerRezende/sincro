@@ -189,4 +189,17 @@ describe('GmailApiClient.sendReply', () => {
     // A dobra gera linhas de continuação, nunca cabeçalhos novos.
     expect(enviada.linhasDeCabecalho).toHaveLength(6);
   });
+
+  it('codifica o nome de exibição do destinatário em RFC 2047 sem corromper o endereço', async () => {
+    await buildClient().sendReply('rt-123', {
+      gmailMessageId: 'msg-1',
+      para: 'João <joao@example.com>',
+      assunto: 'Prazo',
+      texto: 'Ok!',
+    });
+
+    const para = mensagemEnviada().cabecalho('To') as string;
+    expect(para).toMatch(/^=\?UTF-8\?B\?.*\?= <joao@example\.com>$/);
+    expect(decodificarRfc2047(para)).toBe('João');
+  });
 });

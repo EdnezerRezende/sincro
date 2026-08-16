@@ -191,6 +191,14 @@ model KnowledgeDocument {
   @@map("knowledge_documents")
 }
 
+/// ATENÇÃO: esta tabela tem 2 índices criados via SQL bruto na migration
+/// `20260803210000_add_rag_knowledge_base` que NÃO podem ser declarados aqui —
+/// `knowledge_chunks_embedding_hnsw_idx` (HNSW não é um tipo de índice suportado
+/// pelo Prisma) e `knowledge_chunks_fts_idx` (índice GIN sobre uma expressão
+/// `to_tsvector`, não uma coluna). O Prisma não os enxerga e vai propor DROP
+/// INDEX para os dois em qualquer `prisma migrate dev` normal. Sempre rode
+/// `prisma migrate dev --create-only` para esta tabela e remova manualmente
+/// qualquer DROP INDEX gerado para eles antes de aplicar.
 model KnowledgeChunk {
   id          String            @id @default(uuid())
   documentoId String            @map("documento_id")

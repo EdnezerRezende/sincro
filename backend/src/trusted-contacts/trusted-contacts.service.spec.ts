@@ -1,7 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { TrustedContactsService } from './trusted-contacts.service';
+import { CreateTrustedContactDto } from './dto/create-trusted-contact.dto';
 
-function buildDto(overrides: Partial<any> = {}) {
+function buildDto(overrides: Partial<CreateTrustedContactDto> = {}): CreateTrustedContactDto {
   return {
     nome: 'Dra. Marina',
     relacao: 'PSICOLOGO',

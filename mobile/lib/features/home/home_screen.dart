@@ -10,6 +10,9 @@ import '../biofeedback/estado_estresse.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../financas/pluggy_connect_webview_screen.dart';
+import '../guide/guide_content.dart';
+import '../guide/guide_providers.dart';
+import '../guide/guide_screen.dart';
 import 'emergency_button.dart';
 import 'home_layout_mode.dart';
 import 'home_providers.dart';
@@ -25,7 +28,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _registerFcmToken());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _registerFcmToken();
+      _checkGuide();
+    });
   }
 
   Future<void> _registerFcmToken() async {
@@ -41,6 +47,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // normalmente mesmo se o dispositivo não conseguir registrar o token
       // (ex: emulador sem Google Play Services, permissão negada).
     }
+  }
+
+  Future<void> _checkGuide() async {
+    final versaoVista = await ref.read(guidePreferenceProvider).getVersaoVista();
+    final pendentes = itemsToShow(guideItems, versaoVista);
+    if (pendentes.isEmpty || !mounted) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GuideScreen(
+          items: pendentes,
+          title: versaoVista == 0 ? 'Guia rápido do Sincro' : 'Novidades',
+        ),
+      ),
+    );
   }
 
   @override

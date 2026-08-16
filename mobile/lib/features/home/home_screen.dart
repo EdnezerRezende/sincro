@@ -50,19 +50,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _checkGuide() async {
-    final versaoVista = await ref.read(guidePreferenceProvider).getVersaoVista();
-    final pendentes = itemsToShow(guideItems, versaoVista);
-    if (pendentes.isEmpty || !mounted) return;
+    try {
+      final versaoVista = await ref.read(guidePreferenceProvider).getVersaoVista();
+      final pendentes = itemsToShow(guideItems, versaoVista);
+      if (pendentes.isEmpty || !mounted) return;
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => GuideScreen(
-          items: pendentes,
-          title: versaoVista == 0 ? 'Guia rápido do Sincro' : 'Novidades',
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GuideScreen(
+            items: pendentes,
+            title: versaoVista == 0 ? 'Guia rápido do Sincro' : 'Novidades',
+          ),
         ),
-      ),
-    );
+      );
+      if (mounted) {
+        await ref.read(guidePreferenceProvider).setVersaoVista(guiaVersaoAtual);
+      }
+    } catch (_) {
+      // Best-effort, mesmo padrão de _registerFcmToken: uma falha aqui não deve travar a Home;
+      // pior caso, o guia aparece de novo (ou deixa de aparecer) na próxima abertura.
+    }
   }
 
   @override

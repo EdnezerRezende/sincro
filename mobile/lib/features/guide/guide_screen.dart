@@ -11,8 +11,15 @@ class GuideScreen extends ConsumerWidget {
   final String title;
 
   Future<void> _fechar(BuildContext context, WidgetRef ref) async {
-    await ref.read(guidePreferenceProvider).setVersaoVista(guiaVersaoAtual);
-    if (context.mounted) Navigator.of(context).pop();
+    try {
+      await ref.read(guidePreferenceProvider).setVersaoVista(guiaVersaoAtual);
+    } catch (_) {
+      // Best-effort — mesmo padrão de outras preferências locais deste app: uma falha de
+      // persistência não deve impedir o usuário de fechar a tela (ver spec, "Erros e casos
+      // de borda").
+    } finally {
+      if (context.mounted) Navigator.of(context).pop();
+    }
   }
 
   @override

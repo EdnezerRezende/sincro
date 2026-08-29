@@ -280,7 +280,7 @@ Paste the output as `TOKEN_ENCRYPTION_KEY` in `backend/.env`. Leave `GOOGLE_CLIE
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/crypto backend/.env.example
+git add backend/src/crypto backend/..env.example
 git commit -m "feat: add AES-256-GCM token encryption utility"
 ```
 

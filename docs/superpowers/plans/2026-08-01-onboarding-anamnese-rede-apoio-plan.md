@@ -114,7 +114,7 @@ Expected: query returns `1`.
 Append to `backend/.gitignore` (created by Nest scaffold): `.env`
 
 ```bash
-git add backend package.json backend/docker-compose.yml backend/.env.example backend/.gitignore 2>/dev/null
+git add backend package.json backend/docker-compose.yml backend/..env.example backend/.gitignore 2>/dev/null
 git add backend/
 git commit -m "chore: scaffold NestJS backend with local Postgres via docker-compose"
 ```

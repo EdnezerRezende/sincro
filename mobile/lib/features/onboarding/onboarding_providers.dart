@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_providers.dart';
 import '../auth/auth_providers.dart';
@@ -18,11 +19,21 @@ final onboardingStatusProvider = FutureProvider.autoDispose<OnboardingStatus>((r
   final usersRepository = ref.watch(usersRepositoryProvider);
   try {
     return await usersRepository.getMe();
-  } catch (_) {
+  } catch (e, st) {
+    debugPrint('❌ getMe() failed: $e');
+    debugPrintStack(stackTrace: st);
     final authService = ref.read(authServiceProvider);
     final displayName = authService.currentUser?.displayName?.trim();
     final fallbackNome = (displayName != null && displayName.isNotEmpty) ? displayName : 'Usuário Sincro';
-    await usersRepository.upsertMe(fallbackNome);
+    debugPrint('📝 Attempting upsertMe with: $fallbackNome');
+    try {
+      await usersRepository.upsertMe(fallbackNome);
+      debugPrint('✅ upsertMe succeeded');
+    } catch (e2, st2) {
+      debugPrint('❌ upsertMe failed: $e2');
+      debugPrintStack(stackTrace: st2);
+      rethrow;
+    }
     return usersRepository.getMe();
   }
 });

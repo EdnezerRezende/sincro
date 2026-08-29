@@ -1206,7 +1206,7 @@ class _FuncionalGmailCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Email', style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text(status.gmailEmail, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(status.gmailEmail ?? 'Email não disponível', style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),

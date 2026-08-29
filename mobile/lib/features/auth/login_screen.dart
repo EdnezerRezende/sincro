@@ -196,44 +196,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // Email
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
-                              labelText: 'E-mail',
-                              prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: colorScheme.outline),
+                          SizedBox(
+                            height: 56,
+                            child: TextField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: InputDecoration(
+                                labelText: 'E-mail',
+                                prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: colorScheme.outline),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                ),
+                                filled: true,
+                                fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
                               ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                              ),
-                              filled: true,
-                              fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
                             ),
                           ),
                           const SizedBox(height: 16),
                           // Senha
-                          TextField(
-                            controller: _senhaController,
-                            obscureText: true,
-                            decoration: InputDecoration(
-                              labelText: 'Senha',
-                              prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: colorScheme.outline),
+                          SizedBox(
+                            height: 56,
+                            child: TextField(
+                              controller: _senhaController,
+                              obscureText: true,
+                              decoration: InputDecoration(
+                                labelText: 'Senha',
+                                prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: colorScheme.outline),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                ),
+                                filled: true,
+                                fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
                               ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                              ),
-                              filled: true,
-                              fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
                             ),
                           ),
                           const SizedBox(height: 24),

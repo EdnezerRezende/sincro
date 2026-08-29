@@ -213,7 +213,9 @@ class _GmailCard extends ConsumerWidget {
     try {
       await ref.read(gmailConnectionRepositoryProvider).connect();
       ref.invalidate(gmailConnectionStatusProvider);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('❌ Gmail connection failed: $e');
+      debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),
@@ -661,7 +663,9 @@ class _ModernoGmailCard extends ConsumerWidget {
     try {
       await ref.read(gmailConnectionRepositoryProvider).connect();
       ref.invalidate(gmailConnectionStatusProvider);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('❌ Gmail connection failed: $e');
+      debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),
@@ -1150,7 +1154,9 @@ class _FuncionalGmailCard extends ConsumerWidget {
     try {
       await ref.read(gmailConnectionRepositoryProvider).connect();
       ref.invalidate(gmailConnectionStatusProvider);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('❌ Gmail connection failed: $e');
+      debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),

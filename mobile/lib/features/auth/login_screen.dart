@@ -197,20 +197,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                         children: [
                           // Email
                           SizedBox(
-                            height: 56,
+                            height: 68,
                             child: TextField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
+                              style: const TextStyle(fontSize: 16),
                               decoration: InputDecoration(
                                 labelText: 'E-mail',
-                                prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                labelStyle: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
+                                prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant, size: 24),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(color: colorScheme.outline),
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: colorScheme.outline, width: 2),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   borderSide: BorderSide(color: colorScheme.primary, width: 2),
                                 ),
                                 filled: true,
@@ -221,20 +223,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                           const SizedBox(height: 16),
                           // Senha
                           SizedBox(
-                            height: 56,
+                            height: 68,
                             child: TextField(
                               controller: _senhaController,
                               obscureText: true,
+                              style: const TextStyle(fontSize: 16),
                               decoration: InputDecoration(
                                 labelText: 'Senha',
-                                prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                labelStyle: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
+                                prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant, size: 24),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(color: colorScheme.outline),
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: colorScheme.outline, width: 2),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   borderSide: BorderSide(color: colorScheme.primary, width: 2),
                                 ),
                                 filled: true,
@@ -285,22 +289,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                           ),
                           const SizedBox(height: 24),
                           // Botão Entrar
-                          ElevatedButton(
-                            onPressed: (_loading || _googleLoading) ? null : _submit,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          SizedBox(
+                            height: 64,
+                            child: ElevatedButton(
+                              onPressed: (_loading || _googleLoading) ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              ),
+                              child: _loading
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                                      ),
+                                    )
+                                  : const Text('Entrar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                             ),
-                            child: _loading
-                                ? SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
-                                    ),
-                                  )
-                                : const Text('Entrar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           ),
                           const SizedBox(height: 16),
                           // Divider
@@ -323,37 +330,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                           ),
                           const SizedBox(height: 16),
                           // Botão Google
-                          OutlinedButton(
-                            onPressed: (_loading || _googleLoading) ? null : _submitGoogle,
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: BorderSide(color: colorScheme.outline, width: 1.5),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: _googleLoading
-                                ? SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                                    ),
-                                  )
-                                : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text('🔐', style: TextStyle(fontSize: 18)),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Entrar com Google',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: colorScheme.onSurface,
-                                        ),
+                          SizedBox(
+                            height: 64,
+                            child: OutlinedButton(
+                              onPressed: (_loading || _googleLoading) ? null : _submitGoogle,
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                side: BorderSide(color: colorScheme.outline, width: 2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              ),
+                              child: _googleLoading
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
                                       ),
-                                    ],
-                                  ),
+                                    )
+                                  : Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Text('🔐', style: TextStyle(fontSize: 20)),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Entrar com Google',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
                           ),
                           const SizedBox(height: 32),
                           // Link para signup

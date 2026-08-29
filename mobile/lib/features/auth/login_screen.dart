@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -14,6 +15,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
   final _senhaController = TextEditingController();
   bool _loading = false;
   bool _googleLoading = false;
+  bool _rememberMe = false;
   String? _error;
 
   late AnimationController _fadeController;
@@ -36,6 +38,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
 
     _fadeController.forward();
     _slideController.forward();
+
+    _loadSavedEmail();
+  }
+
+  Future<void> _loadSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+    if (savedEmail != null && mounted) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _rememberMe = true;
+      });
+    }
   }
 
   @override
@@ -55,6 +70,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
     try {
       final authService = ref.read(authServiceProvider);
       await authService.logIn(_emailController.text.trim(), _senhaController.text);
+
+      if (_rememberMe) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_email', _emailController.text.trim());
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('saved_email');
+      }
+
       if (mounted) Navigator.of(context).pushReplacementNamed('/onboarding-router');
     } catch (e) {
       setState(() => _error = 'E-mail ou senha inválidos.');
@@ -226,6 +250,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                                 ],
                               ),
                             ),
+                          const SizedBox(height: 24),
+                          // Remember Me
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _rememberMe,
+                                onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'Lembrar-me neste dispositivo',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 24),
                           // Botão Entrar
                           ElevatedButton(

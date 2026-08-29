@@ -202,6 +202,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                             decoration: InputDecoration(
                               labelText: 'E-mail',
                               prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(color: colorScheme.outline),
@@ -222,6 +223,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                             decoration: InputDecoration(
                               labelText: 'Senha',
                               prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(color: colorScheme.outline),

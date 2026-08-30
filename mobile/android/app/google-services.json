@@ -14,7 +14,15 @@
       },
       "oauth_client": [
         {
-          "client_id": "393611506422-6r1faed2rndqk5h8cnaj7rq96e58va9p.apps.googleusercontent.com",
+          "client_id": "393611506422-d132uohiegdamscbk9evnc9afrb5tbpo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sincro.sincro_mobile",
+            "certificate_hash": "5838dbadc81f91e30d11ded622a0c76e9112fd33"
+          }
+        },
+        {
+          "client_id": "393611506422-g0ufsk76bb8kk4krc7g2tvg9uipibr6c.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -29,6 +37,13 @@
             {
               "client_id": "393611506422-6r1faed2rndqk5h8cnaj7rq96e58va9p.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "393611506422-u51lv09h5q9m401q9sp4ddn40rb0a5d8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sincro.sincroMobile"
+              }
             }
           ]
         }

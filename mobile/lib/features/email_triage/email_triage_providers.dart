@@ -17,6 +17,7 @@ final googleSignInProvider = Provider<GoogleSignIn>((ref) {
   return GoogleSignIn(
     scopes: const [_gmailReadonlyScope, _gmailSendScope, _calendarEventsScope],
     serverClientId: _googleWebClientId.isEmpty ? null : _googleWebClientId,
+    forceCodeForRefreshToken: true,
   );
 });
 

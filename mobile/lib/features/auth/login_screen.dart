@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/app_input.dart';
 import 'auth_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -47,19 +48,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            AppInput(
+              label: 'E-mail',
+              placeholder: 'seu@email.com',
               controller: _emailController,
-              decoration: const InputDecoration(labelText: 'E-mail'),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 16),
-            TextField(
+            AppInput(
+              label: 'Senha',
+              placeholder: 'Digite sua senha',
               controller: _senhaController,
-              decoration: const InputDecoration(labelText: 'Senha'),
               obscureText: true,
+              suffixIcon: AppInputSuffixIcon.showPassword,
+              error: _error,
             ),
             const SizedBox(height: 24),
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             ElevatedButton(
               onPressed: _loading ? null : _submit,
               child: _loading ? const CircularProgressIndicator() : const Text('Entrar'),

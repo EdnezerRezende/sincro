@@ -27,6 +27,8 @@ import 'features/financas/financas_screen.dart';
 import 'features/grounding_cards/grounding_cards_library_screen.dart';
 import 'features/grounding_cards/grounding_card_sugerido_screen.dart';
 import 'features/grounding_cards/admin_grounding_cards_list_screen.dart';
+import 'features/home/home_providers.dart';
+import 'core/theme/theme_mode_preference.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -130,17 +132,24 @@ Future<void> main() async {
   runApp(const ProviderScope(child: SincroApp()));
 }
 
-class SincroApp extends StatelessWidget {
+class SincroApp extends ConsumerWidget {
   const SincroApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeModeAsync = ref.watch(themeModeProvider);
+
+    final themeMode = themeModeAsync.maybeWhen(
+      data: (mode) => ThemeModePreferenceStorage.toThemeMode(mode),
+      orElse: () => ThemeMode.system,
+    );
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Sincro',
       theme: sincroLightTheme,
       darkTheme: sincroDarkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       initialRoute: '/login',
       routes: {
         '/login': (_) => const LoginScreen(),

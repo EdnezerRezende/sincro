@@ -14,6 +14,8 @@ import '../onboarding/anamnese/anamnese_providers.dart';
 import '../onboarding/anamnese/anamnese_wizard_screen.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../trusted_contacts/trusted_contacts_screen.dart';
+import '../../core/theme/theme_mode_preference.dart';
+import '../home/home_design_style.dart';
 
 /// Resultado do diálogo de dia de recebimento. Existe para separar "cancelou" (o `showDialog`
 /// devolve `null`) de "pediu para limpar" (devolve uma instância com `dia == null`).
@@ -112,6 +114,64 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         builder: (_) => const GuideScreen(items: guideItems, title: 'Guia rápido do Sincro'),
       ),
     );
+  }
+
+  Future<void> _editThemeMode() async {
+    final atual = await ref.read(themeModePreferenceProvider).getMode();
+    if (!mounted) return;
+
+    final escolhido = await showDialog<ThemeModePreference>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Tema'),
+        children: ThemeModePreference.values.map((t) {
+          return RadioListTile<ThemeModePreference>(
+            title: Text(t.label),
+            value: t,
+            groupValue: atual,
+            onChanged: (v) => Navigator.pop(dialogContext, v),
+          );
+        }).toList(),
+      ),
+    );
+    if (escolhido == null) return;
+
+    await ref.read(themeModePreferenceProvider).setMode(escolhido);
+    ref.invalidate(themeModeProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tema atualizado.')),
+      );
+    }
+  }
+
+  Future<void> _editDesignStyle() async {
+    final atual = await ref.read(homeLayoutPreferenceProvider).getDesign();
+    if (!mounted) return;
+
+    final escolhido = await showDialog<HomeDesignStyle>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Estilo de design'),
+        children: HomeDesignStyle.values.map((d) {
+          return RadioListTile<HomeDesignStyle>(
+            title: Text(d.label),
+            value: d,
+            groupValue: atual,
+            onChanged: (v) => Navigator.pop(dialogContext, v),
+          );
+        }).toList(),
+      ),
+    );
+    if (escolhido == null) return;
+
+    await ref.read(homeLayoutPreferenceProvider).setDesign(escolhido);
+    ref.invalidate(homeDesignStyleProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Estilo atualizado.')),
+      );
+    }
   }
 
   void _manageContacts() {
@@ -424,6 +484,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             leading: const Icon(Icons.dashboard_customize_outlined),
             title: const Text('Layout da tela inicial'),
             onTap: _busy ? null : _editHomeLayout,
+          ),
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Estilo de design'),
+            onTap: _busy ? null : _editDesignStyle,
+          ),
+          ListTile(
+            leading: const Icon(Icons.brightness_4_outlined),
+            title: const Text('Tema'),
+            onTap: _busy ? null : _editThemeMode,
           ),
           ListTile(
             leading: const Icon(Icons.people_outline),

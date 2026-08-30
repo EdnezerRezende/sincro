@@ -361,7 +361,7 @@ Expected: PASS (4 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/pluggy backend/.env.example
+git add backend/src/pluggy backend/..env.example
 git commit -m "feat: add Pluggy API client with apiKey caching and 403 retry"
 ```
 

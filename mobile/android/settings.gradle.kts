@@ -26,7 +26,10 @@ plugins {
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version("4.3.10") apply false
     // END: FlutterFire Configuration
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // 2.3.0 (e não 2.1.0) porque o firebase-auth 24.1.0 trazido pelo plugin `firebase_auth` foi
+    // compilado com metadata Kotlin 2.3.0 — um compilador 2.1.0 não consegue ler esse .kotlin_module
+    // e o daemon do Gradle crasha em vez de reportar um erro normal.
+    id("org.jetbrains.kotlin.android") version "2.3.0" apply false
 }
 
 include(":app")

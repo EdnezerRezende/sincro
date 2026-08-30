@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -13,7 +15,10 @@ android {
     // O androidx.health.connect:connect-client (dependência do plugin `health`) exige compilar
     // contra a API 36; o padrão do Flutter 3.32 ainda é 35.
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // url_launcher_android/webview_flutter_android/workmanager_android todos exigem NDK
+    // 27.0.12077973 — mais novo que o default do Flutter (flutter.ndkVersion); fixado aqui em vez
+    // de deixar o build só avisar e seguir com uma versão incompatível.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -22,10 +27,6 @@ android {
         // prática o AGP exige isso habilitado sempre que essa dependência está presente, independente
         // do minSdk configurado.
         isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
@@ -47,6 +48,14 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+}
+
+kotlin {
+    // Substitui o antigo bloco `kotlinOptions` dentro de `android {}`, removido no Kotlin 2.3.0
+    // em favor da DSL `compilerOptions`.
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 

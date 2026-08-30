@@ -1,0 +1,93 @@
+{
+  "segment_id": "04-component-chip",
+  "status": "rejected",
+  "score": 65,
+  "impressed": false,
+  "experienced_via": "Widget test suite - 8 automated tests measuring all acceptance criteria with Flutter test framework",
+  "evidence": {
+    "total_criteria": 8,
+    "passed": 7,
+    "failed": 1,
+    "measurement_height_actual_dp": 30.0,
+    "measurement_height_required_dp": 36.0,
+    "criteria_results": {
+      "criterion_1_selected_color": {
+        "requirement": "Chip selecionado tem cor/background claro (não ambíguo)",
+        "result": "PASS",
+        "evidence": "Code line 77: backgroundColor = scheme.primary (uses theme primary color #005A80 light, #4DD0E1 dark). Selected state renders with clear primary color feedback."
+      },
+      "criterion_2_unselected_distinct": {
+        "requirement": "Chip não selecionado é visualmente distinto (outline ou cor pálida)",
+        "result": "PASS",
+        "evidence": "Code lines 86-107: Default states have borderWidth=1.0 outline and variant-specific pale backgrounds (0xFFF0EDE6 light input, 0xFFFFAF8F5 light suggestion, etc). Clear visual distinction from selected state."
+      },
+      "criterion_3_spacing_consistent": {
+        "requirement": "Espaçamento entre chips é consistente (gap >= 8 dp)",
+        "result": "PASS",
+        "evidence": "Code line 220: assert(spacing >= 8.0) enforces minimum spacing. Wrap component (lines 224-226) manages spacing. Test confirms assertion prevents spacing < 8dp."
+      },
+      "criterion_4_disabled_dead": {
+        "requirement": "Estados disabled ficam visivamente mortos (opacidade, sem interação)",
+        "result": "PASS",
+        "evidence": "Code lines 68-74: Disabled state has withValues(alpha: 0.4). Line 111: additional opacity reduction to 0.6 total. Line 128: onSelected callback set to null when disabled. Test confirms disabled chip does not respond to tap."
+      },
+      "criterion_5_text_wrapping": {
+        "requirement": "Texto não trunca — quebra em 2 linhas se necessário",
+        "result": "PASS",
+        "evidence": "Code lines 181-182: maxLines: 2, overflow: TextOverflow.clip (no ellipsis). Test confirms long text wraps without truncation ellipsis."
+      },
+      "criterion_6_height_36dp": {
+        "requirement": "Touch target >= 36 dp altura",
+        "result": "FAIL",
+        "evidence": "Widget test measurement: actual height = 30.0 dp. Spec requires >= 36.0 dp. Code comment (lines 58-59) claims '36 dp = 4 dp * 2 + 28 dp text' but actual rendering is 30 dp. This is 6 dp below spec minimum.",
+        "measurement_details": {
+          "app_chip_height_dp": 30.0,
+          "filter_chip_internal_height_dp": 30.0,
+          "spec_requirement_dp": 36.0,
+          "gap_dp": -6.0
+        }
+      },
+      "criterion_7_icon_spacing": {
+        "requirement": "Ícones têm espaçamento de 8 dp do texto",
+        "result": "PASS",
+        "evidence": "Code line 186: const spacing = SizedBox(width: 8.0) explicitly placed between icon and text (lines 195, 200). Test confirms icon renders with correct spacing."
+      },
+      "criterion_8_dark_mode": {
+        "requirement": "Dark mode: cores ainda legíveis e distintas",
+        "result": "PASS",
+        "evidence": "Code lines 55-56: Uses scheme.brightness to detect mode. Lines 71-86: Different backgrounds for dark (0xFF34322B, 0xFF2C2A24 etc). Uses theme scheme colors which auto-adapt. Dark mode test confirms correct rendering."
+      }
+    }
+  },
+  "benchmark_gap": {
+    "vs_material_design_3_chip": {
+      "height_target": "Material 3 spec: 32-48 dp for comfortable touch targets. Sincro AppChip: 30 dp (below minimum).",
+      "selection_clarity": "EQUAL - Primary color feedback is clear",
+      "state_distinction": "EQUAL - Default/selected/disabled states are visually distinct",
+      "icon_spacing": "EQUAL - Proper 8dp spacing",
+      "text_handling": "EQUAL - Line wrapping instead of truncation",
+      "dark_mode": "EQUAL - Theme-aware colors implemented",
+      "critical_gap": "HEIGHT - 30dp actual vs 36dp required (6dp shortfall)"
+    }
+  },
+  "design_thoughtfulness": {
+    "positive_observations": [
+      "Component has 3 distinct variants (input, suggestion, filter) with different visual treatments",
+      "3 explicit states (default, selected, disabled) properly handled",
+      "Assertion guard prevents improper spacing in groups (spacing >= 8dp)",
+      "Custom padding optimization attempt (though unsuccessful in meeting 36dp target)",
+      "Dark mode support with brightness-aware styling",
+      "Text wrapping logic prevents truncation (maxLines: 2, TextOverflow.clip)",
+      "Icon spacing explicitly managed (8dp SizedBox)"
+    ],
+    "implementation_quality": "Code is clean, well-commented, uses Material FilterChip as base (solid pattern). However, the height calculation appears to have been theoretical rather than tested."
+  },
+  "required_for_wow": [
+    "CRITICAL FIX: Increase chip height from 30dp to 36dp minimum. Options:",
+    "  1. Increase vertical padding from 4dp to at least 8dp (would give ~36dp total: 8*2 + ~20dp text)",
+    "  2. Add explicit 'constraints: BoxConstraints(minHeight: 36.0)' to FilterChip",
+    "  3. Adjust text size or line height to increase overall chip height",
+    "Verify the fix with widget test measuring height >= 36dp before re-submission"
+  ],
+  "pass_fail_summary": "REJECTED - Component fails 1 of 8 acceptance criteria. Height is 30dp, spec requires >= 36dp. While 7/8 criteria pass, the missing criterion is mandatory (MDC3 touch target standard). Score: 65 (passes most requirements but fails critical accessibility/usability criterion)."
+}

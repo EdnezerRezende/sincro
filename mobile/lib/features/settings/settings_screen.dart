@@ -6,6 +6,8 @@ import '../biofeedback/biofeedback_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
+import '../guide/guide_content.dart';
+import '../guide/guide_screen.dart';
 import '../home/home_layout_mode.dart';
 import '../home/home_providers.dart';
 import '../onboarding/anamnese/anamnese_providers.dart';
@@ -103,6 +105,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SnackBar(content: Text('Layout atualizado.')),
       );
     }
+  }
+
+  Future<void> _abrirGuia() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const GuideScreen(items: guideItems, title: 'Guia rápido do Sincro'),
+      ),
+    );
   }
 
   Future<void> _editThemeMode() async {
@@ -544,6 +555,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : () => Navigator.of(context).pushNamed('/admin/grounding-cards'),
             ),
           ],
+          const _SectionHeader('Ajuda'),
+          ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Ver guia do app'),
+            onTap: _busy ? null : _abrirGuia,
+          ),
           const _SectionHeader('Conta'),
           ListTile(
             leading: Icon(Icons.logout, color: destructiveColor),

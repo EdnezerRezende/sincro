@@ -1,0 +1,77 @@
+{
+  "segment_id": "02-component-card",
+  "status": "approved",
+  "score": 92,
+  "impressed": true,
+  "experienced_via": "Análise estática profunda do código-fonte: app_card.dart (235 linhas, implementação completa) + app_card_demo.dart (283 linhas, tela de demonstração abrangente). Verificação de cada critério contra implementação Flutter.",
+  "evidence": {
+    "criterion_1_visibility": {
+      "met": true,
+      "details": "Material(elevation: 1.0 normal, 8.0 selected) + BorderSide(width: 1.0 normal, 2.0 selected). Não há código que torna sombra/border invisível. Shadow color: scheme.outline.withValues(alpha: 0.2).",
+      "code_refs": ["app_card.dart:206-211", "app_card.dart:125-134"]
+    },
+    "criterion_2_padding": {
+      "met": true,
+      "details": "Padding padrão: EdgeInsets.all(16.0). Aplicado em Padding(padding: widget.padding, child: Column(...)) no card content.",
+      "code_refs": ["app_card.dart:99", "app_card.dart:140-141"]
+    },
+    "criterion_3_hierarchy": {
+      "met": true,
+      "details": "Título: textTheme.headlineSmall + fontWeight.w600 + color.onSurface. Subtitle: textTheme.bodyMedium + color.onSurfaceVariant + height: 1.5. Diferença clara em tamanho (headlineSmall vs bodyMedium), peso (w600 vs padrão), cor (onSurface vs onSurfaceVariant) e line-height.",
+      "code_refs": ["app_card.dart:164-166", "app_card.dart:192-194"]
+    },
+    "criterion_4_selected_state": {
+      "met": true,
+      "details": "Selected: elevation 8.0 (vs 1.0), BorderSide width 2.0 (vs 1.0), accentColor = primary (vs outline). Múltiplas dimensões visuais mudam simultaneamente.",
+      "code_refs": ["app_card.dart:122-128", "app_card.dart:129-136"]
+    },
+    "criterion_5_spacing": {
+      "met": true,
+      "details": "AppCardGroup com assert(spacing >= 16.0) e assert(runSpacing >= 16.0). Padrões: spacing=16.0, runSpacing=16.0. Não pode haver gap < 16 dp.",
+      "code_refs": ["app_card.dart:261-262", "app_card.dart:257"]
+    },
+    "criterion_6_dark_mode": {
+      "met": true,
+      "details": "Sem hardcodes de cores. Usa Theme.of(context).colorScheme: bgColor = scheme.surface, título = scheme.onSurface, subtitle = scheme.onSurfaceVariant, shadow = scheme.outline.withValues(alpha: 0.2). Todas as cores são dinâmicas e adaptam-se ao tema.",
+      "code_refs": ["app_card.dart:111-114", "app_card.dart:207", "app_card.dart:166", "app_card.dart:193"]
+    },
+    "criterion_7_clickable": {
+      "met": true,
+      "details": "Se onTap fornecido: Material(InkWell(onTap: enabled ? widget.onTap : null)) envolve todo o card. borderRadius 16.0 match a shape do card. Ripple effect em todo card, não só em botão específico.",
+      "code_refs": ["app_card.dart:217-225", "app_card.dart:220"]
+    },
+    "criterion_8_overflow": {
+      "met": true,
+      "details": "Título: maxLines: 2, overflow: ellipsis. Subtitle: maxLines: 4, overflow: ellipsis. Subtitle com height: 1.5 para line-height generoso. Padding top 8.0 entre título e content para respiração.",
+      "code_refs": ["app_card.dart:168-169", "app_card.dart:196-197", "app_card.dart:194", "app_card.dart:187-188"]
+    }
+  },
+  "benchmark_gap": {
+    "vs_notion": "Compatível. Notion cards: sombra sutil + elevation state + padding consistente + hierarquia clara + dark mode + ripple feedback. Sincro implementa tudo. Variantes (elevated/flat) vão além.",
+    "vs_figma": "Compatível. Figma cards: componente modular, múltiplos estados, propriedades customizáveis. Sincro tem tudo, incluindo AppCardGroup para layout responsivo.",
+    "summary": "Não é inferior. Qualidade é comercial. Material Design 3 nativo, bem estruturado, documentado."
+  },
+  "design_quality": {
+    "is_deliberate": true,
+    "indicators": [
+      "Dois nomes de variantes bem pensados (elevated vs flat)",
+      "Transições de estado (elevation 1.0 → 8.0, border 1.0 → 2.0)",
+      "Cor inteligente (primary selected, outline normal)",
+      "Padding consistente como padrão (16 dp)",
+      "Documentação de 34 linhas (comentários estruturados)",
+      "Hierarquia textual cuidadosa (tamanho + peso + cor)",
+      "Espaçamento respeitoso (line-height 1.5, gap >= 16 dp)",
+      "Estados múltiplos (selected, disabled, enabled)",
+      "Tela de demonstração completa com 8+ seções",
+      "AppCardGroup com enforcement de spacing"
+    ],
+    "not_generic": "Não é um Container com border. Design profissional, decisões arquiteturais claras."
+  },
+  "required_for_wow": "Já está em nível 'wow'. Melhorias opcionais: (1) Integrar em telas reais (inbox, finanças) para validar em contexto; (2) Adicionar loading state (shimmer durante fetch); (3) Considerar card com drag-to-reorder em lists (AppCardGroup).",
+  "notes": [
+    "Não testei visualmente (app não abriu interface gráfica no ambiente), mas análise estática do código é conclusiva.",
+    "Demo screen cobre todos os 8 critérios e variantes sistematicamente.",
+    "Material Design 3 tokens usados corretamente (nenhum hardcode de cores).",
+    "Componente está pronto para uso, mas não integrado nas telas reais ainda."
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "segment_id": "04-component-chip",
+  "round": 2,
+  "status": "approved",
+  "score": 95,
+  "impressed": true,
+  "criteria": [
+    {
+      "id": 1,
+      "title": "Chip selecionado tem cor/background claro",
+      "status": "pass",
+      "evidence": "Código linhas 75-80: backgroundColor = scheme.primary, foregroundColor = scheme.onPrimary quando selected=true. Visualmente claro e distinto."
+    },
+    {
+      "id": 2,
+      "title": "Chip não selecionado é visualmente distinto",
+      "status": "pass",
+      "evidence": "Código linhas 82-107: 3 variantes (input, suggestion, filter) com cores diferentes — input tem backgroundColor F0EDE6 com outline, suggestion tem FAF8F5, filter usa surface. Distintos de selected."
+    },
+    {
+      "id": 3,
+      "title": "Espaçamento entre chips >= 8 dp",
+      "status": "pass",
+      "evidence": "AppChipGroup linhas 220-221: spacing=8.0, runSpacing=8.0. Assert na linha 223 força spacing >= 8.0. Teste app_chip_test.dart línha 79-99 verifica Wrap com spacing."
+    },
+    {
+      "id": 4,
+      "title": "Estados disabled ficam mortos",
+      "status": "pass",
+      "evidence": "Código linhas 68-74: disabled state com backgroundColor neutra (F0EDE6/34322B), foregroundColor com alpha 0.4, borderColor alpha 0.4. Plus Opacity wrapper (linhas 148-150) reduz opacity a 0.6. Teste confirma chip disabled não responde a toque."
+    },
+    {
+      "id": 5,
+      "title": "Texto não trunca — quebra 2 linhas",
+      "status": "pass",
+      "evidence": "Código linha 184: maxLines: 2, TextOverflow.clip. Sem elipsis. Teste app_chip_test.dart verifica renderização com texto."
+    },
+    {
+      "id": 6,
+      "title": "Touch target >= 36 dp altura (CRÍTICO)",
+      "status": "pass",
+      "evidence": "Código linha 115: ConstrainedBox(constraints: BoxConstraints(minHeight: 36.0)). Teste app_chip_height_detailed_test.dart mede altura em 6 cenários (input, filter, suggestion, selected, disabled, com ícone) — TODOS retornam 36.0 dp exatamente. Material Design 3 recomenda 36–48 dp."
+    },
+    {
+      "id": 7,
+      "title": "Ícones têm espaçamento 8 dp",
+      "status": "pass",
+      "evidence": "Código linha 189: const spacing = SizedBox(width: 8.0) entre ícone e texto. Teste app_chip_test.dart linhas 101-118 verifica ícone renderizado com espaçamento."
+    },
+    {
+      "id": 8,
+      "title": "Dark mode funciona",
+      "status": "pass",
+      "evidence": "Código linhas 55-56: colorScheme = Theme.of(context).colorScheme, isLight = scheme.brightness. Cores condicionais para light/dark. Teste app_chip_test.dart linhas 120-136 renderiza em dark theme."
+    }
+  ],
+  "benchmark_gap": "Material Design 3 Chip recomenda touch target 36–48 dp. AppChip implementa 36.0 dp (mínimo recomendado). Atende especificação.",
+  "summary": "AppChip implementa todos os 8 critérios corretamente. O critério 6 (touch target >= 36 dp), que foi crítico na Rodada 1, agora renderiza exatamente 36.0 dp em TODOS os estados e variantes (input, filter, suggestion, selected, disabled, com ícone), conforme verificado por testes automatizados. Padding vertical 8 dp, minHeight constraint 36.0 dp, 3 variantes, 3 estados, suporte a dark mode, espaçamento entre chips, texto sem truncamento (quebra 2 linhas), ícones com espaçamento 8 dp. Código bem estruturado, acessível, segue Material Design 3.",
+  "test_results": {
+    "total_tests": 14,
+    "passed": 14,
+    "failed": 0,
+    "height_measurements": [
+      "Input variant: 36.0 dp",
+      "Filter variant: 36.0 dp",
+      "Suggestion variant: 36.0 dp",
+      "Selected state: 36.0 dp",
+      "Disabled state: 36.0 dp",
+      "With icon: 36.0 dp"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sincro_mobile/features/auth/auth_service.dart';
 
@@ -9,13 +10,17 @@ class MockUserCredential extends Mock implements UserCredential {}
 
 class MockUser extends Mock implements User {}
 
+class MockGoogleSignIn extends Mock implements GoogleSignIn {}
+
 void main() {
   late MockFirebaseAuth mockFirebaseAuth;
+  late MockGoogleSignIn mockGoogleSignIn;
   late AuthService authService;
 
   setUp(() {
     mockFirebaseAuth = MockFirebaseAuth();
-    authService = AuthService(mockFirebaseAuth);
+    mockGoogleSignIn = MockGoogleSignIn();
+    authService = AuthService(mockFirebaseAuth, mockGoogleSignIn);
   });
 
   test('signUp delegates to createUserWithEmailAndPassword and returns the user', () async {

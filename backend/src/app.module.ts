@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -18,6 +19,7 @@ import { EmailReplyModule } from './email-reply/email-reply.module';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,

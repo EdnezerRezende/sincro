@@ -1,0 +1,21 @@
+# Overlay de sandbox/produção: aplicado por cima de docker-compose.yml via
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
+# Remove bind mounts de dev, garante restart automático e expõe as portas só em loopback
+# (127.0.0.1), já que o Caddy (fora deste compose) é quem fala com o mundo externo.
+services:
+  postgres:
+    restart: always
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  backend:
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+
+  mobile-web:
+    restart: always
+    ports:
+      - "127.0.0.1:8080:80"

@@ -615,11 +615,11 @@ FIREBASE_PRIVATE_KEY="COLE_AQUI_A_PRIVATE_KEY_DO_SERVICE_ACCOUNT"
 TOKEN_ENCRYPTION_KEY="GERE_UMA_NOVA_COM_openssl_rand_base64_32"
 GOOGLE_CLIENT_ID="393611506422-g0ufsk76bb8kk4krc7g2tvg9uipibr6c.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="COLE_AQUI_O_CLIENT_SECRET_ATUAL"
-GOOGLE_WEB_CLIENT_ID="393611506422-g0ufsk76bb8kk4krc7g2tvg9uipibr6c.apps.googleusercontent.com"
 ANTHROPIC_API_KEY="COLE_AQUI"
 OPENAI_API_KEY="COLE_AQUI"
 PLUGGY_CLIENT_ID="COLE_AQUI"
 PLUGGY_CLIENT_SECRET="COLE_AQUI"
+PLUGGY_WEBHOOK_SECRET="COLE_AQUI"
 SENTRY_DSN="COLE_AQUI_APOS_CRIAR_O_PROJETO_NO_SENTRY_NA_TASK_14"
 EOF
 ```
@@ -661,13 +661,28 @@ Expected: `caddy version` imprime uma versão instalada.
 
 - [ ] **Step 2: Publicar o Caddyfile do repo**
 
+Caddy expande `{$VAR}` a partir do seu próprio ambiente de processo no momento de carregar o config — não precisa de substituição de texto. Copia o Caddyfile como está e define a variável via systemd:
+
 ```bash
-export SANDBOX_DOMAIN="SEU_SUBDOMINIO.duckdns.org"   # o mesmo criado na Task 7
-envsubst '${SANDBOX_DOMAIN}' < ~/sincro/infra/Caddyfile | sudo tee /etc/caddy/Caddyfile > /dev/null
-sudo systemctl reload caddy
+sudo cp ~/sincro/infra/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl edit caddy
 ```
 
-Expected: `sudo systemctl status caddy` mostra `active (running)`, sem erros no `journalctl -u caddy -n 50`.
+No editor que abrir, adiciona (substituindo pelo subdomínio real da Task 7):
+
+```ini
+[Service]
+Environment=SANDBOX_DOMAIN=SEU_SUBDOMINIO.duckdns.org
+```
+
+Salva e sai, depois:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+```
+
+Expected: `caddy validate` reporta "Valid configuration"; `sudo systemctl status caddy` mostra `active (running)`, sem erros no `journalctl -u caddy -n 50`.
 
 - [ ] **Step 3: Subir os containers do sandbox**
 

@@ -11,9 +11,11 @@ mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 FILENAME="${BACKUP_DIR}/sincro_dev-${TIMESTAMP}.sql.gz"
+TMPFILE="${FILENAME}.tmp"
 
 docker compose -f docker-compose.yml -f docker-compose.sandbox.yml exec -T postgres \
-  pg_dump -U sincro sincro_dev | gzip > "$FILENAME"
+  pg_dump -U sincro sincro_dev | gzip > "$TMPFILE"
+mv "$TMPFILE" "$FILENAME"
 
 echo "Backup salvo em ${FILENAME}"
 

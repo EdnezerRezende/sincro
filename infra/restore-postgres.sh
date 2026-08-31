@@ -20,6 +20,6 @@ if [ "$confirm" != "sim" ]; then
 fi
 
 gunzip -c "$FILE" | docker compose -f docker-compose.yml -f docker-compose.sandbox.yml exec -T postgres \
-  psql -U sincro sincro_dev
+  psql -v ON_ERROR_STOP=1 -U sincro sincro_dev
 
 echo "Restore concluído."

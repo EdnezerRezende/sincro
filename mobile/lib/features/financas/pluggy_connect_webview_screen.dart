@@ -3,12 +3,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 const _pluggyConnectBaseUrl = 'https://connect.pluggy.ai';
-const _pluggyRedirectPrefix = 'https://sincro.app/pluggy-callback';
 
-/// Hosts the Pluggy Connect widget in-app so the user never visually leaves Sincro. Completion is
-/// detected via navigation to our own redirect URL (carrying `itemId` as a query param) rather
-/// than a JS postMessage bridge, since intercepting navigation is a stable webview_flutter
-/// feature regardless of exactly how Pluggy's widget JS communicates completion.
+/// Hosts the Pluggy Connect widget in-app so the user never visually leaves Sincro.
+///
+/// The widget never navigates away and never postMessages a parent (both would require an
+/// iframe host, which we don't have — this loads connect.pluggy.ai directly as the top-level
+/// page). Instead, once the user finishes connecting a bank, it calls `history.replaceState` to
+/// stamp the result (`item_id`, `execution_status`, `events`, ...) onto its OWN url as query
+/// params. So completion is detected via `onUrlChange`, which webview_flutter fires for History
+/// API changes too, not just real navigations.
 class PluggyConnectWebviewScreen extends StatefulWidget {
   const PluggyConnectWebviewScreen({super.key, required this.connectToken});
 
@@ -21,16 +24,17 @@ class PluggyConnectWebviewScreen extends StatefulWidget {
 class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen> {
   late final WebViewController _controller;
   bool _authBlocked = false;
+  // onUrlChange can fire more than once with a successful item_id (e.g. the widget updates the
+  // url again when the user taps "Fechar"), so this guards against popping the route twice.
+  bool _popped = false;
 
-  // Montado via Uri(...) para que connectToken e redirectUrl sejam percent-encoded
-  // corretamente — interpolar a URL de redirect crua na query string quebraria o parsing
-  // no primeiro `:` ou `/` que a Pluggy não esperasse.
+  // Montada via Uri(...) para que connectToken seja percent-encoded corretamente. O nome do
+  // parâmetro é `connect_token` (snake_case) — é o que o bundle do widget lê via
+  // `new URLSearchParams(window.location.search).get("connect_token")`; `connectToken`
+  // (camelCase) é silenciosamente ignorado e produz "esqueceu de incluir o connect token".
   Uri get _connectUrl => Uri.parse(_pluggyConnectBaseUrl).replace(
         path: '/',
-        queryParameters: {
-          'connectToken': widget.connectToken,
-          'redirectUrl': _pluggyRedirectPrefix,
-        },
+        queryParameters: {'connect_token': widget.connectToken},
       );
 
   @override
@@ -40,18 +44,7 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (request) {
-            if (request.url.startsWith(_pluggyRedirectPrefix)) {
-              final itemId = Uri.parse(request.url).queryParameters['itemId'];
-              if (itemId != null) {
-                Navigator.of(context).pop(itemId);
-              } else {
-                setState(() => _authBlocked = true);
-              }
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
+          onUrlChange: (change) => _handleUrlChange(change.url),
           onWebResourceError: (error) {
             // `isForMainFrame` is platform-dependent (reliable on Android; often null on iOS).
             // Only trip the fallback for an explicit main-frame failure — a failed subresource
@@ -64,6 +57,18 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
         ),
       )
       ..loadRequest(_connectUrl);
+  }
+
+  void _handleUrlChange(String? url) {
+    if (_popped || url == null) return;
+    final params = Uri.parse(url).queryParameters;
+    final itemId = params['item_id'];
+    final executionStatus = params['execution_status'];
+    if (itemId == null || executionStatus == null) return;
+    if (executionStatus != 'SUCCESS' && executionStatus != 'PARTIAL_SUCCESS') return;
+
+    _popped = true;
+    Navigator.of(context).pop(itemId);
   }
 
   Future<void> _openInExternalBrowser() async {

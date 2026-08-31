@@ -30,20 +30,22 @@
 
 | Task | Título | Pode paralelizar com | Depende de | Status/Notas |
 |---|---|---|---|---|
-| 1 | `docker-compose.sandbox.yml` overlay | 2, 3, 4, 5, 6 | — | |
-| 2 | Caddyfile + script de atualização DuckDNS | 1, 3, 4, 5, 6 | — | |
-| 3 | Script `deploy.sh` | 2, 4, 5, 6 | 1 | |
-| 4 | Scripts de backup/restore do Postgres | 1, 2, 3, 5, 6 | — | |
-| 5 | Sentry no backend | 1, 2, 3, 4, 6 | — | |
-| 6 | Sentry no Flutter | 1, 2, 3, 4, 5 | — | |
-| 7 | Provisionar VPS + DNS DuckDNS + firewall | — | — (manual, pode começar a qualquer momento) | |
-| 8 | Preparar VPS (Docker, clone do repo, `.env` sandbox) | — | 7 | |
-| 9 | Primeiro deploy + validar TLS/roteamento | — | 1, 2, 3, 5, 8 | |
-| 10 | Atualizar Google OAuth Console pro domínio sandbox | 11 | 7 (precisa do domínio definido) | |
-| 11 | Configurar backup cron na VPS | 10 | 4, 8 | |
-| 12 | Build Android assinado + Firebase App Distribution | 13 | 9 (precisa da URL do backend) | |
-| 13 | Build mobile-web release + deploy | 12 | 9 | |
-| 14 | Validação end-to-end (critérios de sucesso da spec) | — | 9, 10, 11, 12, 13 | |
+| 1 | `docker-compose.sandbox.yml` overlay | 2, 3, 4, 5, 6 | — | [x] Concluída 2026-08-30 (via subagent-driven-development). Corrigida na revisão final: `ports:` precisa de `!reset`/`!override`, não uma lista simples — Compose concatena `ports:` entre `-f` em vez de substituir. |
+| 2 | Caddyfile + script de atualização DuckDNS | 1, 3, 4, 5, 6 | — | [x] Concluída 2026-08-30. Caddyfile ficou como estava (correto); o Step 2 da Task 9 é que foi reescrito (ver nota da Task 9 abaixo). |
+| 3 | Script `deploy.sh` | 2, 4, 5, 6 | 1 | [x] Concluída 2026-08-30. Sem achados. |
+| 4 | Scripts de backup/restore do Postgres | 1, 2, 3, 5, 6 | — | [x] Concluída 2026-08-30. Corrigida na revisão final: `restore-postgres.sh` precisa de `psql -v ON_ERROR_STOP=1` (senão reporta sucesso em restore que falhou); `backup-postgres.sh` precisa dumpar pra `.tmp` e só mover pro nome final em caso de sucesso (senão um dump truncado passa por bom nos 7 dias de retenção). |
+| 5 | Sentry no backend | 1, 2, 3, 4, 6 | — | [x] Concluída 2026-08-30. Corrigida na revisão final: faltava `SentryModule.forRoot()` em `app.module.ts` (sem isso, exceptions de rota HTTP nunca chegam no Sentry — só exceptions de processo). Também removido `@sentry/profiling-node`/tracing (fora do escopo desta fase — só error tracking — e risco de build arm64 na VPS Ampere). |
+| 6 | Sentry no Flutter | 1, 2, 3, 4, 5 | — | [x] Concluída 2026-08-30. Sem achados — revisão elogiou a estrutura main()/_bootstrap(). |
+| 7 | Provisionar VPS + DNS DuckDNS + firewall | — | — (manual, pode começar a qualquer momento) | Pendente — ação manual do usuário. Retomar aqui na próxima sessão. |
+| 8 | Preparar VPS (Docker, clone do repo, `.env` sandbox) | — | 7 | Pendente. **Template do `.env` atualizado**: adicionar `PLUGGY_WEBHOOK_SECRET` (a Task 8 original original omitia essa variável, que o backend exige — ver `finance-webhook.controller.ts`); `GOOGLE_WEB_CLIENT_ID` removido do `.env` do backend (não é lido lá — já está corretamente coberto no `--dart-define` da Task 12). Referência: `backend/.env.example` no repo já lista as variáveis corretas. |
+| 9 | Primeiro deploy + validar TLS/roteamento | — | 1, 2, 3, 5, 8 | Pendente. **Step 2 reescrito**: Caddy expande `{$VAR}` do seu próprio ambiente de processo — não use `envsubst` (incompatível com a sintaxe `{$SANDBOX_DOMAIN}` do Caddyfile, gera config inválida). Publique o Caddyfile como está e defina a variável via `systemctl edit caddy` → `Environment=SANDBOX_DOMAIN=...`, depois `caddy validate` antes de `systemctl restart`. |
+| 10 | Atualizar Google OAuth Console pro domínio sandbox | 11 | 7 (precisa do domínio definido) | Pendente. |
+| 11 | Configurar backup cron na VPS | 10 | 4, 8 | Pendente. |
+| 12 | Build Android assinado + Firebase App Distribution | 13 | 9 (precisa da URL do backend) | Pendente. |
+| 13 | Build mobile-web release + deploy | 12 | 9 | Pendente. |
+| 14 | Validação end-to-end (critérios de sucesso da spec) | — | 9, 10, 11, 12, 13 | Pendente. |
+
+**Nota para quem retomar (a partir da Task 7):** Tasks 1-6 foram implementadas e passaram por revisão de task + revisão final de branch (com um fix wave corrigindo 3 achados Críticos e 5 Importantes — detalhes no ledger em `.superpowers/sdd/2026-08-30-ambiente-sandbox-observabilidade-plan/progress.md`, que continua disponível para contexto). O código já está mesclado na `master`. As Tasks 7-14 exigem provisionar uma VPS/conta DuckDNS reais — não são executáveis por um subagente headless; siga o runbook manual descrito em cada task.
 
 **Paralelização sugerida:**
 - **Onda 1** (sem dependências, tudo em paralelo): Tasks 1, 2, 3, 4, 5, 6 são só arquivos no repo — nenhuma depende da VPS existir. Task 7 (provisionamento manual) também pode começar em paralelo com essas.

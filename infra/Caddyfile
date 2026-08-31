@@ -1,0 +1,12 @@
+# {$SANDBOX_DOMAIN} é substituído no deploy (ex.: sincro-sandbox.duckdns.org) — ver
+# infra/duckdns-update.sh para como o DNS desse domínio é mantido apontando pra VPS.
+{$SANDBOX_DOMAIN} {
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}

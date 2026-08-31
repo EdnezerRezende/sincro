@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
 import 'core/theme.dart';
@@ -71,7 +72,20 @@ void _handleBiofeedbackAlertTap(NotificationResponse response) {
   navigatorKey.currentState?.pushNamed('/grounding-cards/sugerido', arguments: cardId);
 }
 
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
 Future<void> main() async {
+  if (_sentryDsn.isEmpty) {
+    await _bootstrap();
+    return;
+  }
+  await SentryFlutter.init(
+    (options) => options.dsn = _sentryDsn,
+    appRunner: _bootstrap,
+  );
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 

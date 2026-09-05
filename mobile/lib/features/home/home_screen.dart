@@ -7,6 +7,8 @@ import '../email_triage/gmail_connection_repository.dart';
 import '../biofeedback/biofeedback_cache.dart';
 import '../biofeedback/biofeedback_providers.dart';
 import '../biofeedback/estado_estresse.dart';
+import '../calendar/calendar_providers.dart';
+import '../calendar/calendar_event.dart';
 import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
 import '../financas/pluggy_connect_webview_screen.dart';
@@ -146,6 +148,7 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -157,6 +160,8 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
           Text('Tudo em ordem por hoje.', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           _GmailCard(statusAsync: gmailStatusAsync),
+          const SizedBox(height: 16),
+          _CalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 16),
           _FinancasCard(connectionsAsync: financeConnectionsAsync),
           const SizedBox(height: 16),
@@ -182,6 +187,7 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -203,6 +209,8 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   children: [
                     _GmailCard(statusAsync: gmailStatusAsync),
+                    const SizedBox(height: 16),
+                    _CalendarCard(eventsAsync: calendarEventsAsync),
                     const SizedBox(height: 16),
                     _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
                   ],
@@ -597,6 +605,7 @@ class _HomeModernoResumoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -610,6 +619,8 @@ class _HomeModernoResumoView extends ConsumerWidget {
           Text('Tudo sob controle', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 20),
           _ModernoGmailCard(statusAsync: gmailStatusAsync),
+          const SizedBox(height: 11),
+          _ModernoCalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 11),
           _ModernoFinancasCard(connectionsAsync: financeConnectionsAsync),
           const SizedBox(height: 11),
@@ -632,6 +643,7 @@ class _HomeModernoAbasView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -653,6 +665,8 @@ class _HomeModernoAbasView extends ConsumerWidget {
                   padding: const EdgeInsets.all(14),
                   children: [
                     _ModernoGmailCard(statusAsync: gmailStatusAsync),
+                    const SizedBox(height: 11),
+                    _ModernoCalendarCard(eventsAsync: calendarEventsAsync),
                     const SizedBox(height: 11),
                     _ModernoBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
                   ],
@@ -1049,6 +1063,7 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -1064,6 +1079,8 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
           Text('CONEXÕES', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 8),
           _FuncionalGmailCard(statusAsync: gmailStatusAsync),
+          const SizedBox(height: 8),
+          _FuncionalCalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 8),
           _FuncionalFinancasCard(connectionsAsync: financeConnectionsAsync),
           const SizedBox(height: 8),
@@ -1088,6 +1105,7 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
+    final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
@@ -1111,6 +1129,8 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
                     _FuncionalStatusSummary(),
                     const SizedBox(height: 12),
                     _FuncionalGmailCard(statusAsync: gmailStatusAsync),
+                    const SizedBox(height: 8),
+                    _FuncionalCalendarCard(eventsAsync: calendarEventsAsync),
                     const SizedBox(height: 8),
                     _FuncionalBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
                   ],
@@ -1582,6 +1602,222 @@ class _FuncionalGroundingCardsCard extends StatelessWidget {
           const Expanded(child: Text('Alívio sensorial')),
           Icon(Icons.chevron_right, size: 20, color: Colors.grey[600]),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// CALENDAR CARDS (Minimalista, Moderno, Funcional)
+// ============================================================================
+
+/// Card simples do calendário (design minimalista):
+/// Mostra os próximos 3 eventos com título + horário e botão para ver calendário completo.
+class _CalendarCard extends ConsumerWidget {
+  const _CalendarCard({required this.eventsAsync});
+
+  final AsyncValue<List<CalendarEvent>> eventsAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return eventsAsync.when(
+      data: (events) {
+        final upcomingThree = events.take(3).toList();
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.calendar_today_outlined),
+            title: const Text('Próximos eventos'),
+            subtitle: Text(
+              upcomingThree.isEmpty
+                  ? 'Nenhum evento nos próximos dias'
+                  : '${upcomingThree.length} evento(s) agendado(s)',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/calendar'),
+          ),
+        );
+      },
+      loading: () => const Card(
+        child: ListTile(
+          title: Text('Próximos eventos'),
+          subtitle: Text('Carregando...'),
+          leading: Icon(Icons.calendar_today_outlined),
+        ),
+      ),
+      error: (_, __) => Card(
+        child: ListTile(
+          leading: const Icon(Icons.calendar_today_outlined),
+          title: const Text('Próximos eventos'),
+          subtitle: const Text('Conecte o Google Calendar para sincronizar'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).pushNamed('/calendar'),
+        ),
+      ),
+    );
+  }
+}
+
+/// Card do calendário (design moderno com gradiente):
+/// Versão com gradiente sutil (padrão do design moderno).
+class _ModernoCalendarCard extends ConsumerWidget {
+  const _ModernoCalendarCard({required this.eventsAsync});
+
+  final AsyncValue<List<CalendarEvent>> eventsAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return eventsAsync.when(
+      data: (events) {
+        final upcomingThree = events.take(3).toList();
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  colorScheme.primary.withAlpha(25),
+                  colorScheme.secondary.withAlpha(15),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListTile(
+              leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+              title: const Text('Próximos eventos'),
+              subtitle: Text(
+                upcomingThree.isEmpty
+                    ? 'Nenhum evento nos próximos dias'
+                    : '${upcomingThree.length} evento(s) agendado(s)',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).pushNamed('/calendar'),
+            ),
+          ),
+        );
+      },
+      loading: () => Card(
+        elevation: 0,
+        child: ListTile(
+          title: const Text('Próximos eventos'),
+          subtitle: const Text('Carregando...'),
+          leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+        ),
+      ),
+      error: (_, __) => Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colorScheme.primary.withAlpha(25),
+                colorScheme.secondary.withAlpha(15),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListTile(
+            leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+            title: const Text('Próximos eventos'),
+            subtitle: const Text('Conecte o Google Calendar para sincronizar'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/calendar'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Card do calendário (design funcional):
+/// Versão compacta com border, sem gradiente ou decorações extras.
+class _FuncionalCalendarCard extends ConsumerWidget {
+  const _FuncionalCalendarCard({required this.eventsAsync});
+
+  final AsyncValue<List<CalendarEvent>> eventsAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return eventsAsync.when(
+      data: (events) {
+        final upcomingThree = events.take(3).toList();
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Calendário', style: TextStyle(fontWeight: FontWeight.w500)),
+                    Text(
+                      upcomingThree.isEmpty
+                          ? 'Nenhum evento'
+                          : '${upcomingThree.length} evento(s)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed('/calendar'),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 20),
+            SizedBox(width: 10),
+            Expanded(child: Text('Calendário')),
+          ],
+        ),
+      ),
+      error: (_, __) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_outlined, size: 20),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Calendário')),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pushNamed('/calendar'),
+              child: Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

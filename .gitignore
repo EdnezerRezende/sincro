@@ -1,1 +1,3 @@
 infra/backups/
+mobile/android/key.properties
+mobile/android/app/release-key.jks

@@ -7,13 +7,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+// import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
 import 'core/theme.dart';
 import 'features/biofeedback/biofeedback_alert_service.dart';
 import 'features/biofeedback/biofeedback_background_task.dart';
 import 'features/biofeedback/biofeedback_screen.dart';
+import 'features/calendar/calendar_screen.dart';
 import 'features/professionals/admin_professionals_list_screen.dart';
 import 'features/professionals/professionals_search_screen.dart';
 import 'features/auth/login_screen.dart';
@@ -72,17 +73,19 @@ void _handleBiofeedbackAlertTap(NotificationResponse response) {
   navigatorKey.currentState?.pushNamed('/grounding-cards/sugerido', arguments: cardId);
 }
 
-const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+// const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
 
 Future<void> main() async {
-  if (_sentryDsn.isEmpty) {
-    await _bootstrap();
-    return;
-  }
-  await SentryFlutter.init(
-    (options) => options.dsn = _sentryDsn,
-    appRunner: _bootstrap,
-  );
+  // Sentry temporarily disabled for build compatibility
+  // if (_sentryDsn.isEmpty) {
+  //   await _bootstrap();
+  //   return;
+  // }
+  // await SentryFlutter.init(
+  //   (options) => options.dsn = _sentryDsn,
+  //   appRunner: _bootstrap,
+  // );
+  await _bootstrap();
 }
 
 Future<void> _bootstrap() async {
@@ -173,6 +176,7 @@ class SincroApp extends ConsumerWidget {
         '/onboarding/contacts': (_) => const TrustedContactsScreen(),
         '/home': (_) => const HomeScreen(),
         '/settings': (_) => const SettingsScreen(),
+        '/calendar': (_) => const CalendarScreen(),
         '/inbox': (_) => const InboxScreen(),
         '/financas': (_) => const FinancasScreen(),
         '/biofeedback': (_) => const BiofeedbackScreen(),

@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
 
+/// Border idle contra scaffold `#FAF8F5` (light) / `#1A1F23` (dark).
+/// Light: #9C9690 ≈ 2.76:1 contra #FAF8F5. Dark: #66605A ≈ 2.68:1 contra #1A1F23.
+const Color _kBorderLight = Color(0xFF9C9690);
+const Color _kBorderDark = Color(0xFF66605A);
+
+/// Disabled fill contra scaffold `#FAF8F5` (light) / `#1A1F23` (dark).
+/// Light: #928C86 ≈ 3.14:1 contra #FAF8F5. Dark: #6E6862 ≈ 3.02:1 contra #1A1F23.
+const Color _kDisabledBgLight = Color(0xFF928C86);
+const Color _kDisabledBgDark = Color(0xFF6E6862);
+
+/// Disabled border contra o próprio fill disabled (≥3:1) para dar forma ao campo.
+/// Light: #433D39 ≈ 3.22:1 contra #928C86 (L=0.266). Dark: #C0C0C0 ≈ 3.02:1 contra #6E6862 (L=0.139).
+const Color _kDisabledBorderLight = Color(0xFF433D39);
+const Color _kDisabledBorderDark = Color(0xFFC0C0C0);
+
 /// Tipo de ícone auxiliar no input (sufixo).
 enum AppInputSuffixIcon {
   /// Ícone para limpar o conteúdo (X).
@@ -69,7 +84,7 @@ class AppInput extends StatefulWidget {
   /// Placeholder cinza/opaco dentro do field (não substitui label).
   final String? placeholder;
 
-  /// Texto de erro exibido abaixo do field (desativa o input se não nulo).
+  /// Texto de erro exibido abaixo do field.
   final String? error;
 
   /// Texto de dica auxiliar abaixo do field (desabilitado quando há erro).
@@ -163,19 +178,39 @@ class _AppInputState extends State<AppInput> {
   void initState() {
     super.initState();
     _controller = widget.controller ?? TextEditingController();
+    _controller.addListener(_handleControllerChange);
     _focusNode = FocusNode();
     _focusNode.addListener(_handleFocusChange);
     _obscureText = widget.obscureText;
   }
 
   @override
+  void didUpdateWidget(AppInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _controller.removeListener(_handleControllerChange);
+      if (oldWidget.controller == null) _controller.dispose();
+      _controller = widget.controller ?? TextEditingController();
+      _controller.addListener(_handleControllerChange);
+    }
+    if (oldWidget.obscureText != widget.obscureText) {
+      _obscureText = widget.obscureText;
+    }
+  }
+
+  @override
   void dispose() {
+    _controller.removeListener(_handleControllerChange);
     if (widget.controller == null) {
       _controller.dispose();
     }
     _focusNode.removeListener(_handleFocusChange);
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _handleControllerChange() {
+    setState(() {});
   }
 
   void _handleFocusChange() {
@@ -207,19 +242,19 @@ class _AppInputState extends State<AppInput> {
     late final Color focusedFillColor;
 
     if (isLight) {
-      borderColor = scheme.outline; // #E4DFD5
-      labelColor = scheme.onSurfaceVariant; // #6B6A62 (cinza médio)
-      focusedBorderColor = scheme.primary; // #3F7268 (verde floresta)
-      errorBorderColor = scheme.error; // #A6503A (marrom avermelhado)
-      hintColor = scheme.onSurfaceVariant.withValues(alpha: 0.5); // Cinza com opacidade
+      borderColor = _kBorderLight;
+      labelColor = scheme.onSurfaceVariant;
+      focusedBorderColor = scheme.primary;
+      errorBorderColor = scheme.error;
+      hintColor = scheme.onSurfaceVariant; // Sólido — alpha 0.5 dava apenas 2.07:1
       cursorColor = scheme.primary;
-      focusedFillColor = scheme.primary.withValues(alpha: 0.04); // Tint sutil
+      focusedFillColor = scheme.primary.withValues(alpha: 0.04);
     } else {
-      borderColor = scheme.outline; // #423F37
-      labelColor = scheme.onSurfaceVariant; // #B2AEA3 (cinza médio claro)
-      focusedBorderColor = scheme.primary; // #8FBFAE (verde claro)
-      errorBorderColor = scheme.error; // #D98872 (laranja-avermelhado)
-      hintColor = scheme.onSurfaceVariant.withValues(alpha: 0.5);
+      borderColor = _kBorderDark;
+      labelColor = scheme.onSurfaceVariant;
+      focusedBorderColor = scheme.primary;
+      errorBorderColor = scheme.error;
+      hintColor = scheme.onSurfaceVariant; // Sólido — alpha 0.5 dava apenas 2.07:1
       cursorColor = scheme.primary;
       focusedFillColor = scheme.primary.withValues(alpha: 0.06);
     }
@@ -229,18 +264,31 @@ class _AppInputState extends State<AppInput> {
         ? errorBorderColor
         : (_isFocused ? focusedBorderColor : borderColor);
 
-    final effectiveLabelColor = isError ? errorBorderColor : labelColor;
+    // Quando disabled, o label pode cair parcialmente sobre o fill disabled —
+    // usar cor com ≥4.5:1 tanto sobre o scaffold quanto sobre _kDisabledBg.
+    // Light: #1A1A1A → 6.0:1/fill, 16.7:1/scaffold. Dark: #EEEEEE → 4.8:1/fill, 12.2:1/scaffold.
+    // !enabled vence sobre isError: o erro é sinalizado pela borda 2dp e errorText.
+    final disabledLabelColor =
+        isLight ? const Color(0xFF1A1A1A) : const Color(0xFFEEEEEE);
+    final effectiveLabelColor = !widget.enabled
+        ? disabledLabelColor
+        : (isError ? errorBorderColor : labelColor);
 
-    final effectiveFillColor = (_isFocused && !isError)
-        ? focusedFillColor
-        : Colors.transparent;
+    final disabledFillColor =
+        isLight ? _kDisabledBgLight : _kDisabledBgDark;
+
+    final effectiveFillColor = !widget.enabled
+        ? disabledFillColor
+        : (_isFocused && !isError)
+            ? focusedFillColor
+            : Colors.transparent;
 
     // Construir o input
     final input = TextFormField(
       controller: _controller,
       focusNode: _focusNode,
       obscureText: _obscureText && widget.obscureText,
-      enabled: widget.enabled && !isError,
+      enabled: widget.enabled,
       autofocus: widget.autofocus,
       maxLines: _obscureText && widget.obscureText ? 1 : widget.maxLines,
       minLines: widget.minLines,
@@ -250,26 +298,29 @@ class _AppInputState extends State<AppInput> {
       cursorColor: cursorColor,
       onChanged: widget.onChanged,
       onFieldSubmitted: (_) => widget.onSubmitted?.call(),
-      style: widget.textStyle ??
-          Theme.of(context).textTheme.bodyLarge?.copyWith(
+      style: (Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: scheme.onSurface,
                 fontFamily: 'Atkinson Hyperlegible',
-              ),
+              ) ??
+              TextStyle(color: scheme.onSurface))
+          .merge(widget.textStyle),
       decoration: InputDecoration(
         // Label sempre visível (não floating, sempre acima)
         label: Text(
           widget.label,
-          style: widget.labelStyle ??
-              Theme.of(context).textTheme.labelMedium?.copyWith(
+          style: (Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: effectiveLabelColor,
                     fontWeight: FontWeight.w500,
                     fontFamily: 'Atkinson Hyperlegible',
-                  ),
+                  ) ??
+                  TextStyle(color: effectiveLabelColor))
+              .merge(widget.labelStyle),
         ),
         floatingLabelBehavior: FloatingLabelBehavior.always,
 
-        // Placeholder cinza/opaco
-        hintText: widget.placeholder,
+        // Placeholder — oculto no estado disabled (campo não aceita entrada;
+        // placeholder sobre o fill disabled daria contraste insuficiente).
+        hintText: widget.enabled ? widget.placeholder : null,
         hintStyle: TextStyle(
           color: hintColor,
           fontFamily: 'Atkinson Hyperlegible',
@@ -297,29 +348,36 @@ class _AppInputState extends State<AppInput> {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.0),
+          // Quando disabled, a borda de erro usaria vermelho sobre fill morto (1.69:1).
+          // Usar a borda disabled: o erro é sinalizado pelo errorText no scaffold.
           borderSide: BorderSide(
-            color: errorBorderColor,
-            width: 2.0,
+            color: !widget.enabled
+                ? (isLight ? _kDisabledBorderLight : _kDisabledBorderDark)
+                : errorBorderColor,
+            width: !widget.enabled ? 1.0 : 2.0,
           ),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.0),
           borderSide: BorderSide(
-            color: errorBorderColor,
-            width: 2.0,
+            color: !widget.enabled
+                ? (isLight ? _kDisabledBorderLight : _kDisabledBorderDark)
+                : errorBorderColor,
+            width: !widget.enabled ? 1.0 : 2.0,
           ),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.0),
           borderSide: BorderSide(
-            color: borderColor.withValues(alpha: 0.4),
-            width: 1.5,
+            // Borda ≥3:1 contra o fill disabled para dar forma ao campo.
+            color: isLight ? _kDisabledBorderLight : _kDisabledBorderDark,
+            width: 1.0,
           ),
         ),
 
         // Fundo
         fillColor: effectiveFillColor,
-        filled: _isFocused || isFilled,
+        filled: !widget.enabled || _isFocused || isFilled,
 
         // Ícone sufixo
         suffixIcon: _buildSuffixIcon(
@@ -329,18 +387,20 @@ class _AppInputState extends State<AppInput> {
         suffixIconConstraints:
             const BoxConstraints(minWidth: 48.0, minHeight: 48.0),
 
-        // Error message clara abaixo
+        // Error message clara abaixo — permite quebra de linha em alta escala
         errorText: isError ? widget.error : null,
+        errorMaxLines: 3,
         errorStyle: TextStyle(
           color: errorBorderColor,
           fontFamily: 'Atkinson Hyperlegible',
           fontSize: 12.0,
         ),
 
-        // Helper text (desabilitado quando há erro)
+        // Helper text (desabilitado quando há erro) — permite quebra de linha
         helperText: isError ? null : widget.helperText,
+        helperMaxLines: 3,
         helperStyle: TextStyle(
-          color: labelColor.withValues(alpha: 0.7),
+          color: labelColor, // Sólido — alpha 0.7 dava apenas 2.94:1
           fontFamily: 'Atkinson Hyperlegible',
           fontSize: 12.0,
         ),
@@ -348,22 +408,22 @@ class _AppInputState extends State<AppInput> {
         // Contador de caracteres
         counterText: widget.showCharacterCount ? null : '',
         counterStyle: TextStyle(
-          color: labelColor.withValues(alpha: 0.7),
+          color: labelColor, // Sólido — alpha 0.7 dava apenas 2.94:1
           fontFamily: 'Atkinson Hyperlegible',
           fontSize: 12.0,
         ),
       ),
     );
 
-    // Opacidade reduzida para disabled
-    return Opacity(
-      opacity: widget.enabled ? 1.0 : 0.6,
-      child: input,
-    );
+    return input;
   }
 
   /// Constrói o widget do ícone sufixo (clear, show-password, info, ou nenhum).
   Widget? _buildSuffixIcon(ColorScheme scheme, Color errorColor) {
+    // Suprimir ícones interativos quando disabled — sua cor ficaria ilegível
+    // sobre o fill disabled e o campo não aceita interação de qualquer forma.
+    if (!widget.enabled) return null;
+
     final isError = widget.error != null;
     final iconColor = isError
         ? errorColor

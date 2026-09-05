@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+/// Border idle contra scaffold `#FAF8F5` (light) / `#1A1F23` (dark).
+/// Light: #9C9690 ≈ 2.76:1 contra #FAF8F5. Dark: #66605A ≈ 2.68:1 contra #1A1F23.
+const Color _kBorderLight = Color(0xFF9C9690);
+const Color _kBorderDark = Color(0xFF66605A);
+
+/// Disabled fill contra scaffold `#FAF8F5` (light) / `#1A1F23` (dark).
+/// Light: #928C86 ≈ 3.14:1 contra #FAF8F5. Dark: #6E6862 ≈ 3.02:1 contra #1A1F23.
+const Color _kDisabledBgLight = Color(0xFF928C86);
+const Color _kDisabledBgDark = Color(0xFF6E6862);
+
 /// Variantes do chip Sincro: input (selecionável), suggestion (recomendação), filter (toggle).
 /// Estados: default, selected, disabled. Acessível, com spacing generoso e feedback visual claro.
 enum AppChipVariant {
@@ -66,11 +76,14 @@ class AppChip extends StatelessWidget {
     late final double borderWidth;
 
     if (!enabled) {
-      // Disabled: morto visualmente (opacidade reduzida)
-      backgroundColor =
-          isLight ? Color(0xFFF0EDE6) : Color(0xFF34322B);
-      foregroundColor = scheme.onSurface.withValues(alpha: 0.4);
-      borderColor = scheme.outline.withValues(alpha: 0.4);
+      // Disabled: fill com contraste real (≥2.5:1) contra o scaffold.
+      // Foreground escuro/claro fixo para dar ≥3:1 sobre o fill disabled
+      // (scheme.onSurface.withAlpha(0.4) mediria apenas ~1.1:1 sobre #928C86).
+      backgroundColor = isLight ? _kDisabledBgLight : _kDisabledBgDark;
+      foregroundColor = isLight
+          ? const Color(0xFF3A3630) // ~6:1 sobre #928C86
+          : const Color(0xFFEEEEEE); // ~5:1 sobre #6E6862
+      borderColor = Colors.transparent;
       borderWidth = 0;
     } else if (selected) {
       // Selected: cor/background claro (não ambíguo)
@@ -79,21 +92,26 @@ class AppChip extends StatelessWidget {
       borderColor = scheme.primary;
       borderWidth = 0;
     } else {
-      // Default: outline ou cor pálida, visualmente distinto de selected
+      // Default: outline ou cor pálida, visualmente distinto de selected.
+      // Border idle usa _kBorderLight/_kBorderDark em vez de scheme.outline —
+      // scheme.outline (#E0E0E0 light / #4A4A4A dark) rende quase invisível
+      // contra o scaffold (~1.25:1 / ~1.87:1).
+      final idleBorderColor = isLight ? _kBorderLight : _kBorderDark;
       switch (variant) {
         case AppChipVariant.input:
           // Input default: fundo leve com outline
           backgroundColor = isLight ? Color(0xFFF0EDE6) : Color(0xFF34322B);
           foregroundColor = scheme.onSurface;
-          borderColor = scheme.outline;
+          borderColor = idleBorderColor;
           borderWidth = 1.0;
           break;
 
         case AppChipVariant.suggestion:
-          // Suggestion default: fundo mais leve, sugestivo
-          backgroundColor = isLight ? Color(0xFFFAF8F5) : Color(0xFF2C2A24);
+          // Suggestion default: fundo levemente destacado do scaffold (o fill em si
+          // não precisa de contraste — o que importa é a borda ser visível).
+          backgroundColor = isLight ? Color(0xFFEAE5DC) : Color(0xFF2C2A24);
           foregroundColor = scheme.onSurfaceVariant;
-          borderColor = scheme.outline;
+          borderColor = idleBorderColor;
           borderWidth = 1.0;
           break;
 
@@ -101,53 +119,58 @@ class AppChip extends StatelessWidget {
           // Filter default: outline style, sem fundo opaco
           backgroundColor = scheme.surface;
           foregroundColor = scheme.onSurface;
-          borderColor = scheme.outline;
+          borderColor = idleBorderColor;
           borderWidth = 1.0;
           break;
       }
     }
 
-    // Opacity reduzida para disabled
-    final opacity = enabled ? 1.0 : 0.6;
+    final effectiveLabelStyle = labelStyle ??
+        (Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w500,
+            ) ??
+            TextStyle(color: foregroundColor));
 
-    // Construir widget — usar FilterChip para melhor suporte nativo a seleção
-    final chip = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: 36.0),
-      child: FilterChip(
-        label: _ChipLabel(
-          text: label,
-          icon: icon,
-          iconAfterLabel: iconAfterLabel,
-          textStyle: labelStyle ??
-              (Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: foregroundColor,
-                    fontWeight: FontWeight.w500,
-                  ) ??
-                  TextStyle(color: foregroundColor)),
-          iconColor: foregroundColor,
-        ),
-        selected: selected,
-        onSelected: enabled ? onSelected : null,
-        backgroundColor: backgroundColor,
-        selectedColor: backgroundColor,
-        disabledColor: backgroundColor,
-        side: BorderSide(color: borderColor, width: borderWidth),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.0), // 36 dp height → 18 dp radius
-        ),
-        padding: effectivePadding,
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        showCheckmark: false, // Evitar checkmark padrão — feedback é via cor/background
-        labelPadding: EdgeInsets.zero, // Label manage padding internally
-        elevation: 0,
-        pressElevation: 0,
-      ),
+    final labelWidget = _ChipLabel(
+      text: label,
+      icon: icon,
+      iconAfterLabel: iconAfterLabel,
+      textStyle: effectiveLabelStyle,
+      iconColor: foregroundColor,
     );
 
-    return Opacity(
-      opacity: opacity,
-      child: chip,
+    // Widget custom em vez de FilterChip para evitar a camada _kDisabledAlpha (38%)
+    // que o RawChip aplica ao label quando onSelected == null — isso tornava labels
+    // ilegíveis mesmo quando enabled == true e o chip era apenas informativo.
+    final effectiveBorderRadius = BorderRadius.circular(20.0);
+    final shape = RoundedRectangleBorder(
+      borderRadius: effectiveBorderRadius,
+      side: BorderSide(color: borderColor, width: borderWidth),
+    );
+
+    return Semantics(
+      button: enabled && onSelected != null,
+      checked: selected,
+      enabled: enabled,
+      label: label,
+      child: Material(
+        color: backgroundColor,
+        shape: shape,
+        child: InkWell(
+          onTap: (enabled && onSelected != null)
+              ? () => onSelected!(!selected)
+              : null,
+          borderRadius: effectiveBorderRadius,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 36.0, minWidth: 0),
+            child: Padding(
+              padding: effectivePadding,
+              child: labelWidget,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

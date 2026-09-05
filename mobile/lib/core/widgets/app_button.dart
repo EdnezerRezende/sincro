@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Border idle (outline variant) contra scaffold `#FAF8F5` (light) / `#1A1F23` (dark).
+/// Light: #9C9690 ≈ 2.76:1 contra #FAF8F5. Dark: #66605A ≈ 2.68:1 contra #1A1F23.
+const Color _kBorderLight = Color(0xFF9C9690);
+const Color _kBorderDark = Color(0xFF66605A);
+
 /// Variantes visuais do botão Sincro: primário, secundário, outline, texto.
 /// Cada uma tem semântica visual clara e feedback distinto.
 enum AppButtonVariant {
@@ -172,8 +177,16 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     final isLight = scheme.brightness == Brightness.light;
 
     // Determina se está realmente desabilitado (callback null OU disabled=true OU loading=true)
+    // para fins de interação (onPressed / Semantics).
     final effectiveDisabled = _isDisabled();
     final effectiveOnPressed = effectiveDisabled ? null : widget.onPressed;
+
+    // Estado visual "desabilitado" (fill apagado): isLoading tem prioridade sobre
+    // disabled — um botão em loading continua com o fill da variante (ativo, só
+    // ocupado), só usa o fill apagado quando está desabilitado de fato e não está
+    // carregando.
+    final styleDisabled =
+        !widget.isLoading && (widget.disabled || widget.onPressed == null);
 
     // Dimensões conforme size
     final (double height, double horizontalPadding, double minEffectiveWidth) =
@@ -188,11 +201,11 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       height: height,
       horizontalPadding: horizontalPadding,
       minWidth: widget.minWidth ?? minEffectiveWidth,
-      disabled: effectiveDisabled,
+      disabled: styleDisabled,
     );
 
-    // Cores de texto/ícone
-    final textColor = _textColor(scheme, isLight, widget.variant, effectiveDisabled);
+    // Cores de texto/ícone (loading usa a cor "ativa" da variante, não a apagada)
+    final textColor = _textColor(scheme, isLight, widget.variant, styleDisabled);
 
     // Label com ícone (se aplicável)
     final labelWidget = _buildLabel(
@@ -273,7 +286,7 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       case AppButtonVariant.outline:
         defaultBgColor = Colors.transparent;
         defaultFgColor = scheme.secondary;
-        borderColor = scheme.outline;
+        borderColor = isLight ? _kBorderLight : _kBorderDark;
         borderWidth = 1.5;
         break;
 
@@ -285,17 +298,26 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
         break;
     }
 
-    // Cor desabilitada (acinzentada, opaca)
+    // Cor desabilitada: tom quente mais escuro que o scaffold para garantir contraste
+    // real (não apenas opacidade). Light #928C86 ≈ 3.14:1 contra #FAF8F5.
+    // Dark #6E6862 ≈ 3.02:1 contra #1A1F23.
     final disabledBgColor =
-        isLight ? Color(0xFFF0EDE6) : Color(0xFF34322B);
-    final disabledFgColor = scheme.onSurface.withValues(alpha: 0.4);
+        isLight ? Color(0xFF928C86) : Color(0xFF6E6862);
+    // Foreground sólido para garantir ≥3:1 sobre o fill disabled.
+    // Light #3A3630 ≈ 3.93:1 sobre #928C86. Dark #EEEEEE ≈ 4.23:1 sobre #6E6862.
+    final disabledFgColor =
+        isLight ? const Color(0xFF3A3630) : const Color(0xFFEEEEEE);
 
-    // Feedback em hover/press: elevation ou scale (sutil)
+    // Feedback em hover/press: elevation ou scale (sutil).
+    // Nota: `disabled` aqui já representa o estado visual "desabilitado" — o
+    // chamador (`build`) resolve a prioridade isLoading > disabled antes de passar
+    // este valor, de forma que loading nunca renderiza com o fill apagado.
     final resolvedBgColor = WidgetStateProperty.resolveWith((states) {
       if (disabled) return disabledBgColor;
       if (states.contains(WidgetState.pressed)) {
-        // Press state: levemente mais escuro/opaco
-        return Color.lerp(defaultBgColor, scheme.onSurface, 0.1) ?? defaultBgColor;
+        // Press state: queda de luminância de ~28% (observável), canal alternativo
+        // além do overlay do ripple.
+        return Color.lerp(defaultBgColor, Colors.black, 0.28) ?? defaultBgColor;
       }
       if (states.contains(WidgetState.hovered)) {
         // Hover state: levemente mais claro (ou tint)
@@ -311,7 +333,7 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
 
     final resolvedElevation = WidgetStateProperty.resolveWith((states) {
       if (disabled) return 0.0;
-      if (states.contains(WidgetState.pressed)) return 0.0; // Pressed = flat
+      if (states.contains(WidgetState.pressed)) return 1.0; // Pressed = leve elevação (canal extra de feedback)
       if (states.contains(WidgetState.hovered)) return 4.0; // Hover = slight lift
       return 0.0; // Default = flat (Material 3 minimal elevation)
     });
@@ -368,7 +390,8 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     bool disabled,
   ) {
     if (disabled) {
-      return scheme.onSurface.withValues(alpha: 0.4);
+      // Cores sólidas para ≥3:1 sobre o fill disabled (#928C86 light / #6E6862 dark).
+      return isLight ? const Color(0xFF3A3630) : const Color(0xFFEEEEEE);
     }
 
     return switch (variant) {
@@ -412,10 +435,9 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       leadingIcon = null;
     }
 
-    // Texto (opaco se loading)
-    final textOpacity = isLoading ? 0.5 : 1.0;
+    // Texto sempre opaco — o spinner já indica o estado de loading.
     final textWidget = Opacity(
-      opacity: textOpacity,
+      opacity: 1.0,
       child: Text(
         label,
         style: TextStyle(

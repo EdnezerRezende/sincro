@@ -1,120 +1,197 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:sincro_mobile/features/calendar/calendar_event.dart';
+import 'package:sincro_mobile/features/calendar/calendar_providers.dart';
+import 'package:sincro_mobile/features/calendar/calendar_screen.dart';
 
 void main() {
   group('Calendar Touch Target Sizes', () {
-    test('Grid configuration ensures 48dp+ cells', () {
-      // With 7 columns on a 390px phone:
-      // Available width: 390 - (6 * 6px spacing) = 390 - 36 = 354px
-      // Per cell: 354 / 7 = 50.6px per cell (exceeds 48dp minimum)
-      const phoneWidth = 390;
-      const columnCount = 7;
-      const spacing = 6;
-      const cellWidth = (phoneWidth - (columnCount - 1) * spacing) / columnCount;
+    // 320dp é a largura mais estreita de tela real relevante (iPhone SE 1ª geração / Android
+    // pequeno); 390dp é o iPhone 13/14 padrão. Testamos as quatro larguras para cobrir toda a
+    // faixa suportada.
+    //
+    // A ALTURA da célula é garantida em exatamente 48dp em qualquer largura de tela por
+    // `mainAxisExtent: 48` no `SliverGridDelegateWithFixedCrossAxisCount` (essa é a correção
+    // desta rodada: o `ConstrainedBox(minHeight: 48)` anterior era inerte porque o `GridView`
+    // entrega constraints tight a cada célula, e `parent.enforce` de um `ConstrainedBox` sob
+    // constraints tight sempre resulta no tamanho tight do pai).
+    //
+    // A LARGURA da célula, ao contrário, é geometricamente limitada pelo número de colunas: com
+    // 7 colunas (uma por dia da semana) e 24dp de padding horizontal do `SingleChildScrollView`
+    // pai, uma célula de 48dp de largura exigiria pelo menos 7×48 + 24 = 360dp de largura de tela
+    // só de área útil — e isso sem contar `crossAxisSpacing`. Numa tela de 320dp isso é
+    // impossível de satisfazer com qualquer valor de padding/spacing (mesmo com ambos zerados,
+    // 320/7 = 45.7dp < 48dp): não há forma de encaixar 7 alvos de toque de 48dp lado a lado em
+    // 320dp de largura. Por isso a largura só é verificada contra 48dp na largura em que isso é
+    // matematicamente alcançável (390dp, a mais comum em aparelhos atuais); nas larguras mais
+    // estreitas, a largura é verificada contra o mínimo que a WCAG 2.5.8 (Target Size Minimum,
+    // nível AA) de fato exige — 24×24px CSS — que é o critério de sucesso de AA realmente
+    // aplicável aqui (48dp é a recomendação do Material Design, mais rigorosa que a WCAG AA, mas
+    // inatingível em ambas as dimensões simultaneamente numa grade de 7 colunas em telas muito
+    // estreitas).
+    const larguraOndeAlvoDe48DpELargura = 390.0;
+    for (final largura in [320.0, 360.0, 375.0, 390.0]) {
+      testWidgets(
+        'Day cells in CalendarScreen render with height >=48dp and width '
+        '>=24dp (WCAG 2.5.8 AA) at every width; width >=48dp where '
+        'geometrically achievable (largura ${largura}dp)',
+        (WidgetTester tester) async {
+          tester.view.physicalSize = Size(largura, 800);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
 
-      expect(cellWidth, greaterThanOrEqualTo(48));
-    });
-
-    testWidgets('Day cell InkWell is clickable and renders', (WidgetTester tester) async {
-      // Bind to a standard phone size (390x800, typical mobile device)
-      tester.binding.window.physicalSizeTestValue = const Size(390, 800);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
-
-      var tapped = false;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: 366, // 390 - 2*12 padding
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                    childAspectRatio: 1.0,
-                  ),
-                  itemCount: 7,
-                  itemBuilder: (context, index) {
-                    return Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => tapped = true,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Center(
-                            child: Text('${index + 1}'),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                monthEventsProvider.overrideWith(
+                  (ref, params) async => <CalendarEvent>[],
                 ),
-              ),
+                upcomingEventsProvider.overrideWith(
+                  (ref) async => <CalendarEvent>[],
+                ),
+              ],
+              child: const MaterialApp(home: CalendarScreen()),
             ),
-          ),
-        ),
+          );
+          await tester.pumpAndSettle();
+
+          // O segundo GridView da tela é a grade de dias do mês (o primeiro é o cabeçalho
+          // com os nomes dos dias da semana).
+          final dayGrid = find.byType(GridView).at(1);
+          final dayCellInkWells = find.descendant(
+            of: dayGrid,
+            matching: find.byType(InkWell),
+          );
+
+          expect(dayCellInkWells, findsWidgets);
+
+          final larguraMinima = largura >= larguraOndeAlvoDe48DpELargura
+              ? 48.0
+              : 24.0;
+
+          for (final element in dayCellInkWells.evaluate()) {
+            final size = tester.getSize(find.byWidget(element.widget));
+            expect(
+              size.height,
+              greaterThanOrEqualTo(48),
+              reason:
+                  'Day cell height ${size.height} is below the 48dp touch '
+                  'target minimum at screen width ${largura}dp',
+            );
+            expect(
+              size.width,
+              greaterThanOrEqualTo(larguraMinima),
+              reason:
+                  'Day cell width ${size.width} is below the '
+                  '${larguraMinima}dp touch target minimum at screen width '
+                  '${largura}dp',
+            );
+          }
+        },
       );
+    }
 
-      // Verify the grid rendered
-      expect(find.byType(InkWell), findsWidgets);
+    testWidgets(
+      'Month navigation chevrons in CalendarScreen have 48dp touch target',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(390, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      // Tap a cell and verify it responds
-      await tester.tap(find.byType(InkWell).first);
-      await tester.pumpAndSettle();
-      expect(tapped, isTrue);
-    });
-
-    testWidgets('Month navigation buttons have 48dp touch target', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 48,
-              height: 48,
-              child: IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () {},
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              monthEventsProvider.overrideWith(
+                (ref, params) async => <CalendarEvent>[],
               ),
-            ),
-          ),
-        ),
-      );
-
-      final iconButtonFinder = find.byType(IconButton);
-      final iconButtonSize = tester.getSize(iconButtonFinder);
-
-      // IconButton should be at least 48dp x 48dp
-      expect(iconButtonSize.width, greaterThanOrEqualTo(48));
-      expect(iconButtonSize.height, greaterThanOrEqualTo(48));
-    });
-
-    testWidgets('Event card edit button has 48dp touch target', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Editar'),
-                onPressed: () {},
+              upcomingEventsProvider.overrideWith(
+                (ref) async => <CalendarEvent>[],
               ),
-            ),
+            ],
+            child: const MaterialApp(home: CalendarScreen()),
           ),
-        ),
-      );
+        );
+        await tester.pumpAndSettle();
 
-      final buttonFinder = find.byType(OutlinedButton);
-      final buttonSize = tester.getSize(buttonFinder);
+        // Os dois `IconButton` do cabeçalho de navegação (mês anterior/próximo) renderizados
+        // de verdade dentro de `_MonthNavigationHeader`, não um `IconButton` avulso.
+        final chevronFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is IconButton &&
+              widget.icon is Icon &&
+              ((widget.icon as Icon).icon == Icons.chevron_left ||
+                  (widget.icon as Icon).icon == Icons.chevron_right),
+        );
 
-      // Button should have at least 48dp height
-      expect(buttonSize.height, greaterThanOrEqualTo(48));
-    });
+        expect(chevronFinder, findsNWidgets(2));
+
+        for (final element in chevronFinder.evaluate()) {
+          final size = tester.getSize(find.byWidget(element.widget));
+          expect(
+            size.width,
+            greaterThanOrEqualTo(48),
+            reason: 'Month nav chevron width ${size.width} is below 48dp',
+          );
+          expect(
+            size.height,
+            greaterThanOrEqualTo(48),
+            reason: 'Month nav chevron height ${size.height} is below 48dp',
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'Event card "Editar" button in CalendarScreen has 48dp touch target',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(390, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final evento = CalendarEvent(
+          id: 'evt-1',
+          titulo: 'Reunião de equipe',
+          descricao: '',
+          dataHoraInicio: DateTime.now().add(const Duration(hours: 2)),
+          dataHoraFim: DateTime.now().add(const Duration(hours: 3)),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              monthEventsProvider.overrideWith(
+                (ref, params) async => <CalendarEvent>[],
+              ),
+              upcomingEventsProvider.overrideWith(
+                (ref) async => <CalendarEvent>[evento],
+              ),
+            ],
+            child: const MaterialApp(home: CalendarScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Botão "Editar" renderizado de verdade dentro do `_EventCard` da lista de próximos
+        // eventos (não um `OutlinedButton` avulso construído só para o teste).
+        final editarButtonFinder = find.widgetWithText(
+          OutlinedButton,
+          'Editar',
+        );
+
+        expect(editarButtonFinder, findsOneWidget);
+
+        final buttonSize = tester.getSize(editarButtonFinder);
+        expect(
+          buttonSize.height,
+          greaterThanOrEqualTo(48),
+          reason: '"Editar" button height ${buttonSize.height} is below 48dp',
+        );
+      },
+    );
   });
 }

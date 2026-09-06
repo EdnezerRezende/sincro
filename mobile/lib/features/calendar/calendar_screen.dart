@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/app_input.dart';
 import '../email_triage/email_triage_providers.dart';
 import 'calendar_providers.dart';
 import 'calendar_event.dart';
 import 'calendar_repository.dart';
+
+// Idle border: ≥2.5:1 contra scaffold #FAF8F5 (light) / #1A1F23 (dark).
+// Mesmos tokens já aprovados em AppInput, AppChip e HomeScreen.
+const Color _kBorderLight = Color(0xFF9C9690); // 2.76:1 vs #FAF8F5
+const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
 
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -26,7 +32,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final monthEventsAsync = ref.watch(monthEventsProvider((_currentYear, _currentMonth)));
+    final monthEventsAsync = ref.watch(
+      monthEventsProvider((_currentYear, _currentMonth)),
+    );
     final upcomingEventsAsync = ref.watch(upcomingEventsProvider);
 
     return Scaffold(
@@ -57,7 +65,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         child: const Icon(Icons.add),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80), // 80dp para evitar sobrecarga do FAB
+        padding: const EdgeInsets.fromLTRB(
+          12,
+          12,
+          12,
+          80,
+        ), // 80dp para evitar sobrecarga do FAB
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -118,13 +131,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     for (final event in events) ...[
                       _EventCard(event: event),
                       const SizedBox(height: 12),
-                    ]
+                    ],
                   ],
                 );
               },
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: CircularProgressIndicator(),
+                child: Center(child: CircularProgressIndicator()),
               ),
               error: (_, __) => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -164,7 +177,10 @@ class _CalendarErrorPanel extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(
           children: [
-            Icon(Icons.lock_outline, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.lock_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: 8),
             Text(
               'Reconecte o Gmail para usar a agenda.',
@@ -193,6 +209,14 @@ class _CalendarErrorPanel extends ConsumerWidget {
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: onRetry,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? _kBorderLight
+                      : _kBorderDark,
+                  width: 1.5,
+                ),
+              ),
               child: const Text('Tentar novamente'),
             ),
           ],
@@ -222,7 +246,9 @@ Future<void> _reconectarGmail(BuildContext context, WidgetRef ref) async {
   } catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Não foi possível reconectar. Tente novamente.')),
+      const SnackBar(
+        content: Text('Não foi possível reconectar. Tente novamente.'),
+      ),
     );
   }
 }
@@ -258,13 +284,17 @@ class _MonthNavigationHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final nomeMes = _meses[mes - 1];
     const cornerRadius = 12.0;
+    final corBorda = theme.brightness == Brightness.light
+        ? _kBorderLight
+        : _kBorderDark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        border: Border.all(color: corBorda),
         borderRadius: BorderRadius.circular(cornerRadius),
       ),
       child: Row(
@@ -283,14 +313,8 @@ class _MonthNavigationHeader extends StatelessWidget {
           // Mês e ano centralizados
           Column(
             children: [
-              Text(
-                nomeMes,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                '$ano',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(nomeMes, style: Theme.of(context).textTheme.titleMedium),
+              Text('$ano', style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
           // Botão próximo (48dp touch target)
@@ -345,6 +369,21 @@ class _MonthCalendarView extends ConsumerWidget {
     }).toList();
   }
 
+  static const _mesesCompletos = [
+    'janeiro',
+    'fevereiro',
+    'março',
+    'abril',
+    'maio',
+    'junho',
+    'julho',
+    'agosto',
+    'setembro',
+    'outubro',
+    'novembro',
+    'dezembro',
+  ];
+
   /// Retorna hoje (dia 1-31) se estamos no mês atual, null caso contrário.
   int? _hoje() {
     final agora = DateTime.now();
@@ -354,7 +393,11 @@ class _MonthCalendarView extends ConsumerWidget {
     return null;
   }
 
-  void _abrirEventosDoDia(BuildContext context, int dia, List<CalendarEvent> eventosDoDia) {
+  void _abrirEventosDoDia(
+    BuildContext context,
+    int dia,
+    List<CalendarEvent> eventosDoDia,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -397,7 +440,11 @@ class _MonthCalendarView extends ConsumerWidget {
     final hoje = _hoje();
     final diasTotal = _diasDoMes(ano, mes);
     final primeiroDia = _primeiroDiaDaSemana(ano, mes);
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final corBordaIdle = theme.brightness == Brightness.light
+        ? _kBorderLight
+        : _kBorderDark;
+    final nomeMesCompleto = _mesesCompletos[mes - 1];
 
     return monthEventsAsync.when(
       data: (eventos) {
@@ -415,7 +462,15 @@ class _MonthCalendarView extends ConsumerWidget {
               ),
               itemCount: 7, // Apenas nomes dos dias
               itemBuilder: (_, index) {
-                const diasSemana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+                const diasSemana = [
+                  'Seg',
+                  'Ter',
+                  'Qua',
+                  'Qui',
+                  'Sex',
+                  'Sab',
+                  'Dom',
+                ];
                 return Center(
                   child: Text(
                     diasSemana[index],
@@ -427,19 +482,22 @@ class _MonthCalendarView extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 12),
-            // Grid de dias do mês. Garante que cada célula tenha pelo menos 48dp de altura
-            // e largura (tamanho mínimo recomendado para alvo de toque). Com 7 colunas em tela
-            // de 390px, isso resulta em ~48dp por célula, atendendo Material Design spec.
-            // `childAspectRatio: 1.0` garante célula quadrada, e com `mainAxisSpacing: 6`
-            // (em vez de 4) há espaço suficiente sem perder real-estate.
+            // Grid de dias do mês. `mainAxisExtent: 48` força a altura de cada linha (e,
+            // portanto, de cada célula) a exatamente 48dp — o mínimo recomendado para alvo de
+            // toque — independentemente da largura da tela. Sem isso, o `GridView` entrega
+            // constraints apertadas (tight) para cada célula com base em `childAspectRatio`,
+            // o que faz qualquer `ConstrainedBox(minHeight/minWidth: 48)` dentro dela ser inerte
+            // (o `parent.enforce` de um `ConstrainedBox` sob constraints tight sempre resulta no
+            // tamanho tight do pai): em telas de 320dp de largura a célula ficava com ~38.9dp de
+            // altura, bem abaixo do piso de 48dp.
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
-                mainAxisSpacing: 6,
-                crossAxisSpacing: 6,
-                childAspectRatio: 1.0,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                mainAxisExtent: 48,
               ),
               itemCount: 42, // 6 semanas × 7 dias
               itemBuilder: (_, index) {
@@ -456,56 +514,23 @@ class _MonthCalendarView extends ConsumerWidget {
                 final eventosDoDia = _eventosNoDia(dia, eventos);
                 final temEvento = eventosDoDia.isNotEmpty;
                 final ehHoje = dia == hoje;
+                final qtdEventos = eventosDoDia.length;
+                final rotuloEventos = qtdEventos == 0
+                    ? 'nenhum evento'
+                    : qtdEventos == 1
+                    ? '1 evento'
+                    : '$qtdEventos eventos';
 
-                return Container(
-                  decoration: BoxDecoration(
-                    color: ehHoje
-                        ? colorScheme.primary.withValues(alpha: 0.25)
-                        : Colors.transparent,
-                    border: ehHoje
-                        ? Border.all(color: colorScheme.primary, width: 2)
-                        : Border.all(
-                      color: temEvento
-                          ? colorScheme.secondary.withValues(alpha: 0.5)
-                          : colorScheme.outline,
-                      width: 1,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _abrirEventosDoDia(context, dia, eventosDoDia),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$dia',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                fontWeight: ehHoje ? FontWeight.bold : FontWeight.normal,
-                                color: ehHoje ? colorScheme.primary : null,
-                              ),
-                            ),
-                            if (temEvento)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.secondary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                void abrirDia() =>
+                    _abrirEventosDoDia(context, dia, eventosDoDia);
+
+                return _DayCell(
+                  dia: dia,
+                  label: '$dia de $nomeMesCompleto, $rotuloEventos',
+                  ehHoje: ehHoje,
+                  temEvento: temEvento,
+                  corBordaIdle: corBordaIdle,
+                  onTap: abrirDia,
                 );
               },
             ),
@@ -514,11 +539,125 @@ class _MonthCalendarView extends ConsumerWidget {
       },
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: CircularProgressIndicator(),
+        child: Center(child: CircularProgressIndicator()),
       ),
       error: (err, __) => _CalendarErrorPanel(
         error: err,
         onRetry: () => ref.invalidate(monthEventsProvider((ano, mes))),
+      ),
+    );
+  }
+}
+
+/// Célula individual de dia no grid do mês. É um `StatefulWidget` (em vez de uma função que
+/// devolve widgets direto no `itemBuilder`) porque o indicador de foco de teclado precisa
+/// reagir a `onFocusChange` com `setState` — sem estado local não há como saber, no momento do
+/// `build`, se esta célula específica está focada.
+///
+/// O indicador de foco usa a mesma borda opaca de 2dp em `colorScheme.primary` já usada para
+/// marcar "hoje" (contraste ≈7:1 contra o scaffold claro/escuro, medido nos comentários de
+/// `_kBorderLight`/`_kBorderDark` acima). Uma abordagem com cor translúcida (`focusColor` padrão
+/// do `InkWell`, ou um `overlayColor` semi-transparente) foi descartada: qualquer alpha baixo o
+/// bastante para não esconder o número do dia também não atinge os 3:1 mínimos exigidos para
+/// indicadores de UI não-textual — só uma borda opaca resolve os dois requisitos ao mesmo tempo.
+class _DayCell extends StatefulWidget {
+  const _DayCell({
+    required this.dia,
+    required this.label,
+    required this.ehHoje,
+    required this.temEvento,
+    required this.corBordaIdle,
+    required this.onTap,
+  });
+
+  final int dia;
+  final String label;
+  final bool ehHoje;
+  final bool temEvento;
+  final Color corBordaIdle;
+  final VoidCallback onTap;
+
+  @override
+  State<_DayCell> createState() => _DayCellState();
+}
+
+class _DayCellState extends State<_DayCell> {
+  bool _focado = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    // O anel de foco usa sempre a mesma borda opaca de 2dp em `colorScheme.primary` já usada
+    // para marcar "hoje" — inclusive quando a célula É "hoje", pois o preenchimento translúcido
+    // do dia atual reduz o contraste do `focusColor` padrão do `InkWell` para ~1.30:1 (abaixo do
+    // piso de 3:1 exigido para indicadores de UI não-textual).
+    final mostrarAnelFoco = _focado;
+
+    return Semantics(
+      button: true,
+      label: widget.label,
+      onTap: widget.onTap,
+      excludeSemantics: true,
+      child: Container(
+        // O preenchimento de fundo fica em `decoration` (não consome espaço do filho). A borda
+        // fica em `foregroundDecoration`: `Container` desconta a largura de uma borda em
+        // `decoration` do espaço disponível para o filho (insere o filho pela espessura da
+        // borda) mas NÃO faz isso para `foregroundDecoration` — sem essa separação a borda de
+        // 1-2dp reduzia a área tocável do `InkWell` para ~46.9dp, abaixo do piso de 48dp.
+        decoration: BoxDecoration(
+          color: widget.ehHoje
+              ? colorScheme.primary.withValues(alpha: 0.25)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        foregroundDecoration: BoxDecoration(
+          border: widget.ehHoje || mostrarAnelFoco
+              ? Border.all(color: colorScheme.primary, width: 2)
+              : Border.all(
+                  color: widget.temEvento
+                      ? colorScheme.secondary
+                      : widget.corBordaIdle,
+                  width: 1,
+                ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(8),
+            onFocusChange: (focado) => setState(() => _focado = focado),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${widget.dia}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontWeight: widget.ehHoje
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: widget.ehHoje ? colorScheme.primary : null,
+                    ),
+                  ),
+                  if (widget.temEvento)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: colorScheme.secondary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -547,11 +686,21 @@ class _EventCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final corBorda = theme.brightness == Brightness.light
+        ? _kBorderLight
+        : _kBorderDark;
     final horaInicio = _formatTime(event.dataHoraInicio);
     final horaFim = _formatTime(event.dataHoraFim);
 
     return Card(
+      // O tema global usa `elevation: 0` sem sombra; sem uma borda explícita este card fica
+      // indistinguível do scaffold no modo escuro (#1A1F23 sobre #1A1F23 = 1.00:1 de contraste).
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        side: BorderSide(color: corBorda),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -568,9 +717,9 @@ class _EventCard extends ConsumerWidget {
             // Título (principal)
             Text(
               event.titulo,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -592,6 +741,9 @@ class _EventCard extends ConsumerWidget {
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: const Text('Editar'),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: corBorda, width: 1.5),
+                ),
                 onPressed: () => showDialog<void>(
                   context: context,
                   builder: (_) => _EventFormDialog(event: event),
@@ -635,7 +787,9 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
     super.initState();
     final event = widget.event;
     _titleController = TextEditingController(text: event?.titulo ?? '');
-    _descriptionController = TextEditingController(text: event?.descricao ?? '');
+    _descriptionController = TextEditingController(
+      text: event?.descricao ?? '',
+    );
     _ehDiaInteiro = event?.ehDiaInteiro ?? false;
     if (event != null) {
       _startTime = event.dataHoraInicio;
@@ -644,7 +798,12 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
       // Novo evento: sugere daqui a 1h, com 1h de duração — só um ponto de partida razoável,
       // totalmente editável através dos seletores de data/hora abaixo.
       final agora = DateTime.now();
-      final sugerido = DateTime(agora.year, agora.month, agora.day, agora.hour + 1);
+      final sugerido = DateTime(
+        agora.year,
+        agora.month,
+        agora.day,
+        agora.hour + 1,
+      );
       _startTime = sugerido;
       _endTime = sugerido.add(const Duration(hours: 1));
     }
@@ -685,7 +844,13 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
     if (hora == null || !mounted) return;
 
     setState(() {
-      final novaDataHora = DateTime(data.year, data.month, data.day, hora.hour, hora.minute);
+      final novaDataHora = DateTime(
+        data.year,
+        data.month,
+        data.day,
+        hora.hour,
+        hora.minute,
+      );
       if (ehInicio) {
         _startTime = novaDataHora;
         if (!_endTime.isAfter(_startTime)) {
@@ -701,9 +866,9 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
   Future<void> _salvar() async {
     final titulo = _titleController.text.trim();
     if (titulo.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dê um título ao evento.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Dê um título ao evento.')));
       return;
     }
     if (!_endTime.isAfter(_startTime)) {
@@ -741,7 +906,9 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
       ref.invalidate(monthEventsProvider);
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isEditing ? 'Evento atualizado' : 'Evento criado')),
+        SnackBar(
+          content: Text(_isEditing ? 'Evento atualizado' : 'Evento criado'),
+        ),
       );
     } catch (_) {
       if (!mounted) return;
@@ -765,8 +932,14 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
         title: const Text('Excluir evento?'),
         content: const Text('Esta ação não pode ser desfeita.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
         ],
       ),
     );
@@ -779,14 +952,16 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
       ref.invalidate(upcomingEventsProvider);
       ref.invalidate(monthEventsProvider);
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Evento excluído')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Evento excluído')));
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível excluir o evento. Tente novamente.')),
+        const SnackBar(
+          content: Text('Não foi possível excluir o evento. Tente novamente.'),
+        ),
       );
     }
   }
@@ -800,21 +975,17 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
+            AppInput(
+              label: 'Título',
+              placeholder: 'Nome do evento',
               controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Título',
-                hintText: 'Nome do evento',
-              ),
               onChanged: (_) => _marcarAlterado(),
             ),
             const SizedBox(height: 16),
-            TextField(
+            AppInput(
+              label: 'Descrição',
+              placeholder: 'Detalhes adicionais',
               controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Descrição',
-                hintText: 'Detalhes adicionais',
-              ),
               maxLines: 3,
               onChanged: (_) => _marcarAlterado(),
             ),
@@ -860,7 +1031,9 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: (_hasChanges || !_isEditing) && !_saving ? _salvar : null,
+              onPressed: (_hasChanges || !_isEditing) && !_saving
+                  ? _salvar
+                  : null,
               child: _saving
                   ? const SizedBox(
                       width: 18,

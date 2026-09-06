@@ -20,6 +20,11 @@ import 'home_layout_mode.dart';
 import 'home_design_style.dart';
 import 'home_providers.dart';
 
+// Idle border: ≥2.5:1 contra scaffold #FAF8F5 (light) / #1A1F23 (dark).
+// Reusa os mesmos tokens já aprovados em AppInput e AppChip.
+const Color _kBorderLight = Color(0xFF9C9690); // 2.76:1 vs #FAF8F5
+const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -54,7 +59,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _checkGuide() async {
     try {
-      final versaoVista = await ref.read(guidePreferenceProvider).getVersaoVista();
+      final versaoVista = await ref
+          .read(guidePreferenceProvider)
+          .getVersaoVista();
       final pendentes = itemsToShow(guideItems, versaoVista);
       if (pendentes.isEmpty || !mounted) return;
 
@@ -80,15 +87,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     // Sem spinner na tela principal: `resumo` já é o próprio default do provider, então cair
     // nele enquanto a preferência carrega não troca de layout visivelmente depois.
-    final modo = ref.watch(homeLayoutModeProvider).maybeWhen(
-          data: (m) => m,
-          orElse: () => HomeLayoutMode.resumo,
-        );
+    final modo = ref
+        .watch(homeLayoutModeProvider)
+        .maybeWhen(data: (m) => m, orElse: () => HomeLayoutMode.resumo);
 
-    final design = ref.watch(homeDesignStyleProvider).maybeWhen(
-          data: (d) => d,
-          orElse: () => HomeDesignStyle.minimalista,
-        );
+    final design = ref
+        .watch(homeDesignStyleProvider)
+        .maybeWhen(data: (d) => d, orElse: () => HomeDesignStyle.minimalista);
 
     return Scaffold(
       appBar: AppBar(
@@ -102,12 +107,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
       body: switch ((modo, design)) {
-        (HomeLayoutMode.resumo, HomeDesignStyle.minimalista) => const _HomeMinimalistaResumoView(),
-        (HomeLayoutMode.resumo, HomeDesignStyle.moderno) => const _HomeModernoResumoView(),
-        (HomeLayoutMode.resumo, HomeDesignStyle.funcional) => const _HomeFuncionalResumoView(),
-        (HomeLayoutMode.abas, HomeDesignStyle.minimalista) => const _HomeMinimalistaAbasView(),
-        (HomeLayoutMode.abas, HomeDesignStyle.moderno) => const _HomeModernoAbasView(),
-        (HomeLayoutMode.abas, HomeDesignStyle.funcional) => const _HomeFuncionalAbasView(),
+        (HomeLayoutMode.resumo, HomeDesignStyle.minimalista) =>
+          const _HomeMinimalistaResumoView(),
+        (HomeLayoutMode.resumo, HomeDesignStyle.moderno) =>
+          const _HomeModernoResumoView(),
+        (HomeLayoutMode.resumo, HomeDesignStyle.funcional) =>
+          const _HomeFuncionalResumoView(),
+        (HomeLayoutMode.abas, HomeDesignStyle.minimalista) =>
+          const _HomeMinimalistaAbasView(),
+        (HomeLayoutMode.abas, HomeDesignStyle.moderno) =>
+          const _HomeModernoAbasView(),
+        (HomeLayoutMode.abas, HomeDesignStyle.funcional) =>
+          const _HomeFuncionalAbasView(),
       },
     );
   }
@@ -157,7 +168,10 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Tudo em ordem por hoje.', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Tudo em ordem por hoje.',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           _GmailCard(statusAsync: gmailStatusAsync),
           const SizedBox(height: 16),
@@ -256,7 +270,11 @@ class _GmailCard extends ConsumerWidget {
       debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar o Gmail. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -271,7 +289,9 @@ class _GmailCard extends ConsumerWidget {
             child: ListTile(
               leading: const Icon(Icons.mail_outline),
               title: const Text('Caixa de Entrada'),
-              subtitle: const Text('Conecte seu Gmail para ver um resumo calmo dos seus e-mails.'),
+              subtitle: const Text(
+                'Conecte seu Gmail para ver um resumo calmo dos seus e-mails.',
+              ),
               trailing: ElevatedButton(
                 onPressed: () => _connect(context, ref),
                 child: const Text('Conectar Gmail'),
@@ -289,7 +309,12 @@ class _GmailCard extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('Caixa de Entrada'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(
+        child: ListTile(
+          title: Text('Caixa de Entrada'),
+          subtitle: Text('Carregando...'),
+        ),
+      ),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -305,13 +330,20 @@ class _FinancasCard extends ConsumerWidget {
     // conta conectada, não a cada banco novo que o usuário adicionar depois.
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
+      final connectToken = await ref
+          .read(financeConnectionRepositoryProvider)
+          .createConnectToken();
       if (!context.mounted) return;
       final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => PluggyConnectWebviewScreen(connectToken: connectToken)),
+        MaterialPageRoute(
+          builder: (_) =>
+              PluggyConnectWebviewScreen(connectToken: connectToken),
+        ),
       );
       if (itemId == null) return;
-      await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
+      await ref
+          .read(financeConnectionRepositoryProvider)
+          .finalizeConnection(itemId);
       ref.invalidate(financeConnectionsProvider);
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
@@ -319,7 +351,11 @@ class _FinancasCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar sua conta. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar sua conta. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -328,7 +364,10 @@ class _FinancasCard extends ConsumerWidget {
   /// Pergunta o dia de recebimento logo após a primeira conexão, já que ele é o que define o
   /// ciclo do saldo livre. É um nice-to-have: recusar ou digitar algo inválido só segue o
   /// fluxo em silêncio — o usuário pode definir depois em Configurações.
-  Future<void> _promptDiaRecebimento(BuildContext context, WidgetRef ref) async {
+  Future<void> _promptDiaRecebimento(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final controller = TextEditingController();
     final dia = await showDialog<int>(
       context: context,
@@ -338,12 +377,20 @@ class _FinancasCard extends ConsumerWidget {
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Ex: 5 (dia 5 de cada mês)'),
+          decoration: const InputDecoration(
+            hintText: 'Ex: 5 (dia 5 de cada mês)',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Agora não')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Agora não'),
+          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text.trim())),
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              int.tryParse(controller.text.trim()),
+            ),
             child: const Text('Salvar'),
           ),
         ],
@@ -368,7 +415,9 @@ class _FinancasCard extends ConsumerWidget {
             child: ListTile(
               leading: const Icon(Icons.account_balance_outlined),
               title: const Text('Finanças'),
-              subtitle: const Text('Conecte uma conta para ver seu saldo livre.'),
+              subtitle: const Text(
+                'Conecte uma conta para ver seu saldo livre.',
+              ),
               trailing: ElevatedButton(
                 onPressed: () => _connect(context, ref),
                 child: const Text('Conectar conta'),
@@ -386,7 +435,12 @@ class _FinancasCard extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('Finanças'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(
+        child: ListTile(
+          title: Text('Finanças'),
+          subtitle: Text('Carregando...'),
+        ),
+      ),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -405,7 +459,8 @@ class _SaldoLivreSubtitle extends ConsumerWidget {
     final summaryAsync = ref.watch(financeSummaryProvider);
     final fallback = Text('$connectionCount conta(s) conectada(s)');
     return summaryAsync.when(
-      data: (summary) => Text('Saldo livre: R\$ ${summary.saldoLivre.toStringAsFixed(2)}'),
+      data: (summary) =>
+          Text('Saldo livre: R\$ ${summary.saldoLivre.toStringAsFixed(2)}'),
       loading: () => fallback,
       error: (_, __) => fallback,
     );
@@ -419,12 +474,16 @@ class _BiofeedbackCard extends ConsumerWidget {
 
   Future<void> _ativar(BuildContext context, WidgetRef ref) async {
     try {
-      final autorizado = await ref.read(biofeedbackHealthServiceProvider).solicitarPermissao();
+      final autorizado = await ref
+          .read(biofeedbackHealthServiceProvider)
+          .solicitarPermissao();
       if (!autorizado) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Permissão não concedida. Você pode tentar novamente quando quiser.'),
+              content: Text(
+                'Permissão não concedida. Você pode tentar novamente quando quiser.',
+              ),
             ),
           );
         }
@@ -442,8 +501,12 @@ class _BiofeedbackCard extends ConsumerWidget {
       await ref
           .read(biofeedbackCacheProvider)
           .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
-      final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
-      await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
+      final frequenciaMinutos = await ref
+          .read(biofeedbackCacheProvider)
+          .getFrequenciaMinutos();
+      await ref
+          .read(biofeedbackBackgroundTaskProvider)
+          .registrar(Duration(minutes: frequenciaMinutos));
       try {
         await ref.read(biofeedbackSyncServiceProvider).sincronizar();
       } catch (_) {
@@ -457,7 +520,11 @@ class _BiofeedbackCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível ativar o Biofeedback. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível ativar o Biofeedback. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -492,7 +559,12 @@ class _BiofeedbackCard extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Card(child: ListTile(title: Text('Biofeedback'), subtitle: Text('Carregando...'))),
+      loading: () => const Card(
+        child: ListTile(
+          title: Text('Biofeedback'),
+          subtitle: Text('Carregando...'),
+        ),
+      ),
       // O card do Biofeedback nunca some da Home (restrição global do pilar): se não deu para
       // ler o estado de ativação, mostramos o card inativo, que continua sendo um ponto de
       // entrada válido — ativar de novo é idempotente.
@@ -524,7 +596,9 @@ class _UltimaFcSubtitle extends ConsumerWidget {
     final resumoAsync = ref.watch(biofeedbackResumoProvider);
     return resumoAsync.when(
       data: (resumo) {
-        if (resumo?.ultimaFc == null) return const Text('Nenhum dado disponível ainda');
+        if (resumo?.ultimaFc == null) {
+          return const Text('Nenhum dado disponível ainda');
+        }
         // Sem "agora": a última leitura pode ter horas, já que a sincronização é periódica.
         final rotuloEstado = _rotuloEstado(resumo!.estadoEstresse);
         final texto = rotuloEstado.isEmpty
@@ -573,7 +647,9 @@ class _ProfessionalsCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.medical_services_outlined),
         title: const Text('Encontrar profissional'),
-        subtitle: const Text('Busque profissionais neuroafirmativos perto de você.'),
+        subtitle: const Text(
+          'Busque profissionais neuroafirmativos perto de você.',
+        ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).pushNamed('/professionals'),
       ),
@@ -590,7 +666,9 @@ class _GroundingCardsCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.self_improvement_outlined),
         title: const Text('Alívio sensorial'),
-        subtitle: const Text('Técnicas de aterramento e alívio para o dia a dia.'),
+        subtitle: const Text(
+          'Técnicas de aterramento e alívio para o dia a dia.',
+        ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
       ),
@@ -614,9 +692,15 @@ class _HomeModernoResumoView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Você está em dia', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Você está em dia',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 6),
-          Text('Tudo sob controle', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            'Tudo sob controle',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 20),
           _ModernoGmailCard(statusAsync: gmailStatusAsync),
           const SizedBox(height: 11),
@@ -674,7 +758,9 @@ class _HomeModernoAbasView extends ConsumerWidget {
                 ListView(
                   padding: const EdgeInsets.all(14),
                   children: [
-                    _ModernoFinancasCard(connectionsAsync: financeConnectionsAsync),
+                    _ModernoFinancasCard(
+                      connectionsAsync: financeConnectionsAsync,
+                    ),
                   ],
                 ),
                 ListView(
@@ -712,7 +798,11 @@ class _ModernoGmailCard extends ConsumerWidget {
       debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar o Gmail. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -725,20 +815,27 @@ class _ModernoGmailCard extends ConsumerWidget {
         if (!status.connected) {
           return Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Colors.blue.withAlpha(25), Colors.cyan.withAlpha(15)],
+                  colors: [
+                    Colors.blue.withAlpha(25),
+                    Colors.cyan.withAlpha(15),
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: ListTile(
                 leading: Icon(Icons.mail_outline, color: Colors.blue[600]),
                 title: const Text('Caixa de Entrada'),
-                subtitle: const Text('Conecte seu Gmail para ver um resumo calmo dos seus e-mails.'),
+                subtitle: const Text(
+                  'Conecte seu Gmail para ver um resumo calmo dos seus e-mails.',
+                ),
                 trailing: ElevatedButton(
                   onPressed: () => _connect(context, ref),
                   child: const Text('Conectar Gmail'),
@@ -780,13 +877,20 @@ class _ModernoFinancasCard extends ConsumerWidget {
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
+      final connectToken = await ref
+          .read(financeConnectionRepositoryProvider)
+          .createConnectToken();
       if (!context.mounted) return;
       final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => PluggyConnectWebviewScreen(connectToken: connectToken)),
+        MaterialPageRoute(
+          builder: (_) =>
+              PluggyConnectWebviewScreen(connectToken: connectToken),
+        ),
       );
       if (itemId == null) return;
-      await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
+      await ref
+          .read(financeConnectionRepositoryProvider)
+          .finalizeConnection(itemId);
       ref.invalidate(financeConnectionsProvider);
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
@@ -794,13 +898,20 @@ class _ModernoFinancasCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar sua conta. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar sua conta. Tente novamente.',
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<void> _promptDiaRecebimento(BuildContext context, WidgetRef ref) async {
+  Future<void> _promptDiaRecebimento(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final controller = TextEditingController();
     final dia = await showDialog<int>(
       context: context,
@@ -810,12 +921,20 @@ class _ModernoFinancasCard extends ConsumerWidget {
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Ex: 5 (dia 5 de cada mês)'),
+          decoration: const InputDecoration(
+            hintText: 'Ex: 5 (dia 5 de cada mês)',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Agora não')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Agora não'),
+          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text.trim())),
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              int.tryParse(controller.text.trim()),
+            ),
             child: const Text('Salvar'),
           ),
         ],
@@ -836,20 +955,30 @@ class _ModernoFinancasCard extends ConsumerWidget {
         if (connections.isEmpty) {
           return Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Colors.green.withAlpha(25), Colors.teal.withAlpha(15)],
+                  colors: [
+                    Colors.green.withAlpha(25),
+                    Colors.teal.withAlpha(15),
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: ListTile(
-                leading: Icon(Icons.account_balance_outlined, color: Colors.green[600]),
+                leading: Icon(
+                  Icons.account_balance_outlined,
+                  color: Colors.green[600],
+                ),
                 title: const Text('Finanças'),
-                subtitle: const Text('Conecte uma conta para ver seu saldo livre.'),
+                subtitle: const Text(
+                  'Conecte uma conta para ver seu saldo livre.',
+                ),
                 trailing: ElevatedButton(
                   onPressed: () => _connect(context, ref),
                   child: const Text('Conectar conta'),
@@ -862,7 +991,10 @@ class _ModernoFinancasCard extends ConsumerWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           child: ListTile(
-            leading: Icon(Icons.account_balance_outlined, color: Colors.green[600]),
+            leading: Icon(
+              Icons.account_balance_outlined,
+              color: Colors.green[600],
+            ),
             title: const Text('Finanças'),
             subtitle: _SaldoLivreSubtitle(connectionCount: connections.length),
             trailing: const Icon(Icons.chevron_right),
@@ -875,7 +1007,10 @@ class _ModernoFinancasCard extends ConsumerWidget {
         child: ListTile(
           title: const Text('Finanças'),
           subtitle: const Text('Carregando...'),
-          leading: Icon(Icons.account_balance_outlined, color: Colors.green[600]),
+          leading: Icon(
+            Icons.account_balance_outlined,
+            color: Colors.green[600],
+          ),
         ),
       ),
       error: (_, __) => const SizedBox.shrink(),
@@ -890,12 +1025,16 @@ class _ModernoBiofeedbackCard extends ConsumerWidget {
 
   Future<void> _ativar(BuildContext context, WidgetRef ref) async {
     try {
-      final autorizado = await ref.read(biofeedbackHealthServiceProvider).solicitarPermissao();
+      final autorizado = await ref
+          .read(biofeedbackHealthServiceProvider)
+          .solicitarPermissao();
       if (!autorizado) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Permissão não concedida. Você pode tentar novamente quando quiser.'),
+              content: Text(
+                'Permissão não concedida. Você pode tentar novamente quando quiser.',
+              ),
             ),
           );
         }
@@ -905,8 +1044,12 @@ class _ModernoBiofeedbackCard extends ConsumerWidget {
       await ref
           .read(biofeedbackCacheProvider)
           .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
-      final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
-      await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
+      final frequenciaMinutos = await ref
+          .read(biofeedbackCacheProvider)
+          .getFrequenciaMinutos();
+      await ref
+          .read(biofeedbackBackgroundTaskProvider)
+          .registrar(Duration(minutes: frequenciaMinutos));
       try {
         await ref.read(biofeedbackSyncServiceProvider).sincronizar();
       } catch (_) {}
@@ -916,7 +1059,11 @@ class _ModernoBiofeedbackCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível ativar o Biofeedback. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível ativar o Biofeedback. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -929,7 +1076,9 @@ class _ModernoBiofeedbackCard extends ConsumerWidget {
         if (!ativo) {
           return Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -942,7 +1091,9 @@ class _ModernoBiofeedbackCard extends ConsumerWidget {
               child: ListTile(
                 leading: Icon(Icons.favorite_border, color: Colors.red[600]),
                 title: const Text('Biofeedback'),
-                subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
+                subtitle: const Text(
+                  'Acompanhe seu bem-estar com seu smartwatch.',
+                ),
                 trailing: ElevatedButton(
                   onPressed: () => _ativar(context, ref),
                   child: const Text('Ativar Biofeedback'),
@@ -1011,14 +1162,22 @@ class _ModernoProfessionalsCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.purple.withAlpha(25), Colors.blue.withAlpha(15)],
+            colors: [
+              Theme.of(context).colorScheme.primary.withAlpha(25),
+              Theme.of(context).colorScheme.secondary.withAlpha(15),
+            ],
           ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: ListTile(
-          leading: Icon(Icons.medical_services_outlined, color: Colors.purple[600]),
+          leading: Icon(
+            Icons.medical_services_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           title: const Text('Encontrar profissional'),
-          subtitle: const Text('Busque profissionais neuroafirmativos perto de você.'),
+          subtitle: const Text(
+            'Busque profissionais neuroafirmativos perto de você.',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).pushNamed('/professionals'),
         ),
@@ -1045,9 +1204,14 @@ class _ModernoGroundingCardsCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: ListTile(
-          leading: Icon(Icons.self_improvement_outlined, color: Colors.orange[600]),
+          leading: Icon(
+            Icons.self_improvement_outlined,
+            color: Colors.deepOrange[700],
+          ),
           title: const Text('Alívio sensorial'),
-          subtitle: const Text('Técnicas de aterramento e alívio para o dia a dia.'),
+          subtitle: const Text(
+            'Técnicas de aterramento e alívio para o dia a dia.',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
         ),
@@ -1072,7 +1236,10 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Monitorando seu ritmo', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Monitorando seu ritmo',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 12),
           _FuncionalStatusSummary(),
           const SizedBox(height: 16),
@@ -1132,13 +1299,17 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
                     const SizedBox(height: 8),
                     _FuncionalCalendarCard(eventsAsync: calendarEventsAsync),
                     const SizedBox(height: 8),
-                    _FuncionalBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
+                    _FuncionalBiofeedbackCard(
+                      ativoAsync: biofeedbackAtivoAsync,
+                    ),
                   ],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(12),
                   children: [
-                    _FuncionalFinancasCard(connectionsAsync: financeConnectionsAsync),
+                    _FuncionalFinancasCard(
+                      connectionsAsync: financeConnectionsAsync,
+                    ),
                   ],
                 ),
                 ListView(
@@ -1162,31 +1333,57 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
   }
 }
 
-class _FuncionalStatusSummary extends StatelessWidget {
+class _FuncionalStatusSummary extends ConsumerWidget {
   const _FuncionalStatusSummary();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final biofeedbackAsync = ref.watch(biofeedbackAtivoProvider);
+    final label = biofeedbackAsync.when(
+      data: (v) => v ? 'Monitoramento ativo' : 'Monitoramento inativo',
+      loading: () => 'Verificando...',
+      error: (_, __) => 'Dados indisponíveis',
+    );
+    final icon = biofeedbackAsync.when(
+      data: (v) => v ? Icons.check_circle : Icons.circle_outlined,
+      loading: () => Icons.hourglass_empty_outlined,
+      error: (_, __) => Icons.error_outline,
+    );
+    final iconColor = biofeedbackAsync.when<Color>(
+      data: (v) => v ? Colors.green[700]! : colorScheme.onSurfaceVariant,
+      loading: () => colorScheme.onSurfaceVariant,
+      error: (_, __) => colorScheme.onSurfaceVariant,
+    );
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
+          color: theme.brightness == Brightness.light
+              ? _kBorderLight
+              : _kBorderDark,
           width: 1.5,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Status do dia', style: Theme.of(context).textTheme.labelMedium),
+          Text('Status do dia', style: theme.textTheme.labelMedium),
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.check_circle, size: 18, color: Colors.green[600]),
+              Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Sem triagem necessária', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ],
@@ -1209,7 +1406,11 @@ class _FuncionalGmailCard extends ConsumerWidget {
       debugPrintStack(stackTrace: st);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar o Gmail. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar o Gmail. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -1223,7 +1424,12 @@ class _FuncionalGmailCard extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? _kBorderLight
+                    : _kBorderDark,
+                width: 1,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -1234,7 +1440,10 @@ class _FuncionalGmailCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Email', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Email',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                       const Text('Conectar', style: TextStyle(fontSize: 12)),
                     ],
                   ),
@@ -1250,7 +1459,12 @@ class _FuncionalGmailCard extends ConsumerWidget {
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.light
+                  ? _kBorderLight
+                  : _kBorderDark,
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -1261,12 +1475,20 @@ class _FuncionalGmailCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Email', style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text(status.gmailEmail ?? 'Email não disponível', style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const Text(
+                      'Email',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      status.gmailEmail ?? 'Email não disponível',
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[600]),
+              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
             ],
           ),
         );
@@ -1274,7 +1496,12 @@ class _FuncionalGmailCard extends ConsumerWidget {
       loading: () => Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.light
+                ? _kBorderLight
+                : _kBorderDark,
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Row(
@@ -1298,13 +1525,20 @@ class _FuncionalFinancasCard extends ConsumerWidget {
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
+      final connectToken = await ref
+          .read(financeConnectionRepositoryProvider)
+          .createConnectToken();
       if (!context.mounted) return;
       final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => PluggyConnectWebviewScreen(connectToken: connectToken)),
+        MaterialPageRoute(
+          builder: (_) =>
+              PluggyConnectWebviewScreen(connectToken: connectToken),
+        ),
       );
       if (itemId == null) return;
-      await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
+      await ref
+          .read(financeConnectionRepositoryProvider)
+          .finalizeConnection(itemId);
       ref.invalidate(financeConnectionsProvider);
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
@@ -1312,13 +1546,20 @@ class _FuncionalFinancasCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível conectar sua conta. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar sua conta. Tente novamente.',
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<void> _promptDiaRecebimento(BuildContext context, WidgetRef ref) async {
+  Future<void> _promptDiaRecebimento(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final controller = TextEditingController();
     final dia = await showDialog<int>(
       context: context,
@@ -1331,9 +1572,15 @@ class _FuncionalFinancasCard extends ConsumerWidget {
           decoration: const InputDecoration(hintText: 'Ex: 5'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Agora não')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Agora não'),
+          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text.trim())),
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              int.tryParse(controller.text.trim()),
+            ),
             child: const Text('Salvar'),
           ),
         ],
@@ -1355,7 +1602,12 @@ class _FuncionalFinancasCard extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? _kBorderLight
+                    : _kBorderDark,
+                width: 1,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -1366,7 +1618,10 @@ class _FuncionalFinancasCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Finanças', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Finanças',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                       const Text('Conectar', style: TextStyle(fontSize: 12)),
                     ],
                   ),
@@ -1382,7 +1637,12 @@ class _FuncionalFinancasCard extends ConsumerWidget {
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.light
+                  ? _kBorderLight
+                  : _kBorderDark,
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -1393,12 +1653,18 @@ class _FuncionalFinancasCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Finanças', style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text('${connections.length} conta(s)', style: const TextStyle(fontSize: 12)),
+                    const Text(
+                      'Finanças',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      '${connections.length} conta(s)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[600]),
+              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
             ],
           ),
         );
@@ -1406,7 +1672,12 @@ class _FuncionalFinancasCard extends ConsumerWidget {
       loading: () => Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.light
+                ? _kBorderLight
+                : _kBorderDark,
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Row(
@@ -1429,12 +1700,16 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
 
   Future<void> _ativar(BuildContext context, WidgetRef ref) async {
     try {
-      final autorizado = await ref.read(biofeedbackHealthServiceProvider).solicitarPermissao();
+      final autorizado = await ref
+          .read(biofeedbackHealthServiceProvider)
+          .solicitarPermissao();
       if (!autorizado) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Permissão não concedida. Você pode tentar novamente quando quiser.'),
+              content: Text(
+                'Permissão não concedida. Você pode tentar novamente quando quiser.',
+              ),
             ),
           );
         }
@@ -1444,8 +1719,12 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
       await ref
           .read(biofeedbackCacheProvider)
           .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
-      final frequenciaMinutos = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
-      await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: frequenciaMinutos));
+      final frequenciaMinutos = await ref
+          .read(biofeedbackCacheProvider)
+          .getFrequenciaMinutos();
+      await ref
+          .read(biofeedbackBackgroundTaskProvider)
+          .registrar(Duration(minutes: frequenciaMinutos));
       try {
         await ref.read(biofeedbackSyncServiceProvider).sincronizar();
       } catch (_) {}
@@ -1455,7 +1734,11 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível ativar o Biofeedback. Tente novamente.')),
+          const SnackBar(
+            content: Text(
+              'Não foi possível ativar o Biofeedback. Tente novamente.',
+            ),
+          ),
         );
       }
     }
@@ -1469,7 +1752,12 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? _kBorderLight
+                    : _kBorderDark,
+                width: 1,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -1480,7 +1768,10 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Biofeedback', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Biofeedback',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                       const Text('Ativar', style: TextStyle(fontSize: 12)),
                     ],
                   ),
@@ -1496,7 +1787,12 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.light
+                  ? _kBorderLight
+                  : _kBorderDark,
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -1507,12 +1803,15 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Biofeedback', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const Text(
+                      'Biofeedback',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
                     const Text('Ativo', style: TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[600]),
+              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
             ],
           ),
         );
@@ -1520,7 +1819,12 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
       loading: () => Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.light
+                ? _kBorderLight
+                : _kBorderDark,
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Row(
@@ -1534,7 +1838,12 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
       error: (_, __) => Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.light
+                ? _kBorderLight
+                : _kBorderDark,
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -1545,7 +1854,10 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Biofeedback', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Biofeedback',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const Text('Ativar', style: TextStyle(fontSize: 12)),
                 ],
               ),
@@ -1566,19 +1878,41 @@ class _FuncionalProfessionalsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.medical_services_outlined, size: 20),
-          const SizedBox(width: 10),
-          const Expanded(child: Text('Profissionais')),
-          Icon(Icons.chevron_right, size: 20, color: Colors.grey[600]),
-        ],
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: 'Profissionais',
+      onTap: () => Navigator.of(context).pushNamed('/professionals'),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).pushNamed('/professionals'),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? _kBorderLight
+                    : _kBorderDark,
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.medical_services_outlined, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Profissionais')),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1589,19 +1923,41 @@ class _FuncionalGroundingCardsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.self_improvement_outlined, size: 20),
-          const SizedBox(width: 10),
-          const Expanded(child: Text('Alívio sensorial')),
-          Icon(Icons.chevron_right, size: 20, color: Colors.grey[600]),
-        ],
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: 'Alívio sensorial',
+      onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? _kBorderLight
+                    : _kBorderDark,
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.self_improvement_outlined, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Alívio sensorial')),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1686,7 +2042,10 @@ class _ModernoCalendarCard extends ConsumerWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: ListTile(
-              leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+              leading: Icon(
+                Icons.calendar_today_outlined,
+                color: colorScheme.primary,
+              ),
               title: const Text('Próximos eventos'),
               subtitle: Text(
                 upcomingThree.isEmpty
@@ -1704,7 +2063,10 @@ class _ModernoCalendarCard extends ConsumerWidget {
         child: ListTile(
           title: const Text('Próximos eventos'),
           subtitle: const Text('Carregando...'),
-          leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+          leading: Icon(
+            Icons.calendar_today_outlined,
+            color: colorScheme.primary,
+          ),
         ),
       ),
       error: (_, __) => Card(
@@ -1723,7 +2085,10 @@ class _ModernoCalendarCard extends ConsumerWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: ListTile(
-            leading: Icon(Icons.calendar_today_outlined, color: colorScheme.primary),
+            leading: Icon(
+              Icons.calendar_today_outlined,
+              color: colorScheme.primary,
+            ),
             title: const Text('Próximos eventos'),
             subtitle: const Text('Conecte o Google Calendar para sincronizar'),
             trailing: const Icon(Icons.chevron_right),
@@ -1747,76 +2112,130 @@ class _FuncionalCalendarCard extends ConsumerWidget {
     return eventsAsync.when(
       data: (events) {
         final upcomingThree = events.take(3).toList();
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        final calLabel = upcomingThree.isEmpty
+            ? 'Calendário — nenhum evento'
+            : 'Calendário — ${upcomingThree.length} evento(s)';
+        return Semantics(
+          button: true,
+          excludeSemantics: true,
+          label: calLabel,
+          onTap: () => Navigator.of(context).pushNamed('/calendar'),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pushNamed('/calendar'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? _kBorderLight
+                        : _kBorderDark,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
                   children: [
-                    const Text('Calendário', style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text(
-                      upcomingThree.isEmpty
-                          ? 'Nenhum evento'
-                          : '${upcomingThree.length} evento(s)',
-                      style: const TextStyle(fontSize: 12),
+                    const Icon(Icons.calendar_today_outlined, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Calendário',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            upcomingThree.isEmpty
+                                ? 'Nenhum evento'
+                                : '${upcomingThree.length} evento(s)',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ],
                 ),
               ),
-              GestureDetector(
-                onTap: () => Navigator.of(context).pushNamed('/calendar'),
-                child: Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
-      loading: () => Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.calendar_today_outlined, size: 20),
-            SizedBox(width: 10),
-            Expanded(child: Text('Calendário')),
-          ],
-        ),
-      ),
-      error: (_, __) => Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_today_outlined, size: 20),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Calendário')),
-            GestureDetector(
-              onTap: () => Navigator.of(context).pushNamed('/calendar'),
-              child: Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+      loading: () => Semantics(
+        button: true,
+        excludeSemantics: true,
+        label: 'Calendário — carregando',
+        onTap: () => Navigator.of(context).pushNamed('/calendar'),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).pushNamed('/calendar'),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? _kBorderLight
+                      : _kBorderDark,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Calendário')),
+                ],
               ),
             ),
-          ],
+          ),
+        ),
+      ),
+      error: (_, __) => Semantics(
+        button: true,
+        excludeSemantics: true,
+        label: 'Calendário — ver mais',
+        onTap: () => Navigator.of(context).pushNamed('/calendar'),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).pushNamed('/calendar'),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? _kBorderLight
+                      : _kBorderDark,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text('Calendário')),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

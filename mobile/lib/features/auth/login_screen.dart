@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/widgets/app_button.dart';
+import '../../core/widgets/app_input.dart';
 import 'auth_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -105,6 +107,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = colorScheme.brightness == Brightness.dark;
+    final isLight = colorScheme.brightness == Brightness.light;
 
     return Scaffold(
       body: Stack(
@@ -116,7 +119,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                 end: Alignment.bottomCenter,
                 colors: [
                   colorScheme.surface,
-                  isDark ? const Color(0xFF34322B) : const Color(0xFFF5F2ED),
+                  isDark ? colorScheme.surface : const Color(0xFFF5F2ED),
                 ],
               ),
             ),
@@ -190,195 +193,160 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                   position: _slideAnimation,
                   child: FadeTransition(
                     opacity: _fadeAnimation,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Email
-                          SizedBox(
-                            height: 68,
-                            child: TextField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              style: const TextStyle(fontSize: 16),
-                              decoration: InputDecoration(
-                                labelText: 'E-mail',
-                                labelStyle: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
-                                prefixIcon: Icon(Icons.mail_outline, color: colorScheme.onSurfaceVariant, size: 24),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: colorScheme.outline, width: 2),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                                ),
-                                filled: true,
-                                fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Email
+                              AppInput(
+                                label: 'E-mail',
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Senha
-                          SizedBox(
-                            height: 68,
-                            child: TextField(
-                              controller: _senhaController,
-                              obscureText: true,
-                              style: const TextStyle(fontSize: 16),
-                              decoration: InputDecoration(
-                                labelText: 'Senha',
-                                labelStyle: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
-                                prefixIcon: Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant, size: 24),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: colorScheme.outline, width: 2),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                                ),
-                                filled: true,
-                                fillColor: isDark ? const Color(0xFF34322B) : Colors.white,
+                              const SizedBox(height: 16),
+                              // Senha
+                              AppInput(
+                                label: 'Senha',
+                                controller: _senhaController,
+                                obscureText: true,
+                                textInputAction: TextInputAction.done,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          // Erro
-                          if (_error != null)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: colorScheme.error.withAlpha(25),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: colorScheme.error.withAlpha(100)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.warning_rounded, color: colorScheme.error, size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _error!,
-                                      style: TextStyle(color: colorScheme.error, fontSize: 13),
+                              const SizedBox(height: 24),
+                              // Erro
+                              if (_error != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: colorScheme.error.withAlpha(180),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          const SizedBox(height: 24),
-                          // Remember Me
-                          Row(
-                            children: [
-                              Checkbox(
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_rounded,
+                                        color: colorScheme.error,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _error!,
+                                          style: TextStyle(
+                                            color: colorScheme.error,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                              ],
+                              // Remember Me
+                              CheckboxListTile(
                                 value: _rememberMe,
-                                onChanged: (value) => setState(() => _rememberMe = value ?? false),
-                              ),
-                              Expanded(
-                                child: Text(
+                                onChanged: (value) => setState(
+                                  () => _rememberMe = value ?? false,
+                                ),
+                                title: Text(
                                   'Lembrar-me neste dispositivo',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                dense: true,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          // Botão Entrar
-                          SizedBox(
-                            height: 64,
-                            child: ElevatedButton(
-                              onPressed: (_loading || _googleLoading) ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              const SizedBox(height: 24),
+                              // Botão Entrar
+                              AppButton(
+                                label: 'Entrar',
+                                size: AppButtonSize.large,
+                                onPressed: (_loading || _googleLoading)
+                                    ? null
+                                    : _submit,
+                                isLoading: _loading,
                               ),
-                              child: _loading
-                                  ? SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
-                                      ),
-                                    )
-                                  : const Text('Entrar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Divider
-                          Row(
-                            children: [
-                              Expanded(child: Divider(color: colorScheme.outline)),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                child: Text(
-                                  'OU',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              Expanded(child: Divider(color: colorScheme.outline)),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          // Botão Google
-                          SizedBox(
-                            height: 64,
-                            child: OutlinedButton(
-                              onPressed: (_loading || _googleLoading) ? null : _submitGoogle,
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                side: BorderSide(color: colorScheme.outline, width: 2),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                              ),
-                              child: _googleLoading
-                                  ? SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Text('🔐', style: TextStyle(fontSize: 20)),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Entrar com Google',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: colorScheme.onSurface,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          // Link para signup
-                          Center(
-                            child: RichText(
-                              text: TextSpan(
-                                text: 'Não tem conta? ',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
+                              const SizedBox(height: 16),
+                              // Divider
+                              Row(
                                 children: [
-                                  WidgetSpan(
-                                    child: GestureDetector(
-                                      onTap: () => Navigator.of(context).pushNamed('/signup'),
+                                  Expanded(
+                                    child: Divider(
+                                      color: isLight
+                                          ? const Color(0xFF9C9690)
+                                          : const Color(0xFF66605A),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: Text(
+                                      'OU',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Divider(
+                                      color: isLight
+                                          ? const Color(0xFF9C9690)
+                                          : const Color(0xFF66605A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              // Botão Google
+                              AppButton(
+                                label: 'Entrar com Google',
+                                variant: AppButtonVariant.outline,
+                                size: AppButtonSize.large,
+                                onPressed: (_loading || _googleLoading)
+                                    ? null
+                                    : _submitGoogle,
+                                isLoading: _googleLoading,
+                              ),
+                              const SizedBox(height: 32),
+                              // Link para signup
+                              Center(
+                                child: Wrap(
+                                  alignment: WrapAlignment.center,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Não tem conta? ',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(
+                                        context,
+                                      ).pushNamed('/signup'),
+                                      style: TextButton.styleFrom(
+                                        minimumSize: const Size(48, 48),
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.padded,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                      ),
                                       child: Text(
                                         'Criar uma conta',
                                         style: TextStyle(
@@ -389,12 +357,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

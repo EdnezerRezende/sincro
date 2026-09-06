@@ -313,7 +313,13 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     // chamador (`build`) resolve a prioridade isLoading > disabled antes de passar
     // este valor, de forma que loading nunca renderiza com o fill apagado.
     final resolvedBgColor = WidgetStateProperty.resolveWith((states) {
-      if (disabled) return disabledBgColor;
+      if (disabled) {
+        // Outline desabilitado nunca deve ganhar um fill sólido — isso o faria
+        // parecer um botão primário e perderia sua identidade visual. Mantém
+        // transparente; o border (abaixo) já usa a cor idle apagada.
+        if (variant == AppButtonVariant.outline) return Colors.transparent;
+        return disabledBgColor;
+      }
       if (states.contains(WidgetState.pressed)) {
         // Press state: queda de luminância de ~28% (observável), canal alternativo
         // além do overlay do ripple.
@@ -327,7 +333,20 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     });
 
     final resolvedFgColor = WidgetStateProperty.resolveWith((states) {
-      if (disabled) return disabledFgColor;
+      if (disabled) {
+        // Outline desabilitado: usa onSurfaceVariant (mais dimmed) em vez do
+        // disabledFgColor sólido, para não parecer mais forte que o outline
+        // habilitado (que usa scheme.secondary a ~7:1). Disabled é isento do
+        // mínimo de contraste do WCAG 1.4.3 ("inactive UI component").
+        // Em dark, onSurfaceVariant (#B8B8B8, L=0.4793) é mais claro que o
+        // outline habilitado (scheme.secondary #4DB8E8, L=0.4174), invertendo
+        // a hierarquia visual — usa _kBorderDark (L≈0.119), nitidamente mais
+        // dimmed. Em light, onSurfaceVariant já é corretamente mais dimmed.
+        if (variant == AppButtonVariant.outline) {
+          return isLight ? scheme.onSurfaceVariant : _kBorderDark;
+        }
+        return disabledFgColor;
+      }
       return defaultFgColor;
     });
 
@@ -338,21 +357,45 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       return 0.0; // Default = flat (Material 3 minimal elevation)
     });
 
-    // Para outline/border, precisamos usar OutlinedButton ou customizar manualmente
-    late final OutlinedBorder shape;
-    if (variant == AppButtonVariant.outline || variant == AppButtonVariant.text) {
-      shape = RoundedRectangleBorder(
+    // Para outline/border, precisamos usar OutlinedButton ou customizar manualmente.
+    // Resolvido por estado para permitir um border de foco (2.5dp, scheme.primary)
+    // distinto do border idle — necessário para indicador de foco visível
+    // (WCAG 2.4.7) no variant outline, onde o overlay sozinho é sutil demais
+    // sobre fundo transparente.
+    final resolvedShape = WidgetStateProperty.resolveWith<OutlinedBorder>((states) {
+      if (variant == AppButtonVariant.outline || variant == AppButtonVariant.text) {
+        if (states.contains(WidgetState.focused)) {
+          if (variant == AppButtonVariant.outline) {
+            return RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              side: BorderSide(
+                color: scheme.primary,
+                width: 2.5,
+              ),
+            );
+          }
+          if (variant == AppButtonVariant.text) {
+            return RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              side: BorderSide(
+                color: scheme.primary,
+                width: 2.0,
+              ),
+            );
+          }
+        }
+        return RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+          side: BorderSide(
+            color: borderColor ?? Colors.transparent,
+            width: borderWidth,
+          ),
+        );
+      }
+      return RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12.0),
-        side: BorderSide(
-          color: borderColor ?? Colors.transparent,
-          width: borderWidth,
-        ),
       );
-    } else {
-      shape = RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      );
-    }
+    });
 
     // Usar ButtonStyle() diretamente para controle total
     return ButtonStyle(
@@ -367,8 +410,25 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       ),
       minimumSize: WidgetStateProperty.all(Size(minWidth, height)),
       maximumSize: WidgetStateProperty.all(Size(double.infinity, height)),
-      shape: WidgetStateProperty.all(shape),
+      shape: resolvedShape,
       overlayColor: WidgetStateProperty.resolveWith((states) {
+        // Focused tem prioridade sobre hovered: sem isso, tab-navigation não
+        // produz nenhuma diferença visual em relação ao estado idle (WCAG 2.4.7
+        // Focus Visible falha). Tint visível (~12% alpha) sobre o fill/fundo.
+        if (states.contains(WidgetState.focused)) {
+          // Outline e text têm fundo transparente/scaffold — precisam de um tint
+          // que contraste com esse fundo (primary), não com o fill inexistente.
+          if (variant == AppButtonVariant.outline ||
+              variant == AppButtonVariant.text) {
+            return scheme.primary.withAlpha(30);
+          }
+          // Primary/secondary têm fill sólido — o tint precisa contrastar com
+          // a cor de fill de cada variante, não sempre onPrimary.
+          if (variant == AppButtonVariant.secondary) {
+            return scheme.onSecondary.withAlpha(30);
+          }
+          return scheme.onPrimary.withAlpha(30);
+        }
         if (states.contains(WidgetState.hovered)) {
           return scheme.onSurface.withValues(alpha: 0.08);
         }
@@ -390,6 +450,17 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     bool disabled,
   ) {
     if (disabled) {
+      // Outline desabilitado: usa onSurfaceVariant (mais dimmed) em vez do
+      // tom sólido abaixo, para não parecer mais forte que o outline
+      // habilitado (que usa scheme.secondary a ~7:1). Disabled é isento do
+      // mínimo de contraste do WCAG 1.4.3 ("inactive UI component").
+      // Em dark, onSurfaceVariant (#B8B8B8, L=0.4793) é mais claro que o
+      // outline habilitado (scheme.secondary #4DB8E8, L=0.4174), invertendo
+      // a hierarquia visual — usa _kBorderDark (L≈0.119), nitidamente mais
+      // dimmed. Em light, onSurfaceVariant já é corretamente mais dimmed.
+      if (variant == AppButtonVariant.outline) {
+        return isLight ? scheme.onSurfaceVariant : _kBorderDark;
+      }
       // Cores sólidas para ≥3:1 sobre o fill disabled (#928C86 light / #6E6862 dark).
       return isLight ? const Color(0xFF3A3630) : const Color(0xFFEEEEEE);
     }

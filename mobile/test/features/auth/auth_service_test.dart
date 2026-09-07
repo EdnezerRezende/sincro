@@ -20,7 +20,7 @@ void main() {
   setUp(() {
     mockFirebaseAuth = MockFirebaseAuth();
     mockGoogleSignIn = MockGoogleSignIn();
-    authService = AuthService(mockFirebaseAuth, mockGoogleSignIn);
+    authService = AuthService(mockFirebaseAuth, () => mockGoogleSignIn);
   });
 
   test('signUp delegates to createUserWithEmailAndPassword and returns the user', () async {

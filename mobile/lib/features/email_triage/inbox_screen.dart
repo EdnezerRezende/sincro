@@ -5,6 +5,12 @@ import 'email_detail_screen.dart';
 import 'email_summary.dart';
 import 'email_triage_providers.dart';
 
+// Calibrated against scaffold AND card fills in both themes.
+// #7C7672: L≈0.185 → 4.22:1 vs #FAF8F5, 3.77:1 vs #F1EBE1 (light fills);
+//                       3.73:1 vs #1A1F23, 3.02:1 vs #2A2F35, 3.18:1 vs #2C2B26 (dark fills).
+const Color _kBorderLight = Color(0xFF7C7672);
+const Color _kBorderDark = Color(0xFF7C7672);
+
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
 
@@ -21,16 +27,28 @@ class InboxScreen extends ConsumerWidget {
             if (summaries.isEmpty) {
               return const _EmptyState();
             }
-            final precisamAtencao = summaries.where((s) => s.precisaAtencao).toList();
-            final podemEsperar = summaries.where((s) => !s.precisaAtencao).toList();
+            final precisamAtencao = summaries
+                .where((s) => s.precisaAtencao)
+                .toList();
+            final podemEsperar = summaries
+                .where((s) => !s.precisaAtencao)
+                .toList();
 
             final items = <_InboxListItem>[
               if (precisamAtencao.isNotEmpty) ...[
-                _InboxListItem.header('Precisam de atenção', precisamAtencao.length, isPending: true),
+                _InboxListItem.header(
+                  'Precisam de atenção',
+                  precisamAtencao.length,
+                  isPending: true,
+                ),
                 ...precisamAtencao.map(_InboxListItem.email),
               ],
               if (podemEsperar.isNotEmpty) ...[
-                _InboxListItem.header('Podem esperar', podemEsperar.length, isPending: false),
+                _InboxListItem.header(
+                  'Podem esperar',
+                  podemEsperar.length,
+                  isPending: false,
+                ),
                 ...podemEsperar.map(_InboxListItem.email),
               ],
             ];
@@ -71,14 +89,14 @@ class InboxScreen extends ConsumerWidget {
 /// ListView.builder build tiles on demand instead of the whole inbox eagerly.
 class _InboxListItem {
   const _InboxListItem.header(this.title, this.count, {required this.isPending})
-      : summary = null,
-        isHeader = true;
+    : summary = null,
+      isHeader = true;
 
   const _InboxListItem.email(this.summary)
-      : title = null,
-        count = 0,
-        isPending = false,
-        isHeader = false;
+    : title = null,
+      count = 0,
+      isPending = false,
+      isHeader = false;
 
   final String? title;
   final EmailSummary? summary;
@@ -112,7 +130,9 @@ class _EmptyState extends StatelessWidget {
               Text(
                 'Nenhum e-mail novo por aqui.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
               ),
             ],
           ),
@@ -149,7 +169,9 @@ class _ErrorState extends StatelessWidget {
               Text(
                 'Não foi possível carregar seus e-mails.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 24),
               FilledButton(
@@ -183,57 +205,61 @@ class _SectionHeader extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final sincroColors = context.sincroColors;
 
-    final badgeColor = isPending ? sincroColors.caution : colors.onSurfaceVariant;
+    final badgeColor = isPending
+        ? sincroColors.caution
+        : colors.onSurfaceVariant;
 
-    return Padding(
-      // 16/24/16/12: on the 8dp grid (theme.dart _spacing4/_spacing6/_spacing3) — the
-      // previous top inset of 20 was off-grid.
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: colors.onSurface,
-                    fontWeight: FontWeight.w600,
+    return Semantics(
+      header: true,
+      child: Padding(
+        // 16/24/16/12: on the 8dp grid (theme.dart _spacing4/_spacing6/_spacing3) — the
+        // previous top inset of 20 was off-grid.
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: colors.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          Container(
-            // horizontal 8 (was 10, off-grid) — theme.dart _spacing2.
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: badgeColor.withValues(alpha: 0.3),
-                width: 1,
+            Container(
+              // horizontal 8 (was 10, off-grid) — theme.dart _spacing2.
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              // No border: the filled background already communicates the category, and a
+              // translucent border (`badgeColor.withValues(alpha: 0.3)`, ~1.54:1) fails the 3:1
+              // floor required for non-text UI. Omitting it is safer than another opacity guess.
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    count.toString(),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: badgeColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  count.toString(),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: badgeColor,
-                        fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -254,10 +280,24 @@ class _SectionHeader extends StatelessWidget {
 /// uniform color; the accent lives in its own `Container` inside an `IntrinsicHeight`-sized
 /// `Row` so it spans the tile's full height without a fixed height literal that could desync
 /// from the (variable-height) text content.
-class _EmailTile extends StatelessWidget {
+///
+/// This is a `StatefulWidget` (not stateless) because the keyboard focus ring needs to react to
+/// `onFocusChange` with `setState` — there's no way to know, at build time, whether this specific
+/// tile is focused without local state. The ring reuses `colorScheme.primary` as an opaque 2dp
+/// border (same pattern as `_DayCell` in calendar_screen.dart) instead of the default `InkWell`
+/// `focusColor`, whose low alpha over these tinted backgrounds measured ~1.30:1 — far below the
+/// 3:1 floor for non-text UI indicators.
+class _EmailTile extends StatefulWidget {
   const _EmailTile({required this.summary});
 
   final EmailSummary summary;
+
+  @override
+  State<_EmailTile> createState() => _EmailTileState();
+}
+
+class _EmailTileState extends State<_EmailTile> {
+  bool _focado = false;
 
   String _formatarDataRelativa(DateTime dt) {
     final agora = DateTime.now();
@@ -282,8 +322,10 @@ class _EmailTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final summary = widget.summary;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final textTheme = theme.textTheme;
     final caution = context.sincroColors.caution;
     final pending = summary.precisaAtencao;
 
@@ -294,105 +336,148 @@ class _EmailTile extends StatelessWidget {
     // `surfaceContainerHighest` is the token theme.dart defines explicitly and distinctly from
     // both scaffold colors in light (0xFFF5F5F5 vs 0xFFFAF8F5) and dark (0xFF2A2F35 vs
     // 0xFF1A1F23), so it's used here instead.
-    final backgroundColor = pending ? caution.withValues(alpha: 0.08) : colors.surfaceContainerHighest;
-    // Uniform single color on every side — never mixed with the accent color (see class doc).
-    final perimeterBorderColor = pending ? caution.withValues(alpha: 0.3) : colors.outline;
+    final backgroundColor = pending
+        ? caution.withValues(alpha: 0.08)
+        : colors.surfaceContainerHighest;
+    // Idle border: always `_kBorderLight`/`_kBorderDark`, for both the plain and pending states.
+    // `colorScheme.outline` measured 1.25:1 and `caution.withValues(alpha: 0.3)` measured 1.68:1
+    // — both fail the 2.5:1 floor for a container border. The caution accent stripe already
+    // carries the urgency signal, so the perimeter border doesn't need to repeat it.
+    final idleBorderColor = theme.brightness == Brightness.light
+        ? _kBorderLight
+        : _kBorderDark;
     final accentColor = pending ? caution : Colors.transparent;
+
+    void abrirDetalhe() => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EmailDetailScreen(summary: summary)),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => EmailDetailScreen(summary: summary)),
+      child: Semantics(
+        button: true,
+        label:
+            '${summary.assunto} de ${summary.remetente} '
+            '${_formatarDataRelativa(summary.recebidoEm)}, '
+            '${summary.resumoCurto}, '
+            '${pending ? "precisa de atenção" : "pode esperar"}',
+        onTap: abrirDetalhe,
+        excludeSemantics: true,
+        child: Container(
+          // Minimum touch target: 48dp
+          constraints: const BoxConstraints(minHeight: 48),
+          // Clips all children (including the accent stripe below) to this container's rounded
+          // rectangle shape. Without this, the accent stripe — a sibling of the InkWell, not
+          // itself bounded by the card's RRect — overflows the card's 12dp corners: its own
+          // `Radius.circular(12)` gets clamped down to ~2dp anyway (Flutter clamps a decoration's
+          // corner radii when they sum to more than the box's width: 12+12=24 > the stripe's
+          // 4dp width), so it could never match the card's corner even un-clipped.
+          clipBehavior: Clip.antiAlias,
+          // Fill color lives in `decoration` (doesn't consume the child's space). The border
+          // lives in `foregroundDecoration` instead: `Container` deducts a `decoration` border's
+          // width from the space available to its child, but does not do so for
+          // `foregroundDecoration` — without this split, the 1-2dp border would shrink the
+          // tappable `InkWell` area below the 48dp floor.
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(12),
           ),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            // Minimum touch target: 48dp
-            constraints: const BoxConstraints(minHeight: 48),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border.all(color: perimeterBorderColor, width: 1),
-              borderRadius: BorderRadius.circular(12),
+          foregroundDecoration: BoxDecoration(
+            border: Border.all(
+              color: _focado ? colors.primary : idleBorderColor,
+              width: _focado ? 2 : 1,
             ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Caution accent stripe. Single-color decoration (never mixed with the
-                  // perimeter border), no fixed height — IntrinsicHeight + stretch size it to
-                  // match the text column exactly, however tall that grows.
-                  Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      // 16: theme.dart _spacing4, documented as "list item padding".
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Top row: sender (left, most emphasized) + timestamp (top-right,
-                          // where mail clients conventionally place it) with the pending
-                          // indicator next to it.
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  summary.remetente,
-                                  style: textTheme.bodyMedium?.copyWith(
-                                    color: colors.onSurface,
-                                    fontWeight: FontWeight.w600,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: abrirDetalhe,
+              onFocusChange: (focado) => setState(() => _focado = focado),
+              focusColor: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Caution accent stripe. Single-color decoration (never mixed with the
+                    // perimeter border), no fixed height — IntrinsicHeight + stretch size it to
+                    // match the text column exactly, however tall that grows. No borderRadius
+                    // here: the outer Container's `clipBehavior: Clip.antiAlias` already clips
+                    // this stripe to the card's 12dp corners.
+                    Container(width: 4, color: accentColor),
+                    Expanded(
+                      child: Padding(
+                        // 16: theme.dart _spacing4, documented as "list item padding".
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Top row: sender (left, most emphasized) + timestamp (top-right,
+                            // where mail clients conventionally place it) with the pending
+                            // indicator next to it.
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    summary.remetente,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: colors.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (pending) ...[
-                                Icon(Icons.mark_email_unread_outlined, color: caution, size: 14),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 8),
+                                if (pending) ...[
+                                  Icon(
+                                    Icons.mark_email_unread_outlined,
+                                    color: caution,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                // No alpha here: `subtitleColor.withValues(alpha: 0.8)` measured
+                                // 3.28:1/3.57:1 (light) — below the 4.5:1 AA floor.
+                                // `onSurfaceVariant` at full opacity measures 4.84:1/7.15:1.
+                                Text(
+                                  _formatarDataRelativa(summary.recebidoEm),
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
                               ],
-                              // No alpha here: `subtitleColor.withValues(alpha: 0.8)` measured
-                              // 3.28:1/3.57:1 (light) — below the 4.5:1 AA floor.
-                              // `onSurfaceVariant` at full opacity measures 4.84:1/7.15:1.
-                              Text(
-                                _formatarDataRelativa(summary.recebidoEm),
-                                style: textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          // Subject: primary text, boldest weight in the tile.
-                          Text(
-                            summary.assunto,
-                            style: textTheme.bodyLarge?.copyWith(
-                              color: colors.onSurface,
-                              fontWeight: FontWeight.w600,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 8),
-                          // Summary: regular weight, muted — the least emphasized of the four
-                          // text elements, distinct from the semibold sender/subject above it.
-                          Text(
-                            summary.resumoCurto,
-                            style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            // Subject: primary text, boldest weight in the tile.
+                            Text(
+                              summary.assunto,
+                              style: textTheme.bodyLarge?.copyWith(
+                                color: colors.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            // Summary: regular weight, muted — the least emphasized of the four
+                            // text elements, distinct from the semibold sender/subject above it.
+                            Text(
+                              summary.resumoCurto,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

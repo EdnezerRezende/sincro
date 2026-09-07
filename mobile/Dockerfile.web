@@ -2,12 +2,17 @@ FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 COPY . .
 RUN flutter pub get
-# Defaults to the browser's own localhost: the mobile-web container serves static assets that
-# then run in the *user's* browser on the host, not inside the Docker network — so it needs the
-# backend's host-published port (docker-compose.yml maps backend's 3000 to the host), not a
-# Docker-internal service name like `backend:3000`. The app's own compiled-in default
-# (10.0.2.2, api_providers.dart) is for the Android emulator instead, and would time out here.
-ARG API_BASE_URL=http://localhost:3000
+# Relative path, not an absolute host:port — the compiled JS runs in the *user's* browser,
+# which resolves a relative baseUrl (e.g. requests to "/api/users/me") against the page's own
+# origin (see Dio's RequestOptions.uri + the web adapter's `xhr.open(method, '${options.uri}')`,
+# which hands the browser a relative string and lets *it* apply same-origin resolution). That
+# means the exact same build works same-origin/HTTPS behind Caddy in the sandbox
+# (infra/Caddyfile: `/api/*` → strip_prefix `/api` → reverse_proxy 127.0.0.1:3000) and, without
+# any Caddy in front, in local docker-compose (nginx.conf below proxies `/api/` to the `backend`
+# service on the internal Docker network, stripping the same prefix) — no mixed content, no CORS
+# preflight in the sandbox, and nothing to hardcode per environment. The app's own compiled-in
+# default (10.0.2.2, api_providers.dart) is for the Android emulator instead and is untouched.
+ARG API_BASE_URL=/api
 RUN flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
 
 FROM nginx:alpine AS runtime

@@ -9,6 +9,12 @@ import 'pluggy_connect_webview_screen.dart';
 
 final _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
+// Calibrated against scaffold AND card fills in both themes.
+// #7C7672: L≈0.185 → 4.22:1 vs #FAF8F5, 3.77:1 vs #F1EBE1 (light fills);
+//                       3.73:1 vs #1A1F23, 3.02:1 vs #2A2F35, 3.18:1 vs #2C2B26 (dark fills).
+const Color _kBorderLight = Color(0xFF7C7672);
+const Color _kBorderDark  = Color(0xFF7C7672);
+
 /// Formata em pt-BR ("R\$ 1.284,37") em vez do `toStringAsFixed(2)` cru ("R\$ 1284.37").
 String _formatCurrency(double value) => _currencyFormat.format(value);
 
@@ -162,18 +168,25 @@ class _LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(color: colors.primary),
-          const SizedBox(height: 16),
-          Text(
-            'Carregando suas finanças...',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 48),
+              CircularProgressIndicator(color: colors.primary),
+              const SizedBox(height: 16),
+              Text(
+                'Carregando suas finanças...',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -328,8 +341,8 @@ class _FinancasContent extends ConsumerWidget {
     // Dark mode usa outline que já estava adequado.
     final cardBorderSide = BorderSide(
       color: theme.brightness == Brightness.light
-          ? theme.colorScheme.onSurfaceVariant
-          : theme.colorScheme.outline,
+          ? _kBorderLight
+          : _kBorderDark,
     );
     final heroColor = summary.saldoLivre < 0 ? sincroColors.caution : theme.colorScheme.primary;
 
@@ -506,19 +519,18 @@ class _FinancasContent extends ConsumerWidget {
                         ],
                       ),
                       ...precisaAtencao.map(
-                        (conexao) => InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                        (conexao) => Semantics(
+                          button: true,
+                          excludeSemantics: true,
+                          label: 'Reconectar ${_statusMessage(conexao)}',
                           onTap: () => _connectFinance(context, ref),
                           child: Container(
                             constraints: const BoxConstraints(minHeight: 48),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(_statusMessage(conexao), style: theme.textTheme.bodySmall),
-                                ),
-                                Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                              ],
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                              title: Text(_statusMessage(conexao), style: theme.textTheme.bodySmall),
+                              trailing: Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                              onTap: () => _connectFinance(context, ref),
                             ),
                           ),
                         ),

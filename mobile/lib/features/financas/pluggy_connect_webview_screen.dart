@@ -23,16 +23,23 @@ Set<String> newConnectionIds(Set<String> beforeIds, List<FinanceConnection> depo
 /// Aviso mostrado no web ANTES de abrir a aba do Pluggy Connect, só quando não existe nenhuma
 /// conexão prévia (`isFirstConnection`). Extraído como função pura pelo mesmo motivo de
 /// `newConnectionIds`: `kIsWeb` é falso em tempo de compilação nos testes de VM, então a única
-/// forma de testar a distinção primeira-conexão vs. reconexão sem um navegador de verdade é
-/// isolar a decisão textual do widget que a usa. Retorna `null` para reconexão — nesse caso o
-/// polling tem uma chance real de funcionar (a linha já existe; o webhook só precisa atualizá-la)
-/// e não há nada a avisar antes de abrir a aba.
+/// forma de testar o texto sem um navegador de verdade é isolar a decisão textual do widget.
+///
+/// Avisa nos DOIS casos, porque no navegador nenhum deles é confirmado automaticamente:
+/// primeira conexão depende de `finalizeConnection(itemId)`, que só roda no app nativo (a aba do
+/// Pluggy é outra origem e o `item_id` não é legível aqui); e reconexão não é detectável porque
+/// `newConnectionIds` compara por `id` — numa reconexão o `id` é o mesmo — e o `status` da linha
+/// também só é escrito por `finalizeConnection`. Prometer confirmação automática em qualquer um
+/// dos dois casos deixaria a pessoa repetindo para sempre uma ação que não pode dar certo.
 @visibleForTesting
 String? firstConnectionWarning({required bool isFirstConnection}) {
-  if (!isFirstConnection) return null;
-  return 'Você ainda não tem nenhuma conta conectada. Pelo navegador, só conseguimos confirmar '
-      'automaticamente a conclusão de contas que já existem — a sua primeira conexão só é '
-      'detectada de forma confiável pelo aplicativo, no celular. Você pode tentar por aqui, mas '
+  if (isFirstConnection) {
+    return 'Você ainda não tem nenhuma conta conectada. Pelo navegador não conseguimos confirmar '
+        'sozinhos que a conexão foi concluída — isso acontece de forma automática no aplicativo, '
+        'no celular. Você pode seguir por aqui, mas talvez precise concluir pelo app.';
+  }
+  return 'Pelo navegador não conseguimos confirmar sozinhos que a reconexão foi concluída — isso '
+      'acontece de forma automática no aplicativo, no celular. Você pode seguir por aqui, mas '
       'talvez precise concluir pelo app.';
 }
 
@@ -45,24 +52,28 @@ String tabOpenedMessage({required bool isFirstConnection}) {
       ? 'Complete a conexão na aba que abrimos. Como é sua primeira conexão, talvez não '
           'consigamos confirmar automaticamente por aqui — se isso acontecer, finalize pelo '
           'aplicativo no celular.'
-      : 'Complete a conexão na aba que abrimos. Volte aqui quando terminar.';
+      : 'Complete a reconexão na aba que abrimos e volte aqui. Se não conseguirmos confirmar '
+          'automaticamente, finalize pelo aplicativo no celular.';
 }
 
 /// Mensagem mostrada quando o polling não encontra uma conexão nova. Este é o ponto central do
 /// defeito relatado: para uma PRIMEIRA conexão, pedir para "tentar de novo" é enganoso, porque
 /// o backend só cria a linha de conexão via `finalizeConnection(itemId)` (caminho nativo) — o
-/// webhook (caminho web) só atualiza uma linha que já existe. Repetir o polling nunca vai
-/// funcionar nesse caso, então a mensagem precisa dizer a verdade em vez de insistir. Para
-/// reconexão, o "tente de novo" genérico continua correto: a linha já existe e o webhook pode
-/// legitimamente estar apenas atrasado.
+/// webhook (caminho web) só atualiza contas de uma linha que já existe, sem tocar no `status`.
+/// Repetir o polling não resolve, então a mensagem precisa dizer a verdade em vez de insistir.
+///
+/// Vale para reconexão também: `newConnectionIds` compara por `id`, e numa reconexão o `id` não
+/// muda — então o polling não tem como enxergar a conclusão. Pedir "toque de novo" aqui seria o
+/// mesmo engano, só com outro gatilho.
 @visibleForTesting
 String pollNotFoundMessage({required bool isFirstConnection}) {
   return isFirstConnection
       ? 'Não conseguimos confirmar sua primeira conexão por aqui — o navegador não recebe a '
           'confirmação de bancos novos automaticamente. Abra o aplicativo Sincro no celular para '
           'concluir; lá a confirmação acontece sozinha.'
-      : 'Ainda não detectamos a atualização da sua conexão. Se você já concluiu, aguarde alguns '
-          'segundos e toque em "Concluí a conexão" novamente.';
+      : 'Não conseguimos confirmar a reconexão por aqui — o navegador não recebe essa confirmação '
+          'automaticamente. Abra o aplicativo Sincro no celular para concluir; lá a confirmação '
+          'acontece sozinha.';
 }
 
 /// Hosts the Pluggy Connect flow. The two platform families need genuinely different
@@ -101,10 +112,12 @@ String pollNotFoundMessage({required bool isFirstConnection}) {
 /// CAVEAT (documented, not silently hidden): the backend only creates a `FinanceConnection` row
 /// when `finalizeConnection(itemId)` is called (see `finance-connections.service.ts`); Pluggy's
 /// webhook only *updates* a connection that already exists by matching `pluggyItemId`. That means
-/// this web polling path reliably detects a RECONNECT (the item already existed, and its status
-/// changes) but cannot make a genuinely brand-new first connection appear in
-/// `/financas/conexoes` on its own, since nothing on this path ever supplies the backend an
-/// itemId. Rather than fake a success, the UI here just keeps offering "Concluí a conexão" /
+/// this web polling path cannot make a brand-new first connection appear in `/financas/conexoes`
+/// on its own, since nothing here ever supplies the backend an itemId. It cannot confirm a
+/// RECONNECT either: `newConnectionIds` diffs by `id`, which does not change on a reconnect, and
+/// the row's `status` is likewise only ever written by `finalizeConnection`. So on web the poll
+/// never confirms anything — the messages say so plainly instead of inviting the user to keep
+/// retrying. Rather than fake a success, the UI here just keeps offering "Concluí a conexão" /
 /// "Cancelar" — never an unlabelled infinite spinner — so the user always has an exit and can
 /// finish the very first connection from the native (mobile) app if the web tab alone doesn't
 /// get picked up.

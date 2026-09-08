@@ -53,12 +53,17 @@ void main() {
   // new `financeConnection` row appear (only `finalizeConnection(itemId)`, the native-only path,
   // creates one — the webhook only updates an existing row), so a first connection attempted from
   // the browser can poll forever without ever succeeding. The messaging must say so instead of
-  // repeating a generic "try again" that will never come true. Reconnect (at least one connection
-  // already existed before the flow started) keeps the original "try again" wording, since that
-  // path has a real chance of succeeding once the webhook catches up.
+  // repeating a generic "try again" that will never come true.
+  //
+  // Reconnect is in the same boat, and a blind review caught the first version of this fix
+  // getting it wrong: `newConnectionIds` diffs by `id`, and a reconnect reuses the same `id`,
+  // while the row's `status` is likewise only ever written by `finalizeConnection`. So the poll
+  // confirms nothing on web either way, and BOTH messages have to say so.
   group('firstConnectionWarning', () {
-    test('is null for a reconnect (a connection already existed before opening Pluggy)', () {
-      expect(firstConnectionWarning(isFirstConnection: false), isNull);
+    test('warns on a reconnect too — the poll cannot confirm that either', () {
+      final aviso = firstConnectionWarning(isFirstConnection: false);
+      expect(aviso, isNotNull);
+      expect(aviso, contains('aplicativo'));
     });
 
     test('warns about the app requirement for a first connection, before opening Pluggy', () {
@@ -70,11 +75,10 @@ void main() {
   });
 
   group('tabOpenedMessage', () {
-    test('reconnect keeps the plain "come back when done" message', () {
-      expect(
-        tabOpenedMessage(isFirstConnection: false),
-        'Complete a conexão na aba que abrimos. Volte aqui quando terminar.',
-      );
+    test('reconnect also flags that confirmation may not come automatically', () {
+      final mensagem = tabOpenedMessage(isFirstConnection: false);
+      expect(mensagem, contains('aplicativo'));
+      expect(mensagem, isNot(contains('Volte aqui quando terminar.')));
     });
 
     test('first connection also warns it may not confirm automatically', () {
@@ -85,10 +89,12 @@ void main() {
   });
 
   group('pollNotFoundMessage', () {
-    test('reconnect gets the generic "try again in a few seconds" message', () {
+    test('reconnect never invites an infinite retry — it points to the app instead', () {
       final mensagem = pollNotFoundMessage(isFirstConnection: false);
-      expect(mensagem, contains('Concluí a conexão'));
-      expect(mensagem, isNot(contains('aplicativo Sincro no celular')));
+      expect(mensagem, contains('aplicativo Sincro no celular'));
+      // A regressão que um crítico cego pegou: mandar tocar de novo num botão cujo
+      // mecanismo de detecção não pode dar certo no navegador.
+      expect(mensagem, isNot(contains('novamente')));
     });
 
     test('first connection tells the truth instead of promising a retry will work', () {

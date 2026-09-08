@@ -1456,40 +1456,64 @@ class _FuncionalGmailCard extends ConsumerWidget {
             ),
           );
         }
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(context).brightness == Brightness.light
-                  ? _kBorderLight
-                  : _kBorderDark,
-              width: 1,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.mail_outline, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        final emailLabel = status.gmailEmail ?? 'Email não disponível';
+        return Semantics(
+          button: true,
+          excludeSemantics: true,
+          label: 'Email — $emailLabel',
+          onTap: () => Navigator.of(context).pushNamed('/inbox'),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pushNamed('/inbox'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? _kBorderLight
+                        : _kBorderDark,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
                   children: [
-                    const Text(
-                      'Email',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    const Icon(Icons.mail_outline, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Email',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            emailLabel,
+                            style: const TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      status.gmailEmail ?? 'Email não disponível',
-                      style: const TextStyle(fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Icon(
+                      Icons.check_circle,
+                      size: 20,
+                      color: Colors.green[700],
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
-            ],
+            ),
           ),
         );
       },
@@ -1784,35 +1808,63 @@ class _FuncionalBiofeedbackCard extends ConsumerWidget {
             ),
           );
         }
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(context).brightness == Brightness.light
-                  ? _kBorderLight
-                  : _kBorderDark,
-              width: 1,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.favorite_border, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        return Semantics(
+          button: true,
+          excludeSemantics: true,
+          label: 'Biofeedback ativo',
+          onTap: () => Navigator.of(context).pushNamed('/biofeedback'),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pushNamed('/biofeedback'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? _kBorderLight
+                        : _kBorderDark,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
                   children: [
-                    const Text(
-                      'Biofeedback',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    const Icon(Icons.favorite_border, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Biofeedback',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          DefaultTextStyle.merge(
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            child: const _UltimaFcSubtitle(),
+                          ),
+                        ],
+                      ),
                     ),
-                    const Text('Ativo', style: TextStyle(fontSize: 12)),
+                    Icon(
+                      Icons.check_circle,
+                      size: 20,
+                      color: Colors.green[700],
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
-            ],
+            ),
           ),
         );
       },

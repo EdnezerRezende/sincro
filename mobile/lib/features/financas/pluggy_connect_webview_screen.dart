@@ -1,32 +1,111 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'finance_connection.dart';
+import 'finance_connection_repository.dart';
+
 const _pluggyConnectBaseUrl = 'https://connect.pluggy.ai';
 
-/// Hosts the Pluggy Connect widget in-app so the user never visually leaves Sincro.
+/// Pure diff at the heart of the web success-detection path: which connection ids in [depois]
+/// (the list fetched *after* the user visits the Pluggy tab) weren't present in [beforeIds] (the
+/// snapshot captured *before* opening it). Extracted as a top-level, side-effect-free function so
+/// it can be unit-tested directly — the surrounding widget can't easily be driven in a plain VM
+/// test since `kIsWeb` is compile-time false there (see the test file for the full explanation).
+@visibleForTesting
+Set<String> newConnectionIds(Set<String> beforeIds, List<FinanceConnection> depois) {
+  return depois.map((c) => c.id).toSet().difference(beforeIds);
+}
+
+/// Hosts the Pluggy Connect flow. The two platform families need genuinely different
+/// implementations, so this widget forks hard on `kIsWeb` in `initState`/`build` and the two
+/// paths never share state:
 ///
-/// The widget never navigates away and never postMessages a parent (both would require an
-/// iframe host, which we don't have — this loads connect.pluggy.ai directly as the top-level
-/// page). Instead, once the user finishes connecting a bank, it calls `history.replaceState` to
-/// stamp the result (`item_id`, `execution_status`, `events`, ...) onto its OWN url as query
-/// params. So completion is detected via `onUrlChange`, which webview_flutter fires for History
-/// API changes too, not just real navigations.
+/// NATIVE (Android/iOS): the widget is hosted in-app via `webview_flutter`, so the user never
+/// visually leaves Sincro. The widget never navigates away and never postMessages a parent (both
+/// would require an iframe host, which we don't have — this loads connect.pluggy.ai directly as
+/// the top-level page of the WebView). Once the user finishes connecting a bank, Pluggy calls
+/// `history.replaceState` to stamp the result (`item_id`, `execution_status`, ...) onto that same
+/// page's url as query params. Completion is detected via `onUrlChange`, which webview_flutter
+/// fires for History API changes too, not just real navigations. The route pops the raw
+/// `String itemId` — the caller still has to exchange it with the backend
+/// (`FinanceConnectionRepository.finalizeConnection`) to actually persist the connection.
+///
+/// WEB: `webview_flutter` has NO web implementation (only `webview_flutter_android` and
+/// `webview_flutter_wkwebview` ship a platform interface registration). Instantiating
+/// `WebViewController()` on web makes `WebViewPlatform.instance!` throw — and the `assert` that
+/// would normally catch that misuse at dev time is stripped in `flutter build web --release`, so
+/// it surfaces as an uncaught runtime exception inside this route's `initState`, which the
+/// `Navigator.push` future being awaited by the caller never sees. Nobody calls `pop`, and the
+/// caller is stuck awaiting forever — the "processando" hang this fix exists for. So on
+/// `kIsWeb`, `WebViewController` is never constructed. Instead we open connect.pluggy.ai in a
+/// brand new browser TAB via `url_launcher` and, once the user comes back, ask the backend
+/// (`GET /financas/conexoes`) whether a new connection now exists — the `item_id` that Pluggy
+/// stamps onto its own URL lives on connect.pluggy.ai's tab (a different origin, a different
+/// browsing context), which our page can never read, so there is no way to recover an itemId on
+/// this path. Success is instead inferred by diffing the connections list captured right before
+/// opening the tab against the list captured after the user says (or the tab regaining focus
+/// implies) they're done. This route then pops `true` (never a String) — the caller must NOT
+/// call `finalizeConnection` in that branch, since the connection is already visible in
+/// `/financas/conexoes` by the time we detect it (see `_FinancasScreenState`'s `_connectFinance`
+/// for how both branches are reconciled).
+///
+/// CAVEAT (documented, not silently hidden): the backend only creates a `FinanceConnection` row
+/// when `finalizeConnection(itemId)` is called (see `finance-connections.service.ts`); Pluggy's
+/// webhook only *updates* a connection that already exists by matching `pluggyItemId`. That means
+/// this web polling path reliably detects a RECONNECT (the item already existed, and its status
+/// changes) but cannot make a genuinely brand-new first connection appear in
+/// `/financas/conexoes` on its own, since nothing on this path ever supplies the backend an
+/// itemId. Rather than fake a success, the UI here just keeps offering "Concluí a conexão" /
+/// "Cancelar" — never an unlabelled infinite spinner — so the user always has an exit and can
+/// finish the very first connection from the native (mobile) app if the web tab alone doesn't
+/// get picked up.
+///
+/// `connectionRepository` is optional on the constructor (not `required`) so that pre-existing
+/// call sites that don't pass it (see e.g. `home_screen.dart`) keep compiling untouched; on
+/// `kIsWeb` without a repository this widget shows an honest "not supported from here" state
+/// rather than crash (the original bug) or poll against nothing.
 class PluggyConnectWebviewScreen extends StatefulWidget {
-  const PluggyConnectWebviewScreen({super.key, required this.connectToken});
+  const PluggyConnectWebviewScreen({
+    super.key,
+    required this.connectToken,
+    this.connectionRepository,
+  });
 
   final String connectToken;
+
+  /// Used only by the `kIsWeb` path to poll `GET /financas/conexoes` before/after the user visits
+  /// the Pluggy tab. The native path never touches it. Optional (not `required`) on purpose: some
+  /// existing call sites in the codebase construct this widget without it, and this widget cannot
+  /// force every caller to be updated in lockstep. When `kIsWeb` and no repository was supplied,
+  /// the widget shows an honest "not supported from here on web" state instead of either crashing
+  /// (the original bug) or silently pretending to poll with nothing to poll with.
+  final FinanceConnectionRepository? connectionRepository;
 
   @override
   State<PluggyConnectWebviewScreen> createState() => _PluggyConnectWebviewScreenState();
 }
 
-class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen> {
-  late final WebViewController _controller;
-  bool _authBlocked = false;
-  // onUrlChange can fire more than once with a successful item_id (e.g. the widget updates the
-  // url again when the user taps "Fechar"), so this guards against popping the route twice.
+enum _WebState { loadingBaseline, baselineFailed, readyToOpen, waitingForUser, checking, unavailable }
+
+class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen> with WidgetsBindingObserver {
+  // Shared by both paths: guards against popping the route more than once (onUrlChange can fire
+  // more than once with a successful item_id on native; the poll timer and the lifecycle
+  // observer can both race to detect success on web).
   bool _popped = false;
+
+  // ---- Native only (Android/iOS) ----
+  WebViewController? _controller;
+  bool _authBlocked = false;
+
+  // ---- Web only ----
+  _WebState _webState = _WebState.loadingBaseline;
+  String? _webMessage;
+  Set<String> _beforeIds = <String>{};
+  Timer? _pollTimer;
 
   // Montada via Uri(...) para que connectToken seja percent-encoded corretamente. O nome do
   // parâmetro é `connect_token` (snake_case) — é o que o bundle do widget lê via
@@ -40,6 +119,20 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      // Never instantiate WebViewController here — see class doc. Instead, capture which
+      // connections already exist before the user ever opens the Pluggy tab, so a later diff
+      // can tell "pre-existing" apart from "just created".
+      WidgetsBinding.instance.addObserver(this);
+      if (widget.connectionRepository == null) {
+        // No repository to poll with — degrade honestly instead of crashing or hanging. Direct
+        // assignment (not setState): this runs before the first frame, in initState.
+        _webState = _WebState.unavailable;
+        return;
+      }
+      _captureBaseline();
+      return;
+    }
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -57,6 +150,98 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
         ),
       )
       ..loadRequest(_connectUrl);
+  }
+
+  @override
+  void dispose() {
+    if (kIsWeb) {
+      WidgetsBinding.instance.removeObserver(this);
+      _pollTimer?.cancel();
+    }
+    super.dispose();
+  }
+
+  // Redundant with the manual "Concluí a conexão" button and the periodic poll timer: whichever
+  // fires first wins. Some browsers reliably map tab-visibility changes to `resumed`; where they
+  // don't, the timer and the button both still give the user a way to complete the flow.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!kIsWeb) return;
+    if (state == AppLifecycleState.resumed && _webState == _WebState.waitingForUser && !_popped) {
+      _checkForNewConnection();
+    }
+  }
+
+  Future<void> _captureBaseline() async {
+    final repository = widget.connectionRepository;
+    if (repository == null) {
+      setState(() => _webState = _WebState.unavailable);
+      return;
+    }
+    setState(() => _webState = _WebState.loadingBaseline);
+    try {
+      final before = await repository.listConnections();
+      if (!mounted) return;
+      setState(() {
+        _beforeIds = before.map((c) => c.id).toSet();
+        _webState = _WebState.readyToOpen;
+      });
+    } catch (_) {
+      // If we can't read the "before" snapshot, we can't safely tell a pre-existing connection
+      // apart from a freshly created one — proceeding anyway risks a false positive ("success")
+      // the very first time the user opens this screen. Fails honestly instead, with a retry.
+      if (!mounted) return;
+      setState(() => _webState = _WebState.baselineFailed);
+    }
+  }
+
+  Future<void> _openPluggyInNewTab() async {
+    bool opened;
+    try {
+      opened = await launchUrl(_connectUrl, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _webState = opened ? _WebState.waitingForUser : _WebState.readyToOpen;
+      _webMessage = opened
+          ? 'Complete a conexão na aba que abrimos. Volte aqui quando terminar.'
+          : 'Não foi possível abrir o Pluggy Connect. Tente novamente.';
+    });
+    if (opened) {
+      _pollTimer?.cancel();
+      _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _checkForNewConnection());
+    }
+  }
+
+  Future<void> _checkForNewConnection() async {
+    final repository = widget.connectionRepository;
+    if (repository == null || _popped || _webState == _WebState.checking) return;
+    setState(() => _webState = _WebState.checking);
+    try {
+      final depois = await repository.listConnections();
+      final novas = newConnectionIds(_beforeIds, depois);
+      if (novas.isNotEmpty) {
+        _popped = true;
+        _pollTimer?.cancel();
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _webState = _WebState.waitingForUser;
+        _webMessage = 'Ainda não detectamos uma nova conexão. Se você já concluiu, aguarde alguns '
+            'segundos e toque em "Concluí a conexão" novamente.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _webState = _WebState.waitingForUser;
+        _webMessage = 'Não foi possível verificar suas conexões agora. Toque em "Concluí a conexão" '
+            'para tentar de novo.';
+      });
+    }
   }
 
   void _handleUrlChange(String? url) {
@@ -84,24 +269,153 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
         title: const Text('Conectar conta'),
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
       ),
-      body: _authBlocked
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Este banco não permite login dentro do app. Você pode continuar num navegador.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(onPressed: _openInExternalBrowser, child: const Text('Abrir no navegador')),
-                  ],
-                ),
+      body: kIsWeb ? _buildWebBody(context) : _buildNativeBody(),
+    );
+  }
+
+  Widget _buildNativeBody() {
+    return _authBlocked
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Este banco não permite login dentro do app. Você pode continuar num navegador.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(onPressed: _openInExternalBrowser, child: const Text('Abrir no navegador')),
+                ],
               ),
-            )
-          : WebViewWidget(controller: _controller),
+            ),
+          )
+        : WebViewWidget(controller: _controller!);
+  }
+
+  Widget _buildWebBody(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_webState == _WebState.unavailable) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.info_outline, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 16),
+              const Text(
+                'Conectar por aqui ainda não é compatível com o navegador. Abra a tela Finanças '
+                'para conectar, ou use o app pelo celular.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_webState == _WebState.loadingBaseline) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_webState == _WebState.baselineFailed) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cloud_off_outlined, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 16),
+              const Text(
+                'Não foi possível verificar suas conexões atuais. Tente novamente para continuar.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(onPressed: _captureBaseline, child: const Text('Tentar novamente')),
+              const SizedBox(height: 8),
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_webState == _WebState.readyToOpen) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.open_in_new, size: 48, color: theme.colorScheme.primary),
+              const SizedBox(height: 16),
+              const Text(
+                'Vamos abrir o Pluggy Connect em outra aba do navegador. Complete a conexão do seu '
+                'banco lá e depois volte para cá.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _openPluggyInNewTab,
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Abrir Pluggy Connect'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+              if (_webMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(_webMessage!, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // waitingForUser or checking.
+    final checking = _webState == _WebState.checking;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.tab_outlined, size: 48, color: theme.colorScheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              _webMessage ?? 'Complete a conexão na aba que abrimos. Volte aqui quando terminar.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: checking ? null : _checkForNewConnection,
+              child: checking
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Concluí a conexão'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: checking ? null : _openPluggyInNewTab,
+              child: const Text('Abrir de novo'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

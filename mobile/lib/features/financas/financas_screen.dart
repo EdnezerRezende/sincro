@@ -74,16 +74,35 @@ String _statusMessage(FinanceConnection conexao) {
 
 /// Dispara o fluxo de conexão/reconexão via Pluggy Connect. Usado tanto para conectar a
 /// primeira conta (estado vazio) quanto para reconectar uma conexão com problema — em ambos os
-/// casos o fluxo é o mesmo: token → widget da Pluggy → finalizar no backend.
+/// casos o token é o mesmo, mas o que `PluggyConnectWebviewScreen` devolve no `pop` diverge por
+/// plataforma (ver o doc daquela classe para o porquê):
+///   - Nativo (Android/iOS): devolve um `String` com o `itemId` lido da própria URL do WebView.
+///     Só nesse caso a conexão ainda precisa ser persistida via `finalizeConnection(itemId)`.
+///   - Web: devolve `true` (nunca um `itemId`, que não é legível pela aba do app — ele fica na
+///     aba do connect.pluggy.ai, outra origem). O `true` só é retornado depois que o widget já
+///     confirmou, consultando `GET /financas/conexoes`, que uma conexão nova apareceu — ou seja,
+///     o backend já está com o dado; chamar `finalizeConnection` de novo não teria itemId válido
+///     para enviar e seria incorreto.
 Future<void> _connectFinance(BuildContext context, WidgetRef ref) async {
   try {
-    final connectToken = await ref.read(financeConnectionRepositoryProvider).createConnectToken();
+    final repository = ref.read(financeConnectionRepositoryProvider);
+    final connectToken = await repository.createConnectToken();
     if (!context.mounted) return;
-    final itemId = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => PluggyConnectWebviewScreen(connectToken: connectToken)),
+    final result = await Navigator.of(context).push<Object>(
+      MaterialPageRoute(
+        builder: (_) => PluggyConnectWebviewScreen(
+          connectToken: connectToken,
+          connectionRepository: repository,
+        ),
+      ),
     );
-    if (itemId == null) return;
-    await ref.read(financeConnectionRepositoryProvider).finalizeConnection(itemId);
+    if (result == null) return;
+    if (result is String) {
+      // Caminho nativo: itemId real, precisa ser trocado com o backend.
+      await repository.finalizeConnection(result);
+    }
+    // Caminho web (result == true): a conexão já foi confirmada por polling dentro do próprio
+    // PluggyConnectWebviewScreen — nada a finalizar aqui.
     ref.invalidate(financeConnectionsProvider);
     ref.invalidate(financeSummaryProvider);
   } catch (_) {

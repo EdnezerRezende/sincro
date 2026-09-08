@@ -20,6 +20,51 @@ Set<String> newConnectionIds(Set<String> beforeIds, List<FinanceConnection> depo
   return depois.map((c) => c.id).toSet().difference(beforeIds);
 }
 
+/// Aviso mostrado no web ANTES de abrir a aba do Pluggy Connect, só quando não existe nenhuma
+/// conexão prévia (`isFirstConnection`). Extraído como função pura pelo mesmo motivo de
+/// `newConnectionIds`: `kIsWeb` é falso em tempo de compilação nos testes de VM, então a única
+/// forma de testar a distinção primeira-conexão vs. reconexão sem um navegador de verdade é
+/// isolar a decisão textual do widget que a usa. Retorna `null` para reconexão — nesse caso o
+/// polling tem uma chance real de funcionar (a linha já existe; o webhook só precisa atualizá-la)
+/// e não há nada a avisar antes de abrir a aba.
+@visibleForTesting
+String? firstConnectionWarning({required bool isFirstConnection}) {
+  if (!isFirstConnection) return null;
+  return 'Você ainda não tem nenhuma conta conectada. Pelo navegador, só conseguimos confirmar '
+      'automaticamente a conclusão de contas que já existem — a sua primeira conexão só é '
+      'detectada de forma confiável pelo aplicativo, no celular. Você pode tentar por aqui, mas '
+      'talvez precise concluir pelo app.';
+}
+
+/// Mensagem mostrada assim que a aba do Pluggy Connect é aberta. Varia por primeira-conexão vs.
+/// reconexão pelo mesmo motivo de [firstConnectionWarning]: já avisamos antes de abrir, mas
+/// reforçar aqui evita que o usuário fique surpreso quando a confirmação automática não vier.
+@visibleForTesting
+String tabOpenedMessage({required bool isFirstConnection}) {
+  return isFirstConnection
+      ? 'Complete a conexão na aba que abrimos. Como é sua primeira conexão, talvez não '
+          'consigamos confirmar automaticamente por aqui — se isso acontecer, finalize pelo '
+          'aplicativo no celular.'
+      : 'Complete a conexão na aba que abrimos. Volte aqui quando terminar.';
+}
+
+/// Mensagem mostrada quando o polling não encontra uma conexão nova. Este é o ponto central do
+/// defeito relatado: para uma PRIMEIRA conexão, pedir para "tentar de novo" é enganoso, porque
+/// o backend só cria a linha de conexão via `finalizeConnection(itemId)` (caminho nativo) — o
+/// webhook (caminho web) só atualiza uma linha que já existe. Repetir o polling nunca vai
+/// funcionar nesse caso, então a mensagem precisa dizer a verdade em vez de insistir. Para
+/// reconexão, o "tente de novo" genérico continua correto: a linha já existe e o webhook pode
+/// legitimamente estar apenas atrasado.
+@visibleForTesting
+String pollNotFoundMessage({required bool isFirstConnection}) {
+  return isFirstConnection
+      ? 'Não conseguimos confirmar sua primeira conexão por aqui — o navegador não recebe a '
+          'confirmação de bancos novos automaticamente. Abra o aplicativo Sincro no celular para '
+          'concluir; lá a confirmação acontece sozinha.'
+      : 'Ainda não detectamos a atualização da sua conexão. Se você já concluiu, aguarde alguns '
+          'segundos e toque em "Concluí a conexão" novamente.';
+}
+
 /// Hosts the Pluggy Connect flow. The two platform families need genuinely different
 /// implementations, so this widget forks hard on `kIsWeb` in `initState`/`build` and the two
 /// paths never share state:
@@ -64,6 +109,15 @@ Set<String> newConnectionIds(Set<String> beforeIds, List<FinanceConnection> depo
 /// finish the very first connection from the native (mobile) app if the web tab alone doesn't
 /// get picked up.
 ///
+/// Because that limitation is structural (not a bug that a retry will fix), the widget captures
+/// whether ANY connection already existed before the flow started (`_beforeIds`, taken in
+/// `_captureBaseline`, before the Pluggy tab is even opened) and uses that to tell a first
+/// connection apart from a reconnect (`_isFirstConnection`). For a first connection it warns the
+/// user *before* they open the tab that the automatic web confirmation likely won't work and the
+/// native app is the reliable path (`firstConnectionWarning`), and if the poll comes back empty
+/// it tells the truth instead of a generic "try again" (`pollNotFoundMessage`) — see those
+/// top-level functions for the exact copy and the reasoning per case.
+///
 /// `connectionRepository` is optional on the constructor (not `required`) so that pre-existing
 /// call sites that don't pass it (see e.g. `home_screen.dart`) keep compiling untouched; on
 /// `kIsWeb` without a repository this widget shows an honest "not supported from here" state
@@ -106,6 +160,11 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
   String? _webMessage;
   Set<String> _beforeIds = <String>{};
   Timer? _pollTimer;
+
+  // Só é significativo depois que a baseline termina de carregar (_WebState.readyToOpen em
+  // diante) — antes disso `_beforeIds` está vazio só porque ainda não veio a resposta, não porque
+  // não existam conexões. Os pontos que usam este getter só rodam nos estados corretos.
+  bool get _isFirstConnection => _beforeIds.isEmpty;
 
   // Montada via Uri(...) para que connectToken seja percent-encoded corretamente. O nome do
   // parâmetro é `connect_token` (snake_case) — é o que o bundle do widget lê via
@@ -206,7 +265,7 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
     setState(() {
       _webState = opened ? _WebState.waitingForUser : _WebState.readyToOpen;
       _webMessage = opened
-          ? 'Complete a conexão na aba que abrimos. Volte aqui quando terminar.'
+          ? tabOpenedMessage(isFirstConnection: _isFirstConnection)
           : 'Não foi possível abrir o Pluggy Connect. Tente novamente.';
     });
     if (opened) {
@@ -231,8 +290,7 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
       if (!mounted) return;
       setState(() {
         _webState = _WebState.waitingForUser;
-        _webMessage = 'Ainda não detectamos uma nova conexão. Se você já concluiu, aguarde alguns '
-            'segundos e toque em "Concluí a conexão" novamente.';
+        _webMessage = pollNotFoundMessage(isFirstConnection: _isFirstConnection);
       });
     } catch (_) {
       if (!mounted) return;
@@ -347,14 +405,23 @@ class _PluggyConnectWebviewScreenState extends State<PluggyConnectWebviewScreen>
     }
 
     if (_webState == _WebState.readyToOpen) {
+      final aviso = firstConnectionWarning(isFirstConnection: _isFirstConnection);
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.open_in_new, size: 48, color: theme.colorScheme.primary),
+              Icon(
+                aviso != null ? Icons.info_outline : Icons.open_in_new,
+                size: 48,
+                color: aviso != null ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.primary,
+              ),
               const SizedBox(height: 16),
+              if (aviso != null) ...[
+                Text(aviso, textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+              ],
               const Text(
                 'Vamos abrir o Pluggy Connect em outra aba do navegador. Complete a conexão do seu '
                 'banco lá e depois volte para cá.',

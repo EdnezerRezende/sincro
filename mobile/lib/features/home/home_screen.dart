@@ -25,6 +25,37 @@ import 'home_providers.dart';
 const Color _kBorderLight = Color(0xFF9C9690); // 2.76:1 vs #FAF8F5
 const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
 
+/// Dispara o mesmo caminho de `_connectFinance` em `financas_screen.dart` — os três atalhos de
+/// Finanças na Home (`_FinancasCard`, `_ModernoFinancasCard`, `_FuncionalFinancasCard`) chamam
+/// esta função em vez de reimplementar a navegação, porque construir `PluggyConnectWebviewScreen`
+/// sem `connectionRepository` faz o widget cair no estado "unavailable" no web (ver o doc daquela
+/// classe) em vez de usar o fluxo real de abrir o Pluggy Connect numa aba e fazer polling em
+/// `/financas/conexoes`. Devolve `true` só quando uma conexão foi de fato persistida — nativo
+/// (`itemId` trocado via `finalizeConnection`) ou web (o próprio widget já confirmou o polling
+/// antes de devolver `true`, e não deve ser finalizado de novo).
+Future<bool> _connectFinanceAccount(BuildContext context, WidgetRef ref) async {
+  final repository = ref.read(financeConnectionRepositoryProvider);
+  final connectToken = await repository.createConnectToken();
+  if (!context.mounted) return false;
+  final result = await Navigator.of(context).push<Object>(
+    MaterialPageRoute(
+      builder: (_) => PluggyConnectWebviewScreen(
+        connectToken: connectToken,
+        connectionRepository: repository,
+      ),
+    ),
+  );
+  if (result == null) return false;
+  if (result is String) {
+    // Caminho nativo: itemId real, precisa ser trocado com o backend.
+    await repository.finalizeConnection(result);
+  }
+  // Caminho web (result == true): a conexão já foi confirmada por polling dentro do próprio
+  // PluggyConnectWebviewScreen — nada a finalizar aqui.
+  ref.invalidate(financeConnectionsProvider);
+  return true;
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -330,21 +361,11 @@ class _FinancasCard extends ConsumerWidget {
     // conta conectada, não a cada banco novo que o usuário adicionar depois.
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref
-          .read(financeConnectionRepositoryProvider)
-          .createConnectToken();
-      if (!context.mounted) return;
-      final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (_) =>
-              PluggyConnectWebviewScreen(connectToken: connectToken),
-        ),
-      );
-      if (itemId == null) return;
-      await ref
-          .read(financeConnectionRepositoryProvider)
-          .finalizeConnection(itemId);
-      ref.invalidate(financeConnectionsProvider);
+      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc daquela função e de
+      // `_connectFinanceAccount` aqui em cima do arquivo para o porquê de não reimplementar a
+      // navegação sem `connectionRepository`.
+      final connected = await _connectFinanceAccount(context, ref);
+      if (!connected) return;
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
       }
@@ -877,21 +898,10 @@ class _ModernoFinancasCard extends ConsumerWidget {
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref
-          .read(financeConnectionRepositoryProvider)
-          .createConnectToken();
-      if (!context.mounted) return;
-      final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (_) =>
-              PluggyConnectWebviewScreen(connectToken: connectToken),
-        ),
-      );
-      if (itemId == null) return;
-      await ref
-          .read(financeConnectionRepositoryProvider)
-          .finalizeConnection(itemId);
-      ref.invalidate(financeConnectionsProvider);
+      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc de
+      // `_connectFinanceAccount` aqui em cima do arquivo.
+      final connected = await _connectFinanceAccount(context, ref);
+      if (!connected) return;
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
       }
@@ -1549,21 +1559,10 @@ class _FuncionalFinancasCard extends ConsumerWidget {
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
     try {
-      final connectToken = await ref
-          .read(financeConnectionRepositoryProvider)
-          .createConnectToken();
-      if (!context.mounted) return;
-      final itemId = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (_) =>
-              PluggyConnectWebviewScreen(connectToken: connectToken),
-        ),
-      );
-      if (itemId == null) return;
-      await ref
-          .read(financeConnectionRepositoryProvider)
-          .finalizeConnection(itemId);
-      ref.invalidate(financeConnectionsProvider);
+      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc de
+      // `_connectFinanceAccount` aqui em cima do arquivo.
+      final connected = await _connectFinanceAccount(context, ref);
+      if (!connected) return;
       if (isFirstConnection && context.mounted) {
         await _promptDiaRecebimento(context, ref);
       }

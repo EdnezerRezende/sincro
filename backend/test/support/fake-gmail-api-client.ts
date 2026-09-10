@@ -20,7 +20,9 @@ export function buildFakeGmailApiClient() {
       historyId: 'history-1',
     }),
     fetchIncremental: async () => ({ emails: [], historyId: 'history-1', historyExpired: false }),
-    fetchFullBody: async () => 'Corpo completo de teste do e-mail original.',
+    fetchFullBody: async () => ({ texto: 'Corpo completo de teste do e-mail original.', ehPreview: false }),
+    arquivar: async () => undefined,
+    excluir: async () => undefined,
     sendReply: async () => undefined,
   };
 }

@@ -24,7 +24,7 @@ void main() {
       handler.resolve(Response(requestOptions: options, statusCode: 201, data: {'success': true}));
     }));
 
-    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
     await repository.connect();
 
     expect(capturedPath, '/gmail/connect');
@@ -36,7 +36,7 @@ void main() {
     when(() => mockGoogleSignIn.signIn()).thenAnswer((_) async => null);
     final dio = Dio(BaseOptions(baseUrl: 'http://test'));
 
-    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
 
     expect(() => repository.connect(), throwsException);
   });
@@ -52,7 +52,7 @@ void main() {
       ));
     }));
 
-    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
     final status = await repository.status();
 
     expect(status.connected, true);
@@ -70,12 +70,61 @@ void main() {
       ));
     }));
 
-    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
     final status = await repository.status();
 
     expect(status.temEscopoEnvio, true);
     expect(status.temEscopoAgenda, false);
+    expect(status.temEscopoModificacao, false);
   });
+
+  test('status parses temEscopoModificacao when present', () async {
+    final mockGoogleSignIn = MockGoogleSignIn();
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: {
+          'connected': true,
+          'gmailEmail': 'ana@example.com',
+          'temEscopoEnvio': true,
+          'temEscopoAgenda': true,
+          'temEscopoModificacao': true,
+        },
+      ));
+    }));
+
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
+    final status = await repository.status();
+
+    expect(status.temEscopoModificacao, true);
+  });
+
+  test(
+    'never builds the GoogleSignIn instance for a call that never touches it (status) — the factory '
+    'is only invoked lazily by connect/disconnect, matching the fix for the web unhandled-exception bug',
+    () async {
+      var factoryChamadas = 0;
+      final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+      dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+        handler.resolve(Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: {'connected': false},
+        ));
+      }));
+
+      final repository = GmailConnectionRepository(dio, () {
+        factoryChamadas++;
+        return MockGoogleSignIn();
+      });
+
+      await repository.status();
+
+      expect(factoryChamadas, 0);
+    },
+  );
 
   test('disconnect calls the delete endpoint and signs out of Google', () async {
     final mockGoogleSignIn = MockGoogleSignIn();
@@ -87,7 +136,7 @@ void main() {
       handler.resolve(Response(requestOptions: options, statusCode: 200, data: {'success': true}));
     }));
 
-    final repository = GmailConnectionRepository(dio, mockGoogleSignIn);
+    final repository = GmailConnectionRepository(dio, () => mockGoogleSignIn);
     await repository.disconnect();
 
     expect(capturedPath, '/gmail/connection');

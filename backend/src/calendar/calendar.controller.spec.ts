@@ -74,6 +74,7 @@ describe('CalendarController — roteamento para o client', () => {
         descricao: 'Pauta',
         dataHoraInicio: '2026-09-01T15:00:00-03:00',
         dataHoraFim: '2026-09-01T16:00:00-03:00',
+        ehDiaInteiro: false,
       },
     );
   });
@@ -91,6 +92,7 @@ describe('CalendarController — roteamento para o client', () => {
         descricao: 'Pauta',
         dataHoraInicio: '2026-09-01T15:00:00-03:00',
         dataHoraFim: '2026-09-01T16:00:00-03:00',
+        ehDiaInteiro: false,
       },
     );
   });

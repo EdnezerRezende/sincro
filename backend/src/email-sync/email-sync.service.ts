@@ -160,4 +160,14 @@ export class EmailSyncService {
     }
     return summary;
   }
+
+  /** Removes the local row for arquivar/excluir (see `EmailSummaryController`). Both actions must
+   *  take the row out of `resumos_email` in the SAME request that acts on Gmail — the sync cron
+   *  only ever handles `messageAdded` history events (see `GmailApiClient.fetchIncremental`), so
+   *  it would never notice (and never remove) a message the user archived or trashed. Takes the
+   *  already-fetched `id` (not the Gmail message id) — the caller has already resolved ownership
+   *  via `getOwned` before calling this. */
+  async remover(id: string): Promise<void> {
+    await this.prisma.emailSummary.delete({ where: { id } });
+  }
 }

@@ -6,6 +6,7 @@ import { GmailOAuthService } from './gmail-oauth.service';
 
 const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const GMAIL_MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 
 @Injectable()
 export class GmailConnectionsService {
@@ -26,11 +27,19 @@ export class GmailConnectionsService {
     const scopesConcedidos = scope.split(' ');
     const temEscopoEnvio = scopesConcedidos.includes(GMAIL_SEND_SCOPE);
     const temEscopoAgenda = scopesConcedidos.includes(CALENDAR_EVENTS_SCOPE);
+    const temEscopoModificacao = scopesConcedidos.includes(GMAIL_MODIFY_SCOPE);
 
     return this.prisma.gmailConnection.upsert({
       where: { userId: user.id },
-      update: { refreshTokenCriptografado, gmailEmail, temEscopoEnvio, temEscopoAgenda },
-      create: { userId: user.id, refreshTokenCriptografado, gmailEmail, temEscopoEnvio, temEscopoAgenda },
+      update: { refreshTokenCriptografado, gmailEmail, temEscopoEnvio, temEscopoAgenda, temEscopoModificacao },
+      create: {
+        userId: user.id,
+        refreshTokenCriptografado,
+        gmailEmail,
+        temEscopoEnvio,
+        temEscopoAgenda,
+        temEscopoModificacao,
+      },
     });
   }
 
@@ -42,6 +51,7 @@ export class GmailConnectionsService {
       gmailEmail: connection?.gmailEmail ?? null,
       temEscopoEnvio: connection?.temEscopoEnvio ?? false,
       temEscopoAgenda: connection?.temEscopoAgenda ?? false,
+      temEscopoModificacao: connection?.temEscopoModificacao ?? false,
     };
   }
 

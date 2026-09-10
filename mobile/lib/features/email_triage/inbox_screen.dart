@@ -1,15 +1,21 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import 'email_detail_screen.dart';
 import 'email_summary.dart';
 import 'email_triage_providers.dart';
+import 'gmail_connection_actions.dart';
+import 'gmail_connection_repository.dart';
 
 // Calibrated against scaffold AND card fills in both themes.
 // #7C7672: L≈0.185 → 4.22:1 vs #FAF8F5, 3.77:1 vs #F1EBE1 (light fills);
 //                       3.73:1 vs #1A1F23, 3.02:1 vs #2A2F35, 3.18:1 vs #2C2B26 (dark fills).
 const Color _kBorderLight = Color(0xFF7C7672);
 const Color _kBorderDark = Color(0xFF7C7672);
+
+/// Ações disponíveis no menu de "mais ações" de cada e-mail da caixa de entrada.
+enum _AcaoEmailTile { arquivar, excluir }
 
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
@@ -19,7 +25,14 @@ class InboxScreen extends ConsumerWidget {
     final summariesAsync = ref.watch(emailSummariesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Caixa de Entrada')),
+      appBar: AppBar(
+        title: const Text('Caixa de Entrada'),
+        // A conexão com o Gmail é gerenciada aqui — não só em Configurações — porque é aqui que
+        // a pessoa percebe que precisa reconectar (para conceder o escopo `gmail.modify`) ou que
+        // quer desconectar. Um menu de "mais opções" na AppBar não disputa espaço com o conteúdo
+        // da lista, que é o motivo de a pessoa estar nesta tela.
+        actions: const [_GmailConnectionMenu()],
+      ),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(emailSummariesProvider),
         child: summariesAsync.when(
@@ -81,6 +94,121 @@ class InboxScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+enum _AcaoMenuConexaoGmail { permitirModificacao, desconectar, reconectar }
+
+/// Menu de "mais opções" da conexão com o Gmail, na AppBar da caixa de entrada.
+///
+/// Sempre mostra pelo menos uma ação, para nunca deixar a pessoa sem um caminho de volta:
+///   - Conectado, mas ainda sem o escopo `gmail.modify` (contas que conectaram antes desse
+///     escopo existir): destaca "Permitir arquivar e excluir e-mails", que reconecta e concede o
+///     escopo que falta — a mesma ação que hoje só aparece reativamente, via SnackBar, quando uma
+///     tentativa de arquivar/excluir falha com 403.
+///   - Conectado: "Desconectar Gmail", com confirmação (ver `confirmarEDesconectarGmail`).
+///   - Não conectado (ou status desconhecido, por exemplo se a checagem falhar): "Reconectar
+///     Gmail", para que desconectar por aqui nunca seja uma porta sem volta dentro do mesmo fluxo.
+class _GmailConnectionMenu extends ConsumerWidget {
+  const _GmailConnectionMenu();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statusAsync = ref.watch(gmailConnectionStatusProvider);
+
+    return statusAsync.when(
+      data: (status) => _menu(context, ref, status),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      // Status desconhecido (checagem falhou): trata como "não conectado" para o menu — a única
+      // ação seguramente correta nesse caso é oferecer reconectar, nunca esconder o menu inteiro.
+      error: (_, __) => _menu(context, ref, null),
+    );
+  }
+
+  Widget _menu(BuildContext context, WidgetRef ref, GmailConnectionStatus? status) {
+    final conectado = status?.connected ?? false;
+    final semEscopoModificacao = conectado && !(status?.temEscopoModificacao ?? false);
+
+    return PopupMenuButton<_AcaoMenuConexaoGmail>(
+      tooltip: 'Opções da conexão com o Gmail',
+      icon: const Icon(Icons.more_vert),
+      onSelected: (acao) {
+        switch (acao) {
+          case _AcaoMenuConexaoGmail.permitirModificacao:
+          case _AcaoMenuConexaoGmail.reconectar:
+            _reconectar(context, ref, avisarSucesso: acao == _AcaoMenuConexaoGmail.permitirModificacao);
+          case _AcaoMenuConexaoGmail.desconectar:
+            _desconectar(context, ref);
+        }
+      },
+      itemBuilder: (context) => [
+        if (semEscopoModificacao)
+          const PopupMenuItem(
+            value: _AcaoMenuConexaoGmail.permitirModificacao,
+            child: Text('Permitir arquivar e excluir e-mails'),
+          ),
+        if (conectado)
+          const PopupMenuItem(
+            value: _AcaoMenuConexaoGmail.desconectar,
+            child: Text('Desconectar Gmail'),
+          ),
+        if (!conectado)
+          const PopupMenuItem(
+            value: _AcaoMenuConexaoGmail.reconectar,
+            child: Text('Reconectar Gmail'),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _desconectar(BuildContext context, WidgetRef ref) async {
+    final desconectou = await confirmarEDesconectarGmail(context, ref);
+    // A caixa de entrada depende diretamente da conexão: sem invalidar a lista, ela continuaria
+    // mostrando e-mails que o backend acabou de apagar junto com a conexão.
+    if (desconectou) {
+      ref.invalidate(emailSummariesProvider);
+    }
+  }
+
+  Future<void> _reconectar(BuildContext context, WidgetRef ref, {required bool avisarSucesso}) async {
+    final status = await reconectarGmail(context, ref);
+    if (status == null) return; // erro já mostrado por reconectarGmail
+
+    if (!avisarSucesso) {
+      // Reconexão "cheia" (a partir de desconectado): a caixa de entrada precisa recarregar,
+      // independentemente do escopo de modificação — é o caminho de leitura que estava faltando.
+      ref.invalidate(emailSummariesProvider);
+      return;
+    }
+    if (!context.mounted) return;
+
+    // Só anuncia sucesso depois de RELER o status e confirmar o escopo — `connect()` não ter
+    // lançado não prova que a pessoa concedeu `gmail.modify`: o consentimento do Google é
+    // granular e ela pode ter desmarcado esse escopo específico na tela de login.
+    if (status.temEscopoModificacao) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gmail reconectado. Agora você pode arquivar e excluir e-mails por aqui.'),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A conexão foi feita, mas a permissão para arquivar e excluir e-mails não foi '
+            'concedida. Você pode tentar de novo e, na tela do Google, deixar essa permissão '
+            'marcada.',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -281,23 +409,121 @@ class _SectionHeader extends StatelessWidget {
 /// `Row` so it spans the tile's full height without a fixed height literal that could desync
 /// from the (variable-height) text content.
 ///
-/// This is a `StatefulWidget` (not stateless) because the keyboard focus ring needs to react to
-/// `onFocusChange` with `setState` — there's no way to know, at build time, whether this specific
-/// tile is focused without local state. The ring reuses `colorScheme.primary` as an opaque 2dp
-/// border (same pattern as `_DayCell` in calendar_screen.dart) instead of the default `InkWell`
-/// `focusColor`, whose low alpha over these tinted backgrounds measured ~1.30:1 — far below the
-/// 3:1 floor for non-text UI indicators.
-class _EmailTile extends StatefulWidget {
+/// This is a `ConsumerStatefulWidget` (not stateless) for two reasons: the keyboard focus ring
+/// needs to react to `onFocusChange` with `setState` — there's no way to know, at build time,
+/// whether this specific tile is focused without local state — and the archive/delete actions
+/// below need `ref` to reach [emailSummaryRepositoryProvider] and, on a missing-scope failure,
+/// [gmailConnectionRepositoryProvider]/[gmailConnectionStatusProvider]. The ring reuses
+/// `colorScheme.primary` as an opaque 2dp border (same pattern as `_DayCell` in
+/// calendar_screen.dart) instead of the default `InkWell` `focusColor`, whose low alpha over
+/// these tinted backgrounds measured ~1.30:1 — far below the 3:1 floor for non-text UI
+/// indicators.
+class _EmailTile extends ConsumerStatefulWidget {
   const _EmailTile({required this.summary});
 
   final EmailSummary summary;
 
   @override
-  State<_EmailTile> createState() => _EmailTileState();
+  ConsumerState<_EmailTile> createState() => _EmailTileState();
 }
 
-class _EmailTileState extends State<_EmailTile> {
+class _EmailTileState extends ConsumerState<_EmailTile> {
   bool _focado = false;
+
+  /// Arquivar é imediato (sem confirmação): a Gmail API só remove o label INBOX — a mensagem
+  /// continua inteira e pode ser encontrada em "Todos os e-mails" no próprio Gmail — então o
+  /// SnackBar informativo abaixo já é feedback suficiente; não há uma ação de "desfazer" própria
+  /// porque restaurá-la ainda é trivial pelo Gmail em si.
+  Future<void> _arquivar() async {
+    final id = widget.summary.id;
+    try {
+      await ref.read(emailSummaryRepositoryProvider).arquivar(id);
+      if (!mounted) return;
+      ref.invalidate(emailSummariesProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('E-mail arquivado.')),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 403) {
+        _mostrarReconectar('Reconecte o Gmail para arquivar e-mails por aqui.');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível arquivar agora. Tente novamente.')),
+        );
+      }
+    }
+  }
+
+  /// Excluir move a mensagem para a lixeira do Gmail (recuperável por lá por ~30 dias) — nunca
+  /// uma exclusão permanente — mas ainda é uma ação destrutiva o bastante para pedir confirmação
+  /// antes de agir, em vez de oferecer desfazer depois.
+  Future<void> _confirmarExclusao() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir e-mail?'),
+        content: const Text(
+          'O e-mail vai para a lixeira do Gmail, onde continua recuperável por cerca de 30 dias.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    await _excluir();
+  }
+
+  Future<void> _excluir() async {
+    final id = widget.summary.id;
+    try {
+      await ref.read(emailSummaryRepositoryProvider).excluir(id);
+      if (!mounted) return;
+      ref.invalidate(emailSummariesProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('E-mail movido para a lixeira.')),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 403) {
+        _mostrarReconectar('Reconecte o Gmail para excluir e-mails por aqui.');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível excluir agora. Tente novamente.')),
+        );
+      }
+    }
+  }
+
+  /// Chamado quando o backend responde 403 por falta do escopo `gmail.modify` — em vez de falhar
+  /// em silêncio, mostra o caminho de reconexão diretamente no SnackBar da ação que falhou.
+  void _mostrarReconectar(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        action: SnackBarAction(label: 'Reconectar', onPressed: _reconectar),
+      ),
+    );
+  }
+
+  // Reutiliza a mesma ação de reconexão do menu da AppBar (gmail_connection_actions.dart) em vez
+  // de repetir a chamada ao repositório + invalidação do status.
+  //
+  // `avisarSucesso: true` porque aqui a pessoa já estava conectada e veio de um 403 ao arquivar
+  // ou excluir: ela pediu justamente a permissão que faltava, então precisa saber se desta vez
+  // foi concedida. Sem isso o caminho fica mudo e ela pode cair no laço 403 → "Reconectar" → 403
+  // sem entender por quê — que é exatamente o que o menu da AppBar já evita.
+  Future<void> _reconectar() async {
+    await reconectarGmailEAvisar(context, ref, avisarSucesso: true);
+  }
 
   String _formatarDataRelativa(DateTime dt) {
     final agora = DateTime.now();
@@ -354,59 +580,63 @@ class _EmailTileState extends State<_EmailTile> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Semantics(
-        button: true,
-        label:
-            '${summary.assunto} de ${summary.remetente} '
-            '${_formatarDataRelativa(summary.recebidoEm)}, '
-            '${summary.resumoCurto}, '
-            '${pending ? "precisa de atenção" : "pode esperar"}',
-        onTap: abrirDetalhe,
-        excludeSemantics: true,
-        child: Container(
-          // Minimum touch target: 48dp
-          constraints: const BoxConstraints(minHeight: 48),
-          // Clips all children (including the accent stripe below) to this container's rounded
-          // rectangle shape. Without this, the accent stripe — a sibling of the InkWell, not
-          // itself bounded by the card's RRect — overflows the card's 12dp corners: its own
-          // `Radius.circular(12)` gets clamped down to ~2dp anyway (Flutter clamps a decoration's
-          // corner radii when they sum to more than the box's width: 12+12=24 > the stripe's
-          // 4dp width), so it could never match the card's corner even un-clipped.
-          clipBehavior: Clip.antiAlias,
-          // Fill color lives in `decoration` (doesn't consume the child's space). The border
-          // lives in `foregroundDecoration` instead: `Container` deducts a `decoration` border's
-          // width from the space available to its child, but does not do so for
-          // `foregroundDecoration` — without this split, the 1-2dp border would shrink the
-          // tappable `InkWell` area below the 48dp floor.
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(12),
+      child: Container(
+        // Minimum touch target: 48dp
+        constraints: const BoxConstraints(minHeight: 48),
+        // Clips all children (including the accent stripe below) to this container's rounded
+        // rectangle shape. Without this, the accent stripe — a sibling of the InkWell, not
+        // itself bounded by the card's RRect — overflows the card's 12dp corners: its own
+        // `Radius.circular(12)` gets clamped down to ~2dp anyway (Flutter clamps a decoration's
+        // corner radii when they sum to more than the box's width: 12+12=24 > the stripe's
+        // 4dp width), so it could never match the card's corner even un-clipped.
+        clipBehavior: Clip.antiAlias,
+        // Fill color lives in `decoration` (doesn't consume the child's space). The border
+        // lives in `foregroundDecoration` instead: `Container` deducts a `decoration` border's
+        // width from the space available to its child, but does not do so for
+        // `foregroundDecoration` — without this split, the 1-2dp border would shrink the
+        // tappable `InkWell` area below the 48dp floor.
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(
+            color: _focado ? colors.primary : idleBorderColor,
+            width: _focado ? 2 : 1,
           ),
-          foregroundDecoration: BoxDecoration(
-            border: Border.all(
-              color: _focado ? colors.primary : idleBorderColor,
-              width: _focado ? 2 : 1,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: abrirDetalhe,
-              onFocusChange: (focado) => setState(() => _focado = focado),
-              focusColor: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Caution accent stripe. Single-color decoration (never mixed with the
-                    // perimeter border), no fixed height — IntrinsicHeight + stretch size it to
-                    // match the text column exactly, however tall that grows. No borderRadius
-                    // here: the outer Container's `clipBehavior: Clip.antiAlias` already clips
-                    // this stripe to the card's 12dp corners.
-                    Container(width: 4, color: accentColor),
-                    Expanded(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Caution accent stripe. Single-color decoration (never mixed with the
+                // perimeter border), no fixed height — IntrinsicHeight + stretch size it to
+                // match the text column exactly, however tall that grows. No borderRadius
+                // here: the outer Container's `clipBehavior: Clip.antiAlias` already clips
+                // this stripe to the card's 12dp corners.
+                Container(width: 4, color: accentColor),
+                // The "open e-mail" tap target is scoped to just this Expanded column (not the
+                // whole card) so the trailing "mais ações" button below can live as an
+                // independent, separately-announced Semantics node in the same Row. Wrapping the
+                // *entire* row (as before) in one `excludeSemantics: true` Semantics node would
+                // swallow the action button's own semantics along with everything else under it.
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label:
+                        '${summary.assunto} de ${summary.remetente} '
+                        '${_formatarDataRelativa(summary.recebidoEm)}, '
+                        '${summary.resumoCurto}, '
+                        '${pending ? "precisa de atenção" : "pode esperar"}',
+                    onTap: abrirDetalhe,
+                    excludeSemantics: true,
+                    child: InkWell(
+                      onTap: abrirDetalhe,
+                      onFocusChange: (focado) => setState(() => _focado = focado),
+                      focusColor: Colors.transparent,
                       child: Padding(
                         // 16: theme.dart _spacing4, documented as "list item padding".
                         padding: const EdgeInsets.all(16),
@@ -476,9 +706,43 @@ class _EmailTileState extends State<_EmailTile> {
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                // "Mais ações" (arquivar/excluir): a 48x48 touch target of its own, reachable by
+                // keyboard/screen reader independently of the "abrir e-mail" tap target above —
+                // never a swipe-only gesture, which wouldn't be discoverable or accessible.
+                SizedBox(
+                  width: 48,
+                  child: Center(
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: PopupMenuButton<_AcaoEmailTile>(
+                        tooltip: 'Mais ações',
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (acao) {
+                          switch (acao) {
+                            case _AcaoEmailTile.arquivar:
+                              _arquivar();
+                            case _AcaoEmailTile.excluir:
+                              _confirmarExclusao();
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _AcaoEmailTile.arquivar,
+                            child: Text('Arquivar'),
+                          ),
+                          PopupMenuItem(
+                            value: _AcaoEmailTile.excluir,
+                            child: Text('Excluir'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

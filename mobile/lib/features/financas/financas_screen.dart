@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import 'finance_connection.dart';
+import 'finance_connection_actions.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
 import 'pluggy_connect_webview_screen.dart';
@@ -241,6 +242,103 @@ class _ErrorState extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Lista cada conexão (instituição) com uma ação de desconectar por linha. Reaproveita
+/// `confirmarEDesconectarFinanceConnection` (finance_connection_actions.dart) — a mesma lógica já
+/// usada em Configurações — em vez de duplicar diálogo de confirmação, chamada ao repositório e
+/// invalidação dos providers.
+class _ConexoesSection extends StatelessWidget {
+  const _ConexoesSection({required this.connections, required this.cardBorderSide});
+
+  final List<FinanceConnection> connections;
+  final BorderSide cardBorderSide;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Card(
+        color: theme.colorScheme.surfaceContainerHighest,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          side: cardBorderSide,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text('Conexões', style: theme.textTheme.titleSmall),
+            ),
+            for (var i = 0; i < connections.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              _ConexaoTile(conexao: connections[i]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConexaoTile extends ConsumerStatefulWidget {
+  const _ConexaoTile({required this.conexao});
+
+  final FinanceConnection conexao;
+
+  @override
+  ConsumerState<_ConexaoTile> createState() => _ConexaoTileState();
+}
+
+class _ConexaoTileState extends ConsumerState<_ConexaoTile> {
+  bool _busy = false;
+
+  Future<void> _desconectar() async {
+    await confirmarEDesconectarFinanceConnection(
+      context,
+      ref,
+      widget.conexao,
+      setBusy: (busy) {
+        if (mounted) setState(() => _busy = busy);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final instituicao = widget.conexao.instituicao;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: const Icon(Icons.account_balance_outlined),
+      title: Text(instituicao),
+      trailing: Semantics(
+        button: true,
+        label: 'Desconectar $instituicao',
+        excludeSemantics: true,
+        child: SizedBox(
+          // Alvo de toque de 48dp, mesmo com o ícone visualmente menor.
+          width: 48,
+          height: 48,
+          child: IconButton(
+            tooltip: 'Desconectar $instituicao',
+            onPressed: _busy ? null : _desconectar,
+            icon: _busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(Icons.link_off, color: theme.colorScheme.error),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -590,6 +688,17 @@ class _FinancasContent extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+
+        // SEÇÃO: Conexões (uma linha por instituição, com ação de desconectar). Pode haver mais
+        // de uma conexão simultânea — por isso a ação vive por linha, não como um botão único de
+        // "Finanças" — e fica visível aqui, na própria tela de Finanças, em vez de só em
+        // Configurações: é aqui que a pessoa já está olhando para essa conexão específica.
+        connectionsAsync.maybeWhen(
+          data: (connections) => connections.isEmpty
+              ? const SizedBox.shrink()
+              : _ConexoesSection(connections: connections, cardBorderSide: cardBorderSide),
+          orElse: () => const SizedBox.shrink(),
         ),
 
         // SEÇÃO: Saldo Livre

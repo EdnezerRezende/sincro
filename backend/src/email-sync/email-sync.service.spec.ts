@@ -9,6 +9,7 @@ function buildDeps() {
       findFirst: jest.fn(),
       create: jest.fn(),
       findMany: jest.fn(),
+      delete: jest.fn(),
     },
   };
   const gmailApiClient = { fetchInitialUnread: jest.fn(), fetchIncremental: jest.fn() };
@@ -287,6 +288,17 @@ describe('EmailSyncService', () => {
       await expect(service.getOwned('fb1', 'someone-elses-summary')).rejects.toThrow(
         'E-mail não encontrado.',
       );
+    });
+  });
+
+  describe('remover', () => {
+    it('deletes the local row by id (arquivar/excluir take the row out of the inbox immediately, without waiting for the sync cron)', async () => {
+      const deps = buildDeps();
+      const service = buildService(deps);
+
+      await service.remover('summary-1');
+
+      expect(deps.prisma.emailSummary.delete).toHaveBeenCalledWith({ where: { id: 'summary-1' } });
     });
   });
 });

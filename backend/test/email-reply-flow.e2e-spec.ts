@@ -183,4 +183,133 @@ describe('Email reply flow (e2e)', () => {
       .set(otherAuthHeader)
       .expect(404);
   });
+
+  it('returns a handled 503 (never an unhandled 500) when the AI draft service fails — e.g. the ' +
+    'Anthropic account is out of credits', async () => {
+    const failingDraftService = {
+      gerar: async () => {
+        throw Object.assign(new Error('400 {"type":"error","error":{"message":"credit balance too low"}}'), {
+          status: 400,
+        });
+      },
+    };
+    const moduleWithFailingDraft: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(FIREBASE_ADMIN)
+      .useValue(buildFakeFirebaseAdmin())
+      .overrideProvider(GmailOAuthService)
+      .useValue(buildFakeGmailOAuth())
+      .overrideProvider(GmailApiClient)
+      .useValue(buildFakeGmailApiClient())
+      .overrideProvider(CalendarApiClient)
+      .useValue(buildFakeCalendarApiClient())
+      .overrideProvider(EmailDraftService)
+      .useValue(failingDraftService)
+      .compile();
+    const failingApp = moduleWithFailingDraft.createNestApplication();
+    failingApp.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    await failingApp.init();
+
+    const summariesTenant1 = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
+    const tenant1EmailId = summariesTenant1.body[0].id as string;
+
+    const response = await request(failingApp.getHttpServer())
+      .post(`/resumos-email/${tenant1EmailId}/rascunhos`)
+      .set(authHeader)
+      .expect(503);
+    expect(response.body.message).toEqual(expect.any(String));
+    expect(response.body.message.length).toBeGreaterThan(0);
+
+    await failingApp.close();
+  });
+
+  it('GET /:id/conteudo returns the full e-mail body without touching any LLM, and works even ' +
+    'while draft generation is broken', async () => {
+    const summariesTenant1 = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
+    const tenant1EmailId = summariesTenant1.body[0].id as string;
+
+    const response = await request(app.getHttpServer())
+      .get(`/resumos-email/${tenant1EmailId}/conteudo`)
+      .set(authHeader)
+      .expect(200);
+    expect(response.body).toEqual({ corpo: 'Corpo completo de teste do e-mail original.', ehPreview: false });
+  });
+
+  it('GET /:id/conteudo rejects access to an e-mail id owned by a different tenant', async () => {
+    const summariesTenant1 = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
+    const tenant1EmailId = summariesTenant1.body[0].id as string;
+
+    await request(app.getHttpServer())
+      .get(`/resumos-email/${tenant1EmailId}/conteudo`)
+      .set(otherAuthHeader)
+      .expect(404);
+  });
+
+  it('with a revoked Gmail token, POST /:id/rascunhos, POST /:id/enviar and POST /compromissos/confirmar ' +
+    'all return an honest 403 in Portuguese — NEVER the raw {"statusCode":500,"message":"Internal server ' +
+    'error"} the user originally reported', async () => {
+    const errorToken = () => Object.assign(new Error('invalid_grant'), { status: 401 });
+    const revokedGmailApiClient = {
+      ...buildFakeGmailApiClient(),
+      fetchFullBody: async () => {
+        throw errorToken();
+      },
+      sendReply: async () => {
+        throw errorToken();
+      },
+    };
+    const revokedCalendarApiClient = {
+      criarEvento: async () => {
+        throw errorToken();
+      },
+    };
+    const moduleWithRevokedToken: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(FIREBASE_ADMIN)
+      .useValue(buildFakeFirebaseAdmin())
+      .overrideProvider(GmailOAuthService)
+      .useValue(buildFakeGmailOAuth())
+      .overrideProvider(GmailApiClient)
+      .useValue(revokedGmailApiClient)
+      .overrideProvider(CalendarApiClient)
+      .useValue(revokedCalendarApiClient)
+      .overrideProvider(EmailDraftService)
+      .useValue(fakeDraftService)
+      .overrideProvider(EmailCommitmentExtractionService)
+      .useValue(fakeExtractionServiceWithCommitment)
+      .compile();
+    const revokedApp = moduleWithRevokedToken.createNestApplication();
+    revokedApp.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    await revokedApp.init();
+
+    const summariesTenant1 = await request(app.getHttpServer()).get('/resumos-email').set(authHeader).expect(200);
+    const tenant1EmailId = summariesTenant1.body[0].id as string;
+
+    const rascunhosResponse = await request(revokedApp.getHttpServer())
+      .post(`/resumos-email/${tenant1EmailId}/rascunhos`)
+      .set(authHeader)
+      .expect(403);
+    expect(rascunhosResponse.body.message).not.toEqual('Internal server error');
+    expect(rascunhosResponse.body.message).toContain('Reconecte');
+
+    const enviarResponse = await request(revokedApp.getHttpServer())
+      .post(`/resumos-email/${tenant1EmailId}/enviar`)
+      .set(authHeader)
+      .send({ texto: 'Combinado, até sexta.' })
+      .expect(403);
+    expect(enviarResponse.body.message).not.toEqual('Internal server error');
+    expect(enviarResponse.body.message).toContain('Reconecte');
+
+    const confirmarResponse = await request(revokedApp.getHttpServer())
+      .post('/resumos-email/compromissos/confirmar')
+      .set(authHeader)
+      .send({ tituloCompromisso: 'Ligar para o cliente', dataHoraLimite: '2026-09-10T10:00:00', antecedenciaMinutos: 60 })
+      .expect(403);
+    expect(confirmarResponse.body.message).not.toEqual('Internal server error');
+    expect(confirmarResponse.body.message).toContain('Reconecte');
+
+    await revokedApp.close();
+  });
 });

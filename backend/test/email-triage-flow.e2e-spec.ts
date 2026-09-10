@@ -72,6 +72,7 @@ describe('Email triage flow (e2e)', () => {
       gmailEmail: 'usuario.teste@gmail.com',
       temEscopoEnvio: true,
       temEscopoAgenda: true,
+      temEscopoModificacao: false,
     });
 
     const user1 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid1 } });
@@ -139,6 +140,7 @@ describe('Email triage flow (e2e)', () => {
       gmailEmail: null,
       temEscopoEnvio: false,
       temEscopoAgenda: false,
+      temEscopoModificacao: false,
     });
 
     // The other tenant's connection and summaries must survive tenant 1's disconnect.
@@ -153,6 +155,152 @@ describe('Email triage flow (e2e)', () => {
       gmailEmail: 'usuario.teste@gmail.com',
       temEscopoEnvio: true,
       temEscopoAgenda: true,
+      temEscopoModificacao: false,
+    });
+  });
+
+  describe('archive/delete (gmail.modify scope)', () => {
+    const firebaseUid3 = 'triage-user-3';
+    const firebaseUid4 = 'triage-user-4';
+    const authHeader3 = { Authorization: `Bearer test-uid:${firebaseUid3}` };
+    const authHeader4 = { Authorization: `Bearer test-uid:${firebaseUid4}` };
+    const FULL_SCOPE_WITH_MODIFY =
+      'https://www.googleapis.com/auth/gmail.readonly ' +
+      'https://www.googleapis.com/auth/gmail.send ' +
+      'https://www.googleapis.com/auth/gmail.modify ' +
+      'https://www.googleapis.com/auth/calendar.events';
+
+    let appWithModify: INestApplication<App>;
+    let appWithoutModify: INestApplication<App>;
+
+    afterAll(async () => {
+      for (const firebaseUid of [firebaseUid3, firebaseUid4]) {
+        const user = await prisma.user.findUnique({ where: { firebaseUid } });
+        if (user) {
+          await prisma.emailSummary.deleteMany({ where: { userId: user.id } });
+          await prisma.gmailConnection.deleteMany({ where: { userId: user.id } });
+        }
+      }
+      await prisma.user.deleteMany({ where: { firebaseUid: { in: [firebaseUid3, firebaseUid4] } } });
+      await appWithModify.close();
+      await appWithoutModify.close();
+    });
+
+    it('archives an e-mail: returns 200 and the row disappears from GET /resumos-email', async () => {
+      const moduleWithModify: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(FIREBASE_ADMIN)
+        .useValue(buildFakeFirebaseAdmin())
+        .overrideProvider(GmailOAuthService)
+        .useValue(buildFakeGmailOAuth({ scope: FULL_SCOPE_WITH_MODIFY }))
+        .overrideProvider(GmailApiClient)
+        .useValue(buildFakeGmailApiClient())
+        .compile();
+      appWithModify = moduleWithModify.createNestApplication();
+      appWithModify.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+      await appWithModify.init();
+
+      await request(appWithModify.getHttpServer())
+        .post('/users/me')
+        .set(authHeader3)
+        .send({ nome: 'Usuário Arquivar' })
+        .expect(201);
+      await request(appWithModify.getHttpServer())
+        .post('/gmail/connect')
+        .set(authHeader3)
+        .send({ serverAuthCode: 'test-code-3' })
+        .expect(201);
+
+      const user3 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid3 } });
+      const emailSyncService3 = moduleWithModify.get(EmailSyncService);
+      await emailSyncService3.syncUser(user3.id);
+
+      const summaries = await request(appWithModify.getHttpServer())
+        .get('/resumos-email')
+        .set(authHeader3)
+        .expect(200);
+      expect(summaries.body).toHaveLength(2);
+      const emailIdToArchive = summaries.body[0].id as string;
+
+      const archiveResult = await request(appWithModify.getHttpServer())
+        .post(`/resumos-email/${emailIdToArchive}/arquivar`)
+        .set(authHeader3)
+        .expect(201);
+      expect(archiveResult.body).toEqual({ arquivado: true });
+
+      const afterArchive = await request(appWithModify.getHttpServer())
+        .get('/resumos-email')
+        .set(authHeader3)
+        .expect(200);
+      expect(afterArchive.body).toHaveLength(1);
+      expect(afterArchive.body.find((s: { id: string }) => s.id === emailIdToArchive)).toBeUndefined();
+
+      const emailIdToDelete = afterArchive.body[0].id as string;
+      const deleteResult = await request(appWithModify.getHttpServer())
+        .post(`/resumos-email/${emailIdToDelete}/excluir`)
+        .set(authHeader3)
+        .expect(201);
+      expect(deleteResult.body).toEqual({ excluido: true });
+
+      const afterDelete = await request(appWithModify.getHttpServer())
+        .get('/resumos-email')
+        .set(authHeader3)
+        .expect(200);
+      expect(afterDelete.body).toEqual([]);
+    });
+
+    it('rejects archive/excluir with 403 when the tenant never granted the gmail.modify scope', async () => {
+      const moduleWithoutModify: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(FIREBASE_ADMIN)
+        .useValue(buildFakeFirebaseAdmin())
+        .overrideProvider(GmailOAuthService)
+        .useValue(buildFakeGmailOAuth()) // default scope has no gmail.modify
+        .overrideProvider(GmailApiClient)
+        .useValue(buildFakeGmailApiClient())
+        .compile();
+      appWithoutModify = moduleWithoutModify.createNestApplication();
+      appWithoutModify.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+      await appWithoutModify.init();
+
+      await request(appWithoutModify.getHttpServer())
+        .post('/users/me')
+        .set(authHeader4)
+        .send({ nome: 'Usuário Sem Escopo' })
+        .expect(201);
+      await request(appWithoutModify.getHttpServer())
+        .post('/gmail/connect')
+        .set(authHeader4)
+        .send({ serverAuthCode: 'test-code-4' })
+        .expect(201);
+
+      const user4 = await prisma.user.findUniqueOrThrow({ where: { firebaseUid: firebaseUid4 } });
+      const emailSyncService4 = moduleWithoutModify.get(EmailSyncService);
+      await emailSyncService4.syncUser(user4.id);
+
+      const summaries = await request(appWithoutModify.getHttpServer())
+        .get('/resumos-email')
+        .set(authHeader4)
+        .expect(200);
+      const emailId = summaries.body[0].id as string;
+
+      await request(appWithoutModify.getHttpServer())
+        .post(`/resumos-email/${emailId}/arquivar`)
+        .set(authHeader4)
+        .expect(403);
+      await request(appWithoutModify.getHttpServer())
+        .post(`/resumos-email/${emailId}/excluir`)
+        .set(authHeader4)
+        .expect(403);
+
+      // The rows must stay untouched — a 403 must never look like a silent success.
+      const stillThere = await request(appWithoutModify.getHttpServer())
+        .get('/resumos-email')
+        .set(authHeader4)
+        .expect(200);
+      expect(stillThere.body).toHaveLength(2);
     });
   });
 });

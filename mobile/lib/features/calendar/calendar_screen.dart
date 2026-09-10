@@ -2,9 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/app_input.dart';
 import '../email_triage/email_triage_providers.dart';
+import '../email_triage/gmail_connection_repository.dart';
 import 'calendar_providers.dart';
 import 'calendar_event.dart';
 import 'calendar_repository.dart';
+
+/// Intervalo mínimo entre revalidações automáticas ao retomar o app (ver
+/// `didChangeAppLifecycleState` em [_CalendarScreenState]). Cobre o caso relatado — usuário cria
+/// ou edita um evento no calendário nativo do aparelho e volta ao Sincro — sem refazer as duas
+/// chamadas de rede a cada troca trivial de app (notificação, teclado, um app diferente por
+/// alguns segundos). 30s é curto o bastante para o usuário nunca perceber os dados como
+/// desatualizados no fluxo relatado (sair do Sincro, abrir o calendário do aparelho, criar/editar
+/// um evento, voltar — isso raramente leva menos de 30s) e longo o bastante para não gerar uma
+/// rajada de requisições em quem alterna de app repetidamente em poucos segundos.
+const Duration _kRevalidationMinInterval = Duration(seconds: 30);
 
 // Idle border: ≥2.5:1 contra scaffold #FAF8F5 (light) / #1A1F23 (dark).
 // Mesmos tokens já aprovados em AppInput, AppChip e HomeScreen.
@@ -18,9 +29,15 @@ class CalendarScreen extends ConsumerStatefulWidget {
   ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends ConsumerState<CalendarScreen> {
+class _CalendarScreenState extends ConsumerState<CalendarScreen>
+    with WidgetsBindingObserver {
   late int _currentYear;
   late int _currentMonth;
+
+  // `null` só antes da primeira revalidação; inicializado em [initState] porque a tela já busca
+  // dados frescos ao ser criada — não há motivo para revalidar de novo se o app for retomado
+  // (`resumed`) menos de [_kRevalidationMinInterval] depois da tela ter acabado de abrir.
+  DateTime? _lastRevalidatedAt;
 
   @override
   void initState() {
@@ -28,6 +45,51 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final now = DateTime.now();
     _currentYear = now.year;
     _currentMonth = now.month;
+    _lastRevalidatedAt = now;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Cobre o sintoma relatado: usuário cria/edita um evento no app de calendário nativo do
+  // aparelho e volta ao Sincro. Sem isso, os providers `autoDispose` só refazem a busca quando a
+  // tela é recriada do zero — nunca ao simplesmente retomar o app com a tela já aberta.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed) return;
+    final agora = DateTime.now();
+    final ultima = _lastRevalidatedAt;
+    if (ultima != null &&
+        agora.difference(ultima) < _kRevalidationMinInterval) {
+      return;
+    }
+    _lastRevalidatedAt = agora;
+    ref.invalidate(upcomingEventsProvider);
+    ref.invalidate(monthEventsProvider);
+  }
+
+  // Usado tanto pelo gesto de puxar-para-atualizar quanto poderia ser reusado por qualquer botão
+  // de atualização manual futuro. Invalida os dois providers e só resolve quando as novas buscas
+  // terminam (sucesso ou erro), para que o `RefreshIndicator` mostre o spinner pelo tempo certo.
+  // Erros não são relançados: já ficam visíveis via `AsyncValue.error` nos painéis correspondentes
+  // — deixar a exceção escapar daqui só produziria um erro não tratado sem nenhum usuário para vê-lo.
+  Future<void> _atualizar() async {
+    _lastRevalidatedAt = DateTime.now();
+    ref.invalidate(upcomingEventsProvider);
+    ref.invalidate(monthEventsProvider);
+    try {
+      await Future.wait([
+        ref.read(upcomingEventsProvider.future),
+        ref.read(monthEventsProvider((_currentYear, _currentMonth)).future),
+      ]);
+    } catch (_) {
+      // Ignorado de propósito — ver comentário acima do método.
+    }
   }
 
   @override
@@ -36,6 +98,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       monthEventsProvider((_currentYear, _currentMonth)),
     );
     final upcomingEventsAsync = ref.watch(upcomingEventsProvider);
+    final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -64,91 +127,148 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         tooltip: 'Novo evento',
         child: const Icon(Icons.add),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(
-          12,
-          12,
-          12,
-          80,
-        ), // 80dp para evitar sobrecarga do FAB
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Visualização do mês com navegação
-            _MonthNavigationHeader(
-              ano: _currentYear,
-              mes: _currentMonth,
-              onPreviousMonth: () {
-                setState(() {
-                  if (_currentMonth == 1) {
-                    _currentYear--;
-                    _currentMonth = 12;
-                  } else {
-                    _currentMonth--;
-                  }
-                });
-              },
-              onNextMonth: () {
-                setState(() {
-                  if (_currentMonth == 12) {
-                    _currentYear++;
-                    _currentMonth = 1;
-                  } else {
-                    _currentMonth++;
-                  }
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            _MonthCalendarView(
-              ano: _currentYear,
-              mes: _currentMonth,
-              monthEventsAsync: monthEventsAsync,
-            ),
-            const SizedBox(height: 24),
-            // Próximos eventos (sem painel de erro — erros de carregamento são mostrados na
-            // visão do mês, na seção principal acima; mostrar em ambos os lugares cria duplicação)
-            Text(
-              'Próximos eventos',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            upcomingEventsAsync.when(
-              data: (events) {
-                if (events.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'Nenhum evento nos próximos 7 dias',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final event in events) ...[
-                      _EventCard(event: event),
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
+      // `RefreshIndicator` exige um scrollable que sempre aceite o gesto de arrastar, mesmo
+      // quando o conteúdo é mais curto que a viewport (mês sem eventos + "próximos eventos"
+      // vazio) — sem `AlwaysScrollableScrollPhysics`, o `SingleChildScrollView` recusa a
+      // overscroll nesse caso e o puxar-para-atualizar simplesmente não dispara.
+      body: RefreshIndicator(
+        onRefresh: _atualizar,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            80,
+          ), // 80dp para evitar sobrecarga do FAB
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Conta Google cujo calendário "primary" é lido/escrito por esta tela. Discreto e sem
+              // tom de desculpa, mas essencial: um evento criado no app só aparece no calendário do
+              // aparelho se o app de calendário do celular estiver mostrando a MESMA conta — algo
+              // indistinguível de bug para quem usa, sem essa pista.
+              _CalendarAccountHint(statusAsync: gmailStatusAsync),
+              // Visualização do mês com navegação
+              _MonthNavigationHeader(
+                ano: _currentYear,
+                mes: _currentMonth,
+                onPreviousMonth: () {
+                  setState(() {
+                    if (_currentMonth == 1) {
+                      _currentYear--;
+                      _currentMonth = 12;
+                    } else {
+                      _currentMonth--;
+                    }
+                  });
+                },
+                onNextMonth: () {
+                  setState(() {
+                    if (_currentMonth == 12) {
+                      _currentYear++;
+                      _currentMonth = 1;
+                    } else {
+                      _currentMonth++;
+                    }
+                  });
+                },
               ),
-              error: (_, __) => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'Erro ao carregar eventos. Verifique sua conexão.',
-                  textAlign: TextAlign.center,
+              const SizedBox(height: 16),
+              _MonthCalendarView(
+                ano: _currentYear,
+                mes: _currentMonth,
+                monthEventsAsync: monthEventsAsync,
+              ),
+              const SizedBox(height: 24),
+              // Próximos eventos usa o mesmo `_CalendarErrorPanel` da visão do mês (abaixo dizia
+              // "sem painel de erro" e caía numa mensagem genérica sem ação — quem só olha esta
+              // seção nunca achava o "Reconectar Gmail" que já existia lá em cima). Sim, um erro de
+              // escopo simultâneo agora aparece duas vezes na tela; é uma duplicação aceitável em
+              // troca de a ação corretiva estar sempre visível perto de onde a pessoa está olhando.
+              Text(
+                'Próximos eventos',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              upcomingEventsAsync.when(
+                data: (events) {
+                  if (events.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Text(
+                        'Nenhum evento nos próximos 7 dias',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final event in events) ...[
+                        _EventCard(event: event),
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (err, __) => _CalendarErrorPanel(
+                  error: err,
+                  onRetry: () => ref.invalidate(upcomingEventsProvider),
                 ),
               ),
+              // Padding adicional na base para evitar que o FAB sobreponha o último card
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Linha discreta indicando de qual conta Google vem o calendário "primary" lido/escrito por esta
+/// tela. Some silenciosamente enquanto o status ainda carrega ou falha — não é informação crítica
+/// o bastante para justificar um estado de erro próprio, e a tela já tem `_CalendarErrorPanel`
+/// para as falhas que realmente importam (escopo ausente, backend indisponível).
+class _CalendarAccountHint extends StatelessWidget {
+  const _CalendarAccountHint({required this.statusAsync});
+
+  final AsyncValue<GmailConnectionStatus> statusAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    final email = statusAsync.value?.gmailEmail;
+    if (email == null || email.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Semantics(
+        label: 'Agenda sincronizada com a conta Google $email',
+        excludeSemantics: true,
+        child: Row(
+          children: [
+            Icon(
+              Icons.sync_outlined,
+              size: 16,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            // Padding adicional na base para evitar que o FAB sobreponha o último card
-            const SizedBox(height: 24),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Sincronizado com $email',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),

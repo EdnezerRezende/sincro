@@ -3,6 +3,7 @@ import { GmailConnectionsService } from './gmail-connections.service';
 const FULL_SCOPE =
   'https://www.googleapis.com/auth/gmail.readonly ' +
   'https://www.googleapis.com/auth/gmail.send ' +
+  'https://www.googleapis.com/auth/gmail.modify ' +
   'https://www.googleapis.com/auth/calendar.events';
 
 function buildDeps() {
@@ -44,6 +45,7 @@ describe('GmailConnectionsService', () => {
         gmailEmail: 'ana@example.com',
         temEscopoEnvio: true,
         temEscopoAgenda: true,
+        temEscopoModificacao: true,
       },
       create: {
         userId: 'u1',
@@ -51,6 +53,7 @@ describe('GmailConnectionsService', () => {
         gmailEmail: 'ana@example.com',
         temEscopoEnvio: true,
         temEscopoAgenda: true,
+        temEscopoModificacao: true,
       },
     });
   });
@@ -87,7 +90,25 @@ describe('GmailConnectionsService', () => {
 
     expect(prisma.gmailConnection.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ temEscopoEnvio: false, temEscopoAgenda: false }),
+        update: expect.objectContaining({ temEscopoEnvio: false, temEscopoAgenda: false, temEscopoModificacao: false }),
+      }),
+    );
+  });
+
+  it('persists temEscopoModificacao true only when gmail.modify is granted', async () => {
+    const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
+    oauthService.exchangeServerAuthCode.mockResolvedValue({
+      refreshToken: 'rt-123',
+      scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
+    });
+    prisma.gmailConnection.upsert.mockResolvedValue({ id: 'gc1' });
+    const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
+
+    await service.connect('fb1', 'auth-code-abc');
+
+    expect(prisma.gmailConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ temEscopoEnvio: false, temEscopoAgenda: false, temEscopoModificacao: true }),
       }),
     );
   });
@@ -98,6 +119,7 @@ describe('GmailConnectionsService', () => {
       gmailEmail: 'ana@example.com',
       temEscopoEnvio: true,
       temEscopoAgenda: false,
+      temEscopoModificacao: true,
     });
     const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
 
@@ -109,10 +131,11 @@ describe('GmailConnectionsService', () => {
       gmailEmail: 'ana@example.com',
       temEscopoEnvio: true,
       temEscopoAgenda: false,
+      temEscopoModificacao: true,
     });
   });
 
-  it('reports not connected, with both scope flags false, when there is no row', async () => {
+  it('reports not connected, with all scope flags false, when there is no row', async () => {
     const { prisma, usersService, tokenCrypto, oauthService } = buildDeps();
     prisma.gmailConnection.findUnique.mockResolvedValue(null);
     const service = new GmailConnectionsService(prisma as any, usersService as any, tokenCrypto as any, oauthService as any);
@@ -124,6 +147,7 @@ describe('GmailConnectionsService', () => {
       gmailEmail: null,
       temEscopoEnvio: false,
       temEscopoAgenda: false,
+      temEscopoModificacao: false,
     });
   });
 

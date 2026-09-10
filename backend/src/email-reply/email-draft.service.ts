@@ -13,8 +13,11 @@ export class EmailDraftService {
 
   /** Unlike LlmEmailClassifier (which runs unattended in a background cron job and must never
    *  throw), this runs synchronously while a person is looking at the screen, able to retry — so
-   *  a failure here is allowed to propagate; the controller/mobile layer shows a calm retry UI
-   *  instead of silently returning empty drafts. */
+   *  a failure here is allowed to propagate. That premise only holds because reading the e-mail
+   *  itself (GET /resumos-email/:id/conteudo) does NOT depend on this service: EmailReplyController
+   *  catches whatever this throws and turns it into a handled 503, and the mobile screen shows a
+   *  calm, local retry affordance next to the e-mail body it already displayed — never a dead
+   *  screen and never an unhandled 500. */
   async gerar(params: { remetente: string; assunto: string; corpo: string }): Promise<RascunhosGerados> {
     const response = await this.client.messages.create({
       model: 'claude-haiku-4-5-20251001',

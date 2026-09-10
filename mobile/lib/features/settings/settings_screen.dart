@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_providers.dart';
 import '../biofeedback/biofeedback_frequencia.dart';
 import '../biofeedback/biofeedback_providers.dart';
-import '../email_triage/email_triage_providers.dart';
+import '../email_triage/gmail_connection_actions.dart';
 import '../financas/finance_connection.dart';
+import '../financas/finance_connection_actions.dart';
 import '../financas/finance_providers.dart';
 import '../guide/guide_content.dart';
 import '../guide/guide_screen.dart';
@@ -180,38 +181,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  // Diálogo de confirmação + chamada ao repositório + invalidação do status vivem em
+  // `confirmarEDesconectarGmail` (gmail_connection_actions.dart), compartilhado com a caixa de
+  // entrada — evita duas implementações da mesma ação divergindo com o tempo.
   Future<void> _disconnectGmail() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Desconectar Gmail?'),
-        content: const Text(
-          'O resumo da sua caixa de entrada será apagado. Você pode reconectar quando quiser.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Desconectar')),
-        ],
-      ),
+    await confirmarEDesconectarGmail(
+      context,
+      ref,
+      setBusy: (busy) {
+        if (mounted) setState(() => _busy = busy);
+      },
     );
-    if (confirmed != true) return;
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(gmailConnectionRepositoryProvider).disconnect();
-      ref.invalidate(gmailConnectionStatusProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gmail desconectado.')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível desconectar o Gmail. Tente novamente.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _editDiaRecebimento() async {
@@ -294,36 +274,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  // Mesmo padrão de extração do Gmail acima: a lógica vive em
+  // `confirmarEDesconectarFinanceConnection` (finance_connection_actions.dart), compartilhada
+  // com a tela de Finanças.
   Future<void> _disconnectFinanceConnection(FinanceConnection connection) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Desconectar ${connection.instituicao}?'),
-        content: const Text('Os dados dessa conexão serão apagados. Você pode reconectar quando quiser.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Desconectar')),
-        ],
-      ),
+    await confirmarEDesconectarFinanceConnection(
+      context,
+      ref,
+      connection,
+      setBusy: (busy) {
+        if (mounted) setState(() => _busy = busy);
+      },
     );
-    if (confirmed != true) return;
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(financeConnectionRepositoryProvider).disconnect(connection.id);
-      ref.invalidate(financeConnectionsProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${connection.instituicao} desconectado.')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível desconectar. Tente novamente.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _editBiofeedbackFrequencia() async {

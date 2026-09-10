@@ -6,7 +6,7 @@
 
 **Architecture:** Uma VPS gratuita (Oracle Cloud Always Free) roda o mesmo `docker-compose` já usado em desenvolvimento (Postgres+pgvector, backend, mobile-web), atrás de um reverse proxy Caddy que termina TLS automático via Let's Encrypt num subdomínio DuckDNS. Android é distribuído via Firebase App Distribution; testadores sem Android usam a build Flutter Web servida pela mesma VPS. Sentry captura exceptions no backend e crashes no app.
 
-**Tech Stack:** Docker Compose, Caddy (reverse proxy + TLS), DuckDNS (DNS dinâmico grátis), Oracle Cloud Always Free (VPS), Firebase App Distribution, `@sentry/nestjs`, `sentry_flutter`.
+**Tech Stack:** Docker Coffmpose, Caddy (reverse proxy + TLS), DuckDNS (DNS dinâmico grátis), Oracle Cloud Always Free (VPS), Firebase App Distribution, `@sentry/nestjs`, `sentry_flutter`.
 
 **Spec:** [docs/superpowers/specs/2026-08-30-ambiente-sandbox-observabilidade-design.md](../specs/2026-08-30-ambiente-sandbox-observabilidade-design.md)
 

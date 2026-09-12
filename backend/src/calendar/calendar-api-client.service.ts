@@ -28,6 +28,7 @@ export interface EventoCompletoParams {
   dataHoraInicio: string;
   dataHoraFim: string;
   ehDiaInteiro?: boolean; // true se o evento é um evento de dia inteiro (all-day)
+  lembretesMinutosAntes?: number[];
 }
 
 const DURACAO_EVENTO_MINUTOS = 30;
@@ -126,6 +127,7 @@ export class CalendarApiClient {
           description: params.descricao,
           start: { date: dataInicio },
           end: { date: dataFim },
+          ...this.remindersOverride(params.lembretesMinutosAntes),
         },
       });
       return this.paraEventoCalendario(data);
@@ -141,6 +143,7 @@ export class CalendarApiClient {
         description: params.descricao,
         start: { dateTime: inicio },
         end: { dateTime: fim },
+        ...this.remindersOverride(params.lembretesMinutosAntes),
       },
     });
     return this.paraEventoCalendario(data);
@@ -175,6 +178,7 @@ export class CalendarApiClient {
           description: params.descricao,
           start: { date: dataInicio },
           end: { date: dataFim },
+          ...this.remindersOverride(params.lembretesMinutosAntes),
         },
       });
       return this.paraEventoCalendario(data);
@@ -191,6 +195,7 @@ export class CalendarApiClient {
         description: params.descricao,
         start: { dateTime: inicio },
         end: { dateTime: fim },
+        ...this.remindersOverride(params.lembretesMinutosAntes),
       },
     });
     return this.paraEventoCalendario(data);
@@ -200,6 +205,22 @@ export class CalendarApiClient {
     const auth = this.oauthService.authenticatedClientFor(refreshToken);
     const calendar = google.calendar({ version: 'v3', auth });
     await calendar.events.delete({ calendarId: 'primary', eventId });
+  }
+
+  /** Monta o override de lembretes (popup) quando `lembretesMinutosAntes` é fornecido e não-vazio.
+   *  Ausência do campo preserva o comportamento atual (lembretes padrão da agenda do usuário) —
+   *  essencial para não afetar chamadas existentes (ex.: `CalendarController`) que não passam
+   *  esse parâmetro. */
+  private remindersOverride(
+    lembretesMinutosAntes?: number[],
+  ): { reminders: calendar_v3.Schema$Event['reminders'] } | Record<string, never> {
+    if (!lembretesMinutosAntes || lembretesMinutosAntes.length === 0) return {};
+    return {
+      reminders: {
+        useDefault: false,
+        overrides: lembretesMinutosAntes.map((minutes) => ({ method: 'popup', minutes })),
+      },
+    };
   }
 
   private paraEventoCalendario(

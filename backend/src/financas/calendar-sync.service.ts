@@ -36,6 +36,7 @@ export class FinanceCalendarSyncService {
         dataHoraInicio: dataIso,
         dataHoraFim: dataIso,
         ehDiaInteiro: true,
+        lembretesMinutosAntes: [24 * 60],
       };
 
       if (lancamento.googleEventId) {

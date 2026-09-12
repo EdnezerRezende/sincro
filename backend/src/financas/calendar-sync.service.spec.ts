@@ -34,6 +34,7 @@ describe('FinanceCalendarSyncService — syncOnConfirm', () => {
       dataHoraInicio: '2026-10-10',
       dataHoraFim: '2026-10-10',
       ehDiaInteiro: true,
+      lembretesMinutosAntes: [1440],
     });
     expect(eventId).toBe('evt-1');
   });

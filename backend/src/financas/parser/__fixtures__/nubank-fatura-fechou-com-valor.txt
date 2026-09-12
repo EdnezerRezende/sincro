@@ -1,0 +1,8 @@
+Oi, tudo bem?
+
+Sua fatura do cartão Nubank fechou.
+
+Total da fatura: R$ 1.234,56
+Vencimento: 10/10/2026
+
+Abra o app para conferir os detalhes.

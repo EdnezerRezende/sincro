@@ -1,0 +1,6 @@
+Segue o código de barras da sua conta:
+
+82660000001-2 23400012345-6 78900001234-5 60000000000-1
+
+Valor a pagar: R$ 189,90
+Vencimento: 15/09/2026

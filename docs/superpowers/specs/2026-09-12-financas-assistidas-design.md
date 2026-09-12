@@ -52,6 +52,21 @@ custo de infraestrutura zero.
    reaproveitando o padrão arquitetural já usado pelos classificadores
    existentes (`HeuristicEmailClassifier`/`LlmEmailClassifier`), via import
    cruzado do `FinanceModule` no `EmailSyncModule`.
+4. **Instituição financeira como campo estruturado:** como o usuário pode
+   ter múltiplas contas/cartões do mesmo tipo em bancos diferentes, o nome
+   da instituição detectada (Nubank, Itaú, Enel...) é guardado em campo
+   próprio (`instituicao`) em vez de ficar só embutido na `descricao` —
+   permite badge visual e filtro futuro por banco.
+5. **Sincronização com Google Calendar:** o Sincro já tem um módulo
+   `backend/src/calendar/` (`CalendarApiClientService`) que reaproveita a
+   mesma conexão OAuth do Gmail para criar/editar/apagar eventos — não é
+   uma integração nova. Ao **confirmar** um lançamento, o backend cria um
+   evento na `dataVencimento` com lembrete padrão do próprio Google
+   Calendar (não um scheduler próprio do Sincro, seguindo o padrão já
+   estabelecido no módulo). O evento é atualizado/apagado conforme o ciclo
+   de vida do lançamento (ver seção de Modelagem de Dados). Se o usuário
+   não concedeu o escopo de agenda (`temEscopoAgenda=false`), a criação
+   falha silenciosamente — nunca bloqueia a confirmação do lançamento.
 
 ## Arquitetura e Fluxo de Dados
 
@@ -148,6 +163,7 @@ model LancamentoFinanceiro {
   userId           String
   tipo             TipoLancamento
   descricao        String
+  instituicao      String?
   valor            Decimal?          @db.Decimal(12, 2)
   dataVencimento   DateTime
   dataCompetencia  DateTime
@@ -158,6 +174,7 @@ model LancamentoFinanceiro {
   codigoBarras     String?
   cartaoId         String?
   contaId          String?
+  googleEventId    String?
   criadoEm         DateTime          @default(now())
   atualizadoEm     DateTime          @updatedAt
 
@@ -179,6 +196,14 @@ Notas de modelagem:
   `NULL` como não-conflitantes em unique compostos).
 - `valor` é `Decimal?` nullable propositalmente: cobre o caso de fatura por
   PDF/imagem sem valor extraído e o caso de ambiguidade no regex de moeda.
+- `instituicao` é preenchido pelo parser a partir da mesma tabela de
+  mapeamento remetente→instituição usada para reconhecer o e-mail
+  (Nubank, Itaú, Enel...); fica `null` em lançamentos manuais, a menos que
+  o usuário informe.
+- `googleEventId` guarda o id do evento criado no Google Calendar quando o
+  lançamento é confirmado — usado para localizar o evento numa futura
+  edição/exclusão. Fica `null` até a primeira confirmação bem-sucedida e
+  também se a criação do evento falhar (usuário sem escopo de agenda).
 - Tabelas antigas (`FinanceConnection`, `FinanceAccount`, `BoletoDda`) e o
   módulo `pluggy/` são removidos na mesma migration (drop limpo, sem
   migração de dados).
@@ -215,6 +240,11 @@ PATCH  /financas/lancamentos/:id/ignorar   status=IGNORADO (fica no histórico, 
 DELETE /financas/lancamentos/:id           (só permitido se status ≠ CONFIRMADO)
 ```
 
+`.../confirmar` e o `PATCH` de edição de um lançamento já `CONFIRMADO` têm um
+efeito colateral: sincronizam o evento no Google Calendar (ver seção
+"Sincronização com Google Calendar" abaixo). `.../ignorar` e `DELETE` apagam
+o evento correspondente, se existir.
+
 **Resumo**
 ```
 GET    /financas/resumo   { saldoLivre, saldoContas, faturasAbertas, despesasPendentesCiclo, cicloFim }
@@ -228,7 +258,7 @@ só do ponto de vista do usuário).
 
 | Regra | Regex / lógica | Exemplo de e-mail | Fallback |
 |---|---|---|---|
-| Remetente/instituição | lista fixa e extensível de domínios/nomes (Nubank, Itaú, Inter, Bradesco, C6, Claro, Vivo, Enel, etc.) | `De: Nubank <fatura@nubank.com.br>` | remetente fora da lista → e-mail ignorado pelo parser |
+| Remetente/instituição | lista fixa e extensível de domínios/nomes (Nubank, Itaú, Inter, Bradesco, C6, Claro, Vivo, Enel, etc.), cada entrada mapeando domínio → nome de exibição da instituição | `De: Nubank <fatura@nubank.com.br>` → `instituicao="Nubank"` | remetente fora da lista → e-mail ignorado pelo parser; remetente bate mas sem nome mapeado explicitamente → `instituicao` = nome do domínio capitalizado |
 | Valor (moeda BR) | `/R\$\s*([\d.]{1,3}(?:\.\d{3})*,\d{2})/` aplicado nas linhas ao redor de âncora semântica | `Valor total da fatura: R$ 1.234,56` | sem âncora ou múltiplos valores conflitantes → `valor: null` |
 | Âncora semântica (prioridade) | ordem: `/valor\s+a\s+pagar/i`, `/total\s+da\s+fatura/i`, `/fatura\s+fechou/i`, `/total\s+a\s+pagar/i` | `Sua fatura de R$ 1.234,56 já está disponível` | nenhuma âncora bate → tenta `R$` isolado; se houver mais de um sem âncora, `valor: null` |
 | Data (numérica) | `/(\d{2})\/(\d{2})\/(\d{4})/` | `Vencimento: 15/09/2026` | — |
@@ -237,6 +267,25 @@ só do ponto de vista do usuário).
 | Linha digitável (concessionária, 48 dígitos) | `/^\d{11}-\d\s\d{11}-\d\s\d{11}-\d\s\d{11}-\d$/m` | `82660000001-2 23400012345-6 ...` | idem acima |
 | Fatura sem valor extraível (PDF/imagem) | remetente conhecido + assunto `/fatura\s+fechou/i` sem `R$` no corpo | `Assunto: Sua fatura fechou` + link para PDF | cria lançamento com `valor: null`, `dataVencimento` por heurística de vencimento do cartão ou e-mail + N dias |
 | Idempotência | `SELECT` por `[userId, emailMessageId]` antes de qualquer parse | — | reprocessamento nunca duplica |
+
+## Sincronização com Google Calendar
+
+Reaproveita o módulo já existente `backend/src/calendar/` — nenhuma
+integração OAuth nova. `FinanceModule` passa a importar `CalendarModule` e
+chama `CalendarApiClientService` nos pontos abaixo:
+
+| Ação no lançamento | Efeito no Google Calendar |
+|---|---|
+| Confirmar (`status → CONFIRMADO`), sem `googleEventId` | `criarEventoCompleto`: título `Pagar: {instituicao} · {descricao}` (ou só `{descricao}` se `instituicao` for `null`), data = `dataVencimento`, evento de dia inteiro, `reminders.overrides` com um único lembrete popup 1 dia antes (sem múltiplos avisos — tom não alarmista). `googleEventId` do retorno é salvo no lançamento. |
+| Editar lançamento já `CONFIRMADO` (mudou `dataVencimento`/`valor`/`descricao`) | `atualizarEvento(googleEventId, ...)`. Se `googleEventId` for `null` (falhou antes), tenta criar de novo. |
+| Marcar como pago (`isPago → true`) | `deletarEvento(googleEventId)` — a cobrança deixou de precisar de lembrete; `googleEventId` volta a `null`. |
+| Ignorar (`status → IGNORADO`) ou excluir o lançamento | `deletarEvento(googleEventId)` se existir. |
+
+Toda chamada ao `CalendarApiClientService` neste fluxo é **best-effort**: uma
+falha (usuário sem `temEscopoAgenda`, token revogado, API do Google fora do
+ar) é logada e nunca impede a operação principal no `LancamentoFinanceiro` —
+consistente com o comentário já existente no módulo de que o Google Calendar
+é quem entrega os lembretes, o Sincro não reimplementa scheduling próprio.
 
 ## Mobile: UX
 
@@ -270,6 +319,14 @@ Dark mode implementado com os valores reais do tema dark do Sincro
 **Referência viva:** canvas publicado com as 3 telas (claro/escuro
 alternável por tweak) — https://claude.ai/code/artifact/e712b5ed-15e7-4c8a-b2e9-e20b38838b6f
 
+**Pendência de UI não refletida ainda no canvas:** os mockups publicados
+mostram a descrição já com o nome do banco embutido em texto livre (ex.
+"Fatura Nubank"). Com o campo `instituicao` estruturado, a implementação
+Flutter deve exibi-lo como um badge/rótulo separado da descrição (ex. chip
+pequeno "Nubank" ao lado do ícone), não apenas concatenado no texto — ajuste
+a ser feito na implementação, o canvas não precisa ser republicado só por
+isso.
+
 **Ressalva registrada:** o tom exato de preenchimento interno
 ("surfaceContainerHighest") no dark mode foi inferido por extensão da
 progressão de elevação Material (`#343A41`), pois o levantamento de tokens
@@ -296,6 +353,23 @@ Fixtures em `backend/src/financas/parser/__fixtures__/`:
 
 Cada teste chama `parser.match(fixture)` diretamente (regras determinísticas,
 sem mockar regex) com mock apenas do Prisma para verificar `upsert`/idempotência.
+Casos adicionais: `note.instituicao === "Nubank"` para as fixtures do Nubank;
+domínio reconhecido mas sem nome mapeado explicitamente → `instituicao`
+derivado do domínio.
+
+**Sincronização com Google Calendar (unitários, `CalendarApiClientService` mockado)**
+
+- Confirmar um lançamento sem `googleEventId` chama `criarEventoCompleto`
+  exatamente uma vez com o título e a data corretos, e persiste o
+  `googleEventId` retornado.
+- Editar um lançamento `CONFIRMADO` com `googleEventId` existente chama
+  `atualizarEvento`, não `criarEventoCompleto`.
+- Marcar como pago, ignorar ou excluir um lançamento com `googleEventId`
+  chama `deletarEvento`; sem `googleEventId`, não chama nada.
+- `CalendarApiClientService` lançando erro (ex.: `temEscopoAgenda=false`)
+  não impede a confirmação do lançamento — o teste verifica que o
+  `LancamentoFinanceiro` é salvo como `CONFIRMADO` mesmo com a chamada ao
+  Calendar falhando.
 
 **`SaldoLivreCalculator` (unitários — calculator em si não muda)**
 
@@ -329,6 +403,9 @@ apenas) corretamente antes de chamar `calcular()`. Casos:
 - Nenhum lançamento entra no cálculo de Saldo Livre sem confirmação humana.
 - App mobile exibe as 3 telas do fluxo (card na Home, tela com abas,
   bottom sheet de confirmação) fiéis aos tokens visuais do Sincro, em claro
-  e escuro.
-- Suíte de testes das três frentes (parser, calculator/resumo, multi-tenant)
-  passando.
+  e escuro, com o badge de instituição visível nos cards.
+- Confirmar um lançamento cria um evento no Google Calendar do usuário
+  (quando ele tem o escopo de agenda concedido), sem nunca bloquear a
+  confirmação caso a chamada ao Calendar falhe.
+- Suíte de testes das quatro frentes (parser, calculator/resumo,
+  multi-tenant, sincronização com Calendar) passando.

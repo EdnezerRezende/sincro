@@ -11,6 +11,7 @@ import { ContasService } from './contas.service';
 import { LancamentosController } from './lancamentos.controller';
 import { LancamentosService } from './lancamentos.service';
 import { EmailFinanceRegexParserService } from './parser/email-finance-regex-parser.service';
+import { ResumoController } from './resumo.controller';
 import { SaldoLivreCalculator } from './saldo-livre.calculator';
 
 @Module({
@@ -23,7 +24,7 @@ import { SaldoLivreCalculator } from './saldo-livre.calculator';
     FinanceCalendarSyncService,
     LancamentosService,
   ],
-  controllers: [ContasController, CartoesController, LancamentosController],
+  controllers: [ContasController, CartoesController, LancamentosController, ResumoController],
   exports: [EmailFinanceRegexParserService],
 })
 export class FinancasModule {}

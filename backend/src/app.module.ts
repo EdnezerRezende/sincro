@@ -9,8 +9,7 @@ import { TrustedContactsModule } from './trusted-contacts/trusted-contacts.modul
 import { EmergencyModule } from './emergency/emergency.module';
 import { GmailModule } from './gmail/gmail.module';
 import { EmailSyncModule } from './email-sync/email-sync.module';
-import { PluggyModule } from './pluggy/pluggy.module';
-import { FinanceSyncModule } from './finance-sync/finance-sync.module';
+import { FinancasModule } from './financas/financas.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
 import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
 import { RagModule } from './rag/rag.module';
@@ -29,8 +28,7 @@ import { EmailReplyModule } from './email-reply/email-reply.module';
     EmergencyModule,
     GmailModule,
     EmailSyncModule,
-    PluggyModule,
-    FinanceSyncModule,
+    FinancasModule,
     ProfessionalsModule,
     GroundingCardsModule,
     RagModule,

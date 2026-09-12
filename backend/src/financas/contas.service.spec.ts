@@ -58,4 +58,16 @@ describe('ContasService', () => {
 
     expect(prisma.contaFinanceira.delete).toHaveBeenCalledWith({ where: { id: 'conta-1' } });
   });
+
+  it('scopes the linked-lançamentos count to the calling user', async () => {
+    const prisma = buildPrismaMock();
+    prisma.contaFinanceira.findFirst.mockResolvedValue({ id: 'conta-1', userId: 'user-1' });
+    const service = new ContasService(prisma as any);
+
+    await service.remove('user-1', 'conta-1');
+
+    expect(prisma.lancamentoFinanceiro.count).toHaveBeenCalledWith({
+      where: { contaId: 'conta-1', userId: 'user-1' },
+    });
+  });
 });

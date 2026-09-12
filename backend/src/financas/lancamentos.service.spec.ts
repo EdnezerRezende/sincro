@@ -9,6 +9,12 @@ function buildDeps() {
       findFirst: jest.fn(),
       delete: jest.fn(),
     },
+    contaFinanceira: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'conta-1', userId: 'user-1' }),
+    },
+    cartaoCredito: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'cartao-1', userId: 'user-1' }),
+    },
   };
   const calendarSync = { syncOnConfirm: jest.fn(), removeEvent: jest.fn() };
   return { prisma, calendarSync, service: new LancamentosService(prisma as any, calendarSync as any) };
@@ -67,6 +73,36 @@ describe('LancamentosService — createManual', () => {
       }),
     });
   });
+
+  it('throws when contaId belongs to a different user', async () => {
+    const { prisma, service } = buildDeps();
+    prisma.contaFinanceira.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createManual('user-1', {
+        tipo: 'DESPESA',
+        descricao: 'Mercado',
+        dataVencimento: '2026-09-20',
+        contaId: 'conta-de-outro-usuario',
+      }),
+    ).rejects.toThrow();
+    expect(prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+
+  it('throws when cartaoId belongs to a different user', async () => {
+    const { prisma, service } = buildDeps();
+    prisma.cartaoCredito.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createManual('user-1', {
+        tipo: 'FATURA_CARTAO',
+        descricao: 'Fatura',
+        dataVencimento: '2026-09-20',
+        cartaoId: 'cartao-de-outro-usuario',
+      }),
+    ).rejects.toThrow();
+    expect(prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('LancamentosService — confirmar', () => {
@@ -99,6 +135,19 @@ describe('LancamentosService — confirmar', () => {
     prisma.lancamentoFinanceiro.findFirst.mockResolvedValue(null);
 
     await expect(service.confirmar('user-1', 'lanc-x', {})).rejects.toThrow();
+  });
+
+  it('throws when confirming with a contaId that belongs to a different user', async () => {
+    const { prisma, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({
+      id: 'lanc-1', userId: 'user-1', status: 'PENDENTE_REVISAO', googleEventId: null,
+    });
+    prisma.contaFinanceira.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.confirmar('user-1', 'lanc-1', { contaId: 'conta-de-outro-usuario' }),
+    ).rejects.toThrow();
+    expect(prisma.lancamentoFinanceiro.update).not.toHaveBeenCalled();
   });
 });
 

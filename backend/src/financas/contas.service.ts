@@ -27,7 +27,7 @@ export class ContasService {
 
   async remove(userId: string, id: string): Promise<void> {
     await this.getOwnedOrThrow(userId, id);
-    const vinculados = await this.prisma.lancamentoFinanceiro.count({ where: { contaId: id } });
+    const vinculados = await this.prisma.lancamentoFinanceiro.count({ where: { contaId: id, userId } });
     if (vinculados > 0) {
       throw new ConflictException('Conta possui lançamentos vinculados e não pode ser excluída');
     }

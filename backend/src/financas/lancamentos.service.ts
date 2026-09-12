@@ -25,7 +25,8 @@ export class LancamentosService {
     return this.prisma.lancamentoFinanceiro.findMany({ where, orderBy: { dataVencimento: 'asc' } });
   }
 
-  createManual(userId: string, dto: CreateLancamentoDto) {
+  async createManual(userId: string, dto: CreateLancamentoDto) {
+    await this.assertContaECartaoPertencemAoUsuario(userId, dto.contaId, dto.cartaoId);
     const dataVencimento = new Date(dto.dataVencimento);
     const dataCompetencia = dto.dataCompetencia ? new Date(dto.dataCompetencia) : dataVencimento;
     return this.prisma.lancamentoFinanceiro.create({
@@ -48,6 +49,7 @@ export class LancamentosService {
 
   async update(userId: string, id: string, dto: UpdateLancamentoDto) {
     const lancamento = await this.getOwnedOrThrow(userId, id);
+    await this.assertContaECartaoPertencemAoUsuario(userId, dto.contaId, dto.cartaoId);
     const data: Record<string, unknown> = { ...dto };
     if (dto.dataVencimento) data.dataVencimento = new Date(dto.dataVencimento);
     if (dto.dataCompetencia) data.dataCompetencia = new Date(dto.dataCompetencia);
@@ -65,6 +67,7 @@ export class LancamentosService {
 
   async confirmar(userId: string, id: string, dto: ConfirmarLancamentoDto) {
     await this.getOwnedOrThrow(userId, id);
+    await this.assertContaECartaoPertencemAoUsuario(userId, dto.contaId, dto.cartaoId);
     const data: Record<string, unknown> = { status: 'CONFIRMADO' };
     if (dto.valor !== undefined) data.valor = dto.valor;
     if (dto.dataVencimento) data.dataVencimento = new Date(dto.dataVencimento);
@@ -103,5 +106,20 @@ export class LancamentosService {
     const lancamento = await this.prisma.lancamentoFinanceiro.findFirst({ where: { id, userId } });
     if (!lancamento) throw new NotFoundException('Lançamento não encontrado');
     return lancamento;
+  }
+
+  private async assertContaECartaoPertencemAoUsuario(
+    userId: string,
+    contaId: string | undefined,
+    cartaoId: string | undefined,
+  ) {
+    if (contaId) {
+      const conta = await this.prisma.contaFinanceira.findFirst({ where: { id: contaId, userId } });
+      if (!conta) throw new NotFoundException('Conta não encontrada');
+    }
+    if (cartaoId) {
+      const cartao = await this.prisma.cartaoCredito.findFirst({ where: { id: cartaoId, userId } });
+      if (!cartao) throw new NotFoundException('Cartão não encontrado');
+    }
   }
 }

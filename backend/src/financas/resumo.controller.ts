@@ -35,8 +35,12 @@ export class ResumoController {
       .filter((l) => l.tipo === 'FATURA_CARTAO' && l.valor !== null)
       .map((l) => ({ tipo: 'CARTAO_CREDITO', saldoOuFatura: l.valor!.toNumber() }));
 
+    // RECEITA lançamentos are informational only for now: SaldoLivreCalculator
+    // (shared, unmodified) has no concept of adding income to a point-in-time
+    // snapshot, so only DESPESA feeds the subtracted `boletos` list — never
+    // subtract income from Saldo Livre.
     const boletos: BoletoParaCalculo[] = lancamentosRaw
-      .filter((l) => l.tipo !== 'FATURA_CARTAO' && l.valor !== null)
+      .filter((l) => l.tipo === 'DESPESA' && l.valor !== null)
       .map((l) => ({ valor: l.valor!.toNumber(), vencimento: l.dataVencimento, pago: l.isPago }));
 
     const resultado = this.calculator.calcular({

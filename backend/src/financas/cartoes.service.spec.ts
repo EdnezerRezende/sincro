@@ -58,4 +58,16 @@ describe('CartoesService', () => {
 
     await expect(service.remove('user-1', 'cartao-1')).rejects.toThrow();
   });
+
+  it('scopes the linked-lançamentos count to the calling user', async () => {
+    const prisma = buildPrismaMock();
+    prisma.cartaoCredito.findFirst.mockResolvedValue({ id: 'cartao-1', userId: 'user-1' });
+    const service = new CartoesService(prisma as any);
+
+    await service.remove('user-1', 'cartao-1');
+
+    expect(prisma.lancamentoFinanceiro.count).toHaveBeenCalledWith({
+      where: { cartaoId: 'cartao-1', userId: 'user-1' },
+    });
+  });
 });

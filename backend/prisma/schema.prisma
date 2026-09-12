@@ -21,8 +21,6 @@ model User {
   trustedContacts TrustedContact[]
   gmailConnection GmailConnection?
   emailSummaries  EmailSummary[]
-  financeConnections FinanceConnection[]
-  boletosDda      BoletoDda[]
   cardFavoritos   CardFavorito[]
 
   @@map("usuarios")
@@ -88,54 +86,6 @@ model EmailSummary {
   @@map("resumos_email")
 }
 
-model FinanceConnection {
-  id           String           @id @default(uuid())
-  userId       String           @map("user_id")
-  user         User             @relation(fields: [userId], references: [id])
-  pluggyItemId String           @map("pluggy_item_id")
-  instituicao  String
-  status       String
-  criadoEm     DateTime         @default(now()) @map("criado_em")
-  contas       FinanceAccount[]
-
-  @@unique([userId, pluggyItemId])
-  @@index([userId])
-  @@map("conexoes_financeiras")
-}
-
-model FinanceAccount {
-  id               String            @id @default(uuid())
-  conexaoId        String            @map("conexao_id")
-  conexao          FinanceConnection @relation(fields: [conexaoId], references: [id])
-  pluggyAccountId  String            @map("pluggy_account_id")
-  tipo             String
-  nome             String
-  saldoOuFatura    Decimal           @map("saldo_ou_fatura") @db.Decimal(14, 2)
-  vencimentoFatura DateTime?         @map("vencimento_fatura") @db.Date
-  notificadoEm     DateTime?         @map("notificado_em")
-  atualizadoEm     DateTime          @default(now()) @updatedAt @map("atualizado_em")
-
-  @@unique([conexaoId, pluggyAccountId])
-  @@index([conexaoId])
-  @@map("contas_financeiras")
-}
-
-model BoletoDda {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  user         User      @relation(fields: [userId], references: [id])
-  codigoBarras String    @map("codigo_barras")
-  valor        Decimal   @db.Decimal(14, 2)
-  vencimento   DateTime  @db.Date
-  pago         Boolean   @default(false)
-  notificadoEm DateTime? @map("notificado_em")
-  criadoEm     DateTime  @default(now()) @map("criado_em")
-
-  @@unique([userId, codigoBarras])
-  @@index([userId])
-  @@map("boletos_dda")
-}
-
 model Professional {
   id           String   @id @default(uuid())
   nome         String
@@ -178,6 +128,89 @@ model CardFavorito {
   @@unique([userId, cardId])
   @@index([userId])
   @@map("cartoes_favoritos")
+}
+
+enum TipoContaFinanceira {
+  CORRENTE
+  CARTEIRA
+  POUPANCA
+}
+
+enum TipoLancamento {
+  DESPESA
+  RECEITA
+  FATURA_CARTAO
+}
+
+enum StatusLancamento {
+  PENDENTE_REVISAO
+  CONFIRMADO
+  IGNORADO
+}
+
+enum OrigemLancamento {
+  EMAIL_PARSER
+  MANUAL
+}
+
+model ContaFinanceira {
+  id           String                 @id @default(uuid())
+  userId       String                 @map("user_id")
+  nome         String
+  tipo         TipoContaFinanceira
+  saldoAtual   Decimal                @map("saldo_atual") @db.Decimal(14, 2)
+  cor          String?
+  criadoEm     DateTime               @default(now()) @map("criado_em")
+  atualizadoEm DateTime               @default(now()) @updatedAt @map("atualizado_em")
+  lancamentos  LancamentoFinanceiro[]
+
+  @@index([userId])
+  @@map("contas_financeiras_v2")
+}
+
+model CartaoCredito {
+  id            String                 @id @default(uuid())
+  userId        String                 @map("user_id")
+  nome          String
+  diaFechamento Int                    @map("dia_fechamento")
+  diaVencimento Int                    @map("dia_vencimento")
+  limiteTotal   Decimal                @map("limite_total") @db.Decimal(14, 2)
+  cor           String?
+  criadoEm      DateTime               @default(now()) @map("criado_em")
+  atualizadoEm  DateTime               @default(now()) @updatedAt @map("atualizado_em")
+  lancamentos   LancamentoFinanceiro[]
+
+  @@index([userId])
+  @@map("cartoes_credito")
+}
+
+model LancamentoFinanceiro {
+  id              String            @id @default(uuid())
+  userId          String            @map("user_id")
+  tipo            TipoLancamento
+  descricao       String
+  instituicao     String?
+  valor           Decimal?          @db.Decimal(14, 2)
+  dataVencimento  DateTime          @map("data_vencimento") @db.Date
+  dataCompetencia DateTime          @map("data_competencia") @db.Date
+  status          StatusLancamento  @default(PENDENTE_REVISAO)
+  origem          OrigemLancamento
+  isPago          Boolean           @default(false) @map("is_pago")
+  emailMessageId  String?           @map("email_message_id")
+  codigoBarras    String?           @map("codigo_barras")
+  cartaoId        String?           @map("cartao_id")
+  contaId         String?           @map("conta_id")
+  googleEventId   String?           @map("google_event_id")
+  criadoEm        DateTime          @default(now()) @map("criado_em")
+  atualizadoEm    DateTime          @default(now()) @updatedAt @map("atualizado_em")
+
+  cartao          CartaoCredito?    @relation(fields: [cartaoId], references: [id])
+  conta           ContaFinanceira?  @relation(fields: [contaId], references: [id])
+
+  @@unique([userId, emailMessageId])
+  @@index([userId, status])
+  @@index([userId, dataVencimento])
+  @@map("lancamentos_financeiros")
 }
 
 model KnowledgeDocument {

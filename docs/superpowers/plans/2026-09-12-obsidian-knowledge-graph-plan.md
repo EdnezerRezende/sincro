@@ -36,7 +36,7 @@
 **Interfaces:**
 - Produces: a running Memgraph instance reachable at `bolt://localhost:7687`, used by every later task via `neo4j.GraphDatabase.driver`.
 
-- [ ] **Step 1: Create the project directory and git repo**
+- [x] **Step 1: Create the project directory and git repo**
 
 ```bash
 mkdir -p ~/Desenvolvimento/projetos/obsidian-graph
@@ -44,7 +44,7 @@ cd ~/Desenvolvimento/projetos/obsidian-graph
 git init
 ```
 
-- [ ] **Step 2: Write `docker-compose.yml`**
+- [x] **Step 2: Write `docker-compose.yml`**
 
 ```yaml
 services:
@@ -61,7 +61,7 @@ volumes:
   obsidian_graph_memgraph_data:
 ```
 
-- [ ] **Step 3: Write `requirements.txt`**
+- [x] **Step 3: Write `requirements.txt`**
 
 ```text
 neo4j>=5.19,<6
@@ -73,7 +73,7 @@ numpy>=1.26,<2
 pytest>=8.0,<9
 ```
 
-- [ ] **Step 4: Write `.gitignore`**
+- [x] **Step 4: Write `.gitignore`**
 
 ```text
 .venv/
@@ -82,7 +82,7 @@ __pycache__/
 .pytest_cache/
 ```
 
-- [ ] **Step 5: Create and activate a virtualenv, install dependencies**
+- [x] **Step 5: Create and activate a virtualenv, install dependencies**
 
 ```bash
 python3 -m venv .venv
@@ -90,7 +90,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-- [ ] **Step 6: Start Memgraph and verify it's reachable**
+- [x] **Step 6: Start Memgraph and verify it's reachable**
 
 ```bash
 docker compose up -d
@@ -105,7 +105,7 @@ d.close()
 
 Expected: prints `memgraph OK`.
 
-- [ ] **Step 7: Write minimal `README.md`**
+- [x] **Step 7: Write minimal `README.md`**
 
 ```markdown
 # obsidian-graph
@@ -130,7 +130,7 @@ local Ollama) and exposes it to Claude through an MCP server.
 - `mcp_server.py` — MCP server (read + write tools)
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A
@@ -149,7 +149,7 @@ git commit -m "chore: scaffold obsidian-graph project with Memgraph compose"
 **Interfaces:**
 - Produces: `parse_note(vault_root: Path, note_path: Path) -> ParsedNote`, dataclass `ParsedNote(path, title, type, domain, status, updated_at, body, links, tags)`. Used by Task 3's `ingest_file`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_wikilinks.py`:
 
@@ -254,7 +254,7 @@ Body.
     assert note.title == "bad"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd ~/Desenvolvimento/projetos/obsidian-graph
@@ -263,7 +263,7 @@ pytest tests/test_wikilinks.py tests/test_frontmatter.py -v
 
 Expected: FAIL / ERROR — `ingest.py` (and `parse_note`) don't exist yet.
 
-- [ ] **Step 3: Write `ingest.py` (parsing portion)**
+- [x] **Step 3: Write `ingest.py` (parsing portion)**
 
 ```python
 """Shared ingestion: parse a vault note, embed it, and upsert into Memgraph."""
@@ -334,7 +334,7 @@ def parse_note(vault_root: Path, note_path: Path) -> ParsedNote:
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest tests/test_wikilinks.py tests/test_frontmatter.py -v
@@ -342,7 +342,7 @@ pytest tests/test_wikilinks.py tests/test_frontmatter.py -v
 
 Expected: PASS (8 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ingest.py tests/test_wikilinks.py tests/test_frontmatter.py
@@ -360,7 +360,7 @@ git commit -m "feat(ingest): parse frontmatter, wikilinks, and tags from vault n
 - Consumes: `ParsedNote`, `MEMGRAPH_URI`, `OLLAMA_URL`, `EMBED_MODEL` from Task 2.
 - Produces: `embed_text(text: str) -> list[float] | None`, `get_driver() -> Driver`, `upsert_note(driver, note: ParsedNote, embedding: list[float] | None) -> None`, `delete_note(driver, rel_path: str) -> None`, `ingest_file(vault_root: Path, note_path: Path, driver: Driver | None = None) -> None`. `ingest_file` and `delete_note` are used by `bootstrap.py`, `watcher.py`, and `mcp_server.py`'s write tools.
 
-- [ ] **Step 1: Append to `ingest.py`**
+- [x] **Step 1: Append to `ingest.py`**
 
 ```python
 import requests
@@ -443,7 +443,7 @@ def ingest_file(vault_root: Path, note_path: Path, driver: Driver | None = None)
             driver.close()
 ```
 
-- [ ] **Step 2: Manual verification against real Memgraph + Ollama**
+- [x] **Step 2: Manual verification against real Memgraph + Ollama**
 
 ```bash
 brew list ollama || brew install ollama
@@ -481,7 +481,7 @@ d.close()
 
 Expected: prints a row showing `a.md -> b.md` (resolved, not a ghost node, since `b.md` exists and its title `B` matches).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ingest.py
@@ -500,7 +500,7 @@ git commit -m "feat(ingest): embed via Ollama and upsert notes/links/tags into M
 - Consumes: `ingest_file`, `get_driver` from Task 3.
 - Produces: `iter_notes(vault_root: Path) -> Iterator[Path]`, `run(vault_root: Path) -> int`. `run` is used directly by the idempotency test; the CLI entry point is used standalone.
 
-- [ ] **Step 1: Write `bootstrap.py`**
+- [x] **Step 1: Write `bootstrap.py`**
 
 ```python
 """One-time (and re-runnable, idempotent) full-vault ingestion."""
@@ -551,7 +551,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Write the idempotency integration test**
+- [x] **Step 2: Write the idempotency integration test**
 
 ```python
 """Integration test: run bootstrap twice against a real vault, expect zero drift.
@@ -596,7 +596,7 @@ def test_bootstrap_is_idempotent():
     assert before == after
 ```
 
-- [ ] **Step 3: Run the full bootstrap against the real vault, then the idempotency test**
+- [x] **Step 3: Run the full bootstrap against the real vault, then the idempotency test**
 
 ```bash
 cd ~/Desenvolvimento/projetos/obsidian-graph
@@ -606,7 +606,7 @@ VAULT_PATH="/Users/ed/Library/CloudStorage/OneDrive-Pessoal/Documentos/obsidian/
 
 Expected: first command prints `Ingested <N> notes` (N ≈ 158); the pytest run PASSes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add bootstrap.py tests/test_bootstrap_idempotency.py
@@ -625,7 +625,7 @@ git commit -m "feat(bootstrap): full-vault walk with idempotency integration tes
 - Consumes: `ingest_file`, `delete_note`, `get_driver` from Task 3.
 - Produces: a long-lived process; no importable interface consumed by later tasks (mcp_server calls `ingest_file` directly, not through the watcher).
 
-- [ ] **Step 1: Write `watcher.py`**
+- [x] **Step 1: Write `watcher.py`**
 
 ```python
 """Long-lived watchdog daemon: re-ingests notes on change, removes deleted ones."""
@@ -715,7 +715,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Manual verification**
+- [x] **Step 2: Manual verification**
 
 ```bash
 cd ~/Desenvolvimento/projetos/obsidian-graph
@@ -739,7 +739,7 @@ kill $WATCHER_PID
 
 Expected: the query prints a row (the test note was ingested within the debounce window).
 
-- [ ] **Step 3: Write the launchd plist**
+- [x] **Step 3: Write the launchd plist**
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -770,7 +770,7 @@ Expected: the query prints a row (the test note was ingested within the debounce
 
 Note the plist points at the venv's own `python3` (not `/usr/bin/env python3`) so `watchdog`/`neo4j`/`requests` are importable when launchd runs it outside any shell profile.
 
-- [ ] **Step 4: Add install instructions to `README.md`**
+- [x] **Step 4: Add install instructions to `README.md`**
 
 ```markdown
 ## Auto-start the watcher on login
@@ -779,7 +779,7 @@ Note the plist points at the venv's own `python3` (not `/usr/bin/env python3`) s
     launchctl load ~/Library/LaunchAgents/com.ednezer.obsidian-watcher.plist
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add watcher.py launchd/com.ednezer.obsidian-watcher.plist README.md
@@ -797,7 +797,7 @@ git commit -m "feat(watcher): watchdog daemon with debounce + launchd install"
 - Consumes: `embed_text`, `get_driver` from Task 3; reads `VAULT_ROOT` env var.
 - Produces: MCP tools `semantic_search`, `get_note`, `get_neighbors`, `find_by_tag`, plus the `mcp` `FastMCP` instance and helpers `_cosine`, `VAULT_ROOT`, `TZ` consumed by Task 7's write tools.
 
-- [ ] **Step 1: Write `mcp_server.py` (read tools)**
+- [x] **Step 1: Write `mcp_server.py` (read tools)**
 
 ```python
 """MCP server exposing read/write tools over the Obsidian vault graph."""
@@ -912,7 +912,7 @@ def find_by_tag(tag: str) -> list[dict]:
         driver.close()
 ```
 
-- [ ] **Step 2: Manual verification (after Task 4's bootstrap has run against the real vault)**
+- [x] **Step 2: Manual verification (after Task 4's bootstrap has run against the real vault)**
 
 ```bash
 cd ~/Desenvolvimento/projetos/obsidian-graph
@@ -925,7 +925,7 @@ print(find_by_tag('governanca'))
 
 Expected: `semantic_search` returns a ranked list whose top hit is `_conventions.md`; `find_by_tag` includes it too.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mcp_server.py
@@ -943,7 +943,7 @@ git commit -m "feat(mcp): read tools — semantic_search, get_note, get_neighbor
 - Consumes: `mcp`, `VAULT_ROOT`, `TZ` from Task 6; `ingest_file` from Task 3.
 - Produces: MCP tools `append_project_diary(entry: str, project: str = "sincro") -> dict`, `append_personal_diary(entry: str, date: str | None = None) -> dict`; `main()` entry point that runs the server.
 
-- [ ] **Step 1: Append to `mcp_server.py`**
+- [x] **Step 1: Append to `mcp_server.py`**
 
 ```python
 from datetime import datetime
@@ -1072,7 +1072,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Manual verification**
+- [x] **Step 2: Manual verification**
 
 ```bash
 cd ~/Desenvolvimento/projetos/obsidian-graph
@@ -1087,7 +1087,7 @@ tail -n 5 "/Users/ed/Library/CloudStorage/OneDrive-Pessoal/Documentos/obsidian/s
 
 Expected: the daily note has the test entry; both log tiers have a matching entry. **Manually remove the test line from all three files afterward** — this step writes into the real vault.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add mcp_server.py
@@ -1105,7 +1105,7 @@ git commit -m "feat(mcp): write tools — append_project_diary, append_personal_
 - Consumes: `mcp_server.py`'s `main()` entry point from Task 7.
 - Produces: nothing consumed by other tasks — this is the final wiring step.
 
-- [ ] **Step 1: Register the server**
+- [x] **Step 1: Register the server**
 
 ```bash
 claude mcp add obsidian-graph \
@@ -1114,7 +1114,7 @@ claude mcp add obsidian-graph \
      /Users/ed/Desenvolvimento/projetos/obsidian-graph/mcp_server.py
 ```
 
-- [ ] **Step 2: Verify registration**
+- [x] **Step 2: Verify registration**
 
 ```bash
 claude mcp list
@@ -1122,7 +1122,7 @@ claude mcp list
 
 Expected: `obsidian-graph` appears in the list, reachable.
 
-- [ ] **Step 3: Restart Claude Code and manually invoke `semantic_search` once**
+- [x] **Step 3: Restart Claude Code and manually invoke `semantic_search` once**
 
 Confirm the tool shows up and returns results for a real query about the vault.
 

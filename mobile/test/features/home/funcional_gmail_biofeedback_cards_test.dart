@@ -16,7 +16,7 @@ import 'package:sincro_mobile/features/calendar/calendar_event.dart';
 import 'package:sincro_mobile/features/email_triage/email_triage_providers.dart';
 import 'package:sincro_mobile/features/email_triage/gmail_connection_repository.dart';
 import 'package:sincro_mobile/features/financas/finance_providers.dart';
-import 'package:sincro_mobile/features/financas/finance_connection.dart';
+import 'package:sincro_mobile/features/financas/finance_summary.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_providers.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
 import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
@@ -77,8 +77,14 @@ List<Override> _base({
         error: (e, st) => Future<GmailConnectionStatus>.error(e, st),
       ),
     ),
-    financeConnectionsProvider.overrideWith(
-      (ref) async => <FinanceConnection>[],
+    financeSummaryProvider.overrideWith(
+      (ref) async => FinanceSummary(
+        saldoLivre: 0,
+        saldoContas: 0,
+        faturasAbertas: 0,
+        despesasPendentesCiclo: 0,
+        cicloFim: DateTime(2026, 1, 1),
+      ),
     ),
     trustedContactsListProvider.overrideWith((ref) async => []),
   ];

@@ -103,3 +103,86 @@ describe('EmailFinanceRegexParserService — matches', () => {
     expect(service.matches('Loja XYZ <contato@lojaxyz.com.br>', 'Promoção')).toBe(false);
   });
 });
+
+describe('EmailFinanceRegexParserService — processEmail', () => {
+  function buildPrismaMock() {
+    return {
+      lancamentoFinanceiro: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+  }
+
+  it('creates a PENDENTE_REVISAO lançamento from a matched email', async () => {
+    const prisma = buildPrismaMock();
+    const service = new EmailFinanceRegexParserService(prisma as any);
+
+    await service.processEmail(
+      'user-1',
+      {
+        gmailMessageId: 'msg-1',
+        remetente: 'Nubank <fatura@nubank.com.br>',
+        assunto: 'Sua fatura fechou',
+        recebidoEm: new Date(Date.UTC(2026, 8, 1)),
+      },
+      fixture('nubank-fatura-fechou-com-valor.txt'),
+    );
+
+    expect(prisma.lancamentoFinanceiro.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        tipo: 'FATURA_CARTAO',
+        descricao: 'Sua fatura fechou',
+        instituicao: 'Nubank',
+        valor: 1234.56,
+        dataVencimento: new Date(Date.UTC(2026, 9, 10)),
+        dataCompetencia: new Date(Date.UTC(2026, 9, 10)),
+        status: 'PENDENTE_REVISAO',
+        origem: 'EMAIL_PARSER',
+        emailMessageId: 'msg-1',
+        codigoBarras: null,
+      },
+    });
+  });
+
+  it('does not create a lançamento for an unmatched sender', async () => {
+    const prisma = buildPrismaMock();
+    const service = new EmailFinanceRegexParserService(prisma as any);
+
+    await service.processEmail(
+      'user-1',
+      {
+        gmailMessageId: 'msg-2',
+        remetente: 'Loja XYZ <contato@lojaxyz.com.br>',
+        assunto: 'Promoção',
+        recebidoEm: new Date(Date.UTC(2026, 8, 1)),
+      },
+      fixture('email-remetente-desconhecido.txt'),
+    );
+
+    expect(prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+
+  it('never creates a second lançamento for an already-processed emailMessageId', async () => {
+    const prisma = buildPrismaMock();
+    prisma.lancamentoFinanceiro.findUnique.mockResolvedValue({ id: 'existing' });
+    const service = new EmailFinanceRegexParserService(prisma as any);
+
+    await service.processEmail(
+      'user-1',
+      {
+        gmailMessageId: 'msg-1',
+        remetente: 'Nubank <fatura@nubank.com.br>',
+        assunto: 'Sua fatura fechou',
+        recebidoEm: new Date(Date.UTC(2026, 8, 1)),
+      },
+      fixture('nubank-fatura-fechou-com-valor.txt'),
+    );
+
+    expect(prisma.lancamentoFinanceiro.findUnique).toHaveBeenCalledWith({
+      where: { userId_emailMessageId: { userId: 'user-1', emailMessageId: 'msg-1' } },
+    });
+    expect(prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+});

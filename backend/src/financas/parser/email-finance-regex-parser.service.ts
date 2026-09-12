@@ -76,6 +76,51 @@ export class EmailFinanceRegexParserService {
     };
   }
 
+  async processEmail(
+    userId: string,
+    email: { gmailMessageId: string; remetente: string; assunto: string; recebidoEm: Date },
+    corpoCompleto: string,
+  ): Promise<void> {
+    const existing = await this.prisma.lancamentoFinanceiro.findUnique({
+      where: { userId_emailMessageId: { userId, emailMessageId: email.gmailMessageId } },
+    });
+    if (existing) return;
+
+    const parsed = this.parse({
+      remetente: email.remetente,
+      assunto: email.assunto,
+      corpo: corpoCompleto,
+      recebidoEm: email.recebidoEm,
+    });
+    if (!parsed) return;
+
+    try {
+      await this.prisma.lancamentoFinanceiro.create({
+        data: {
+          userId,
+          tipo: parsed.tipo,
+          descricao: parsed.descricao,
+          instituicao: parsed.instituicao,
+          valor: parsed.valor,
+          dataVencimento: parsed.dataVencimento,
+          dataCompetencia: parsed.dataVencimento,
+          status: 'PENDENTE_REVISAO',
+          origem: 'EMAIL_PARSER',
+          emailMessageId: email.gmailMessageId,
+          codigoBarras: parsed.codigoBarras,
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code === 'P2002') {
+        this.logger.warn(
+          `Message ${email.gmailMessageId} was already staged by a concurrent run, skipping (race-safe dedup)`,
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
   private getInstituicao(remetente: string): string | null {
     const lower = remetente.toLowerCase();
     const found = INSTITUTION_MAP.find((entry) => lower.includes(entry.domain));

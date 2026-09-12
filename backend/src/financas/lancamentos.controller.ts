@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { CurrentFirebaseUid } from '../common/current-firebase-uid.decorator';
 import { UsersService } from '../users/users.service';
+import { ConfirmarLancamentoDto } from './dto/confirmar-lancamento.dto';
 import { CreateLancamentoDto } from './dto/create-lancamento.dto';
 import { UpdateLancamentoDto } from './dto/update-lancamento.dto';
 import { LancamentosService } from './lancamentos.service';
@@ -38,5 +39,28 @@ export class LancamentosController {
   ) {
     const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
     return this.lancamentosService.update(user.id, id, dto);
+  }
+
+  @Patch(':id/confirmar')
+  async confirmar(
+    @CurrentFirebaseUid() firebaseUid: string,
+    @Param('id') id: string,
+    @Body() dto: ConfirmarLancamentoDto,
+  ) {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    return this.lancamentosService.confirmar(user.id, id, dto);
+  }
+
+  @Patch(':id/ignorar')
+  async ignorar(@CurrentFirebaseUid() firebaseUid: string, @Param('id') id: string) {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    return this.lancamentosService.ignorar(user.id, id);
+  }
+
+  @Delete(':id')
+  async remove(@CurrentFirebaseUid() firebaseUid: string, @Param('id') id: string) {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    await this.lancamentosService.remove(user.id, id);
+    return { removed: true };
   }
 }

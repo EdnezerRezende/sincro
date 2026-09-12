@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FinanceCalendarSyncService } from './calendar-sync.service';
+import { ConfirmarLancamentoDto } from './dto/confirmar-lancamento.dto';
 import { CreateLancamentoDto } from './dto/create-lancamento.dto';
 import { UpdateLancamentoDto } from './dto/update-lancamento.dto';
 
@@ -60,6 +61,42 @@ export class LancamentosService {
       }
     }
     return atualizado;
+  }
+
+  async confirmar(userId: string, id: string, dto: ConfirmarLancamentoDto) {
+    await this.getOwnedOrThrow(userId, id);
+    const data: Record<string, unknown> = { status: 'CONFIRMADO' };
+    if (dto.valor !== undefined) data.valor = dto.valor;
+    if (dto.dataVencimento) data.dataVencimento = new Date(dto.dataVencimento);
+    if (dto.contaId !== undefined) data.contaId = dto.contaId;
+    if (dto.cartaoId !== undefined) data.cartaoId = dto.cartaoId;
+
+    const atualizado = await this.prisma.lancamentoFinanceiro.update({ where: { id }, data });
+
+    const googleEventId = await this.calendarSync.syncOnConfirm(userId, atualizado);
+    if (googleEventId) {
+      await this.prisma.lancamentoFinanceiro.update({ where: { id }, data: { googleEventId } });
+    }
+    return atualizado;
+  }
+
+  async ignorar(userId: string, id: string) {
+    const lancamento = await this.getOwnedOrThrow(userId, id);
+    const atualizado = await this.prisma.lancamentoFinanceiro.update({
+      where: { id },
+      data: { status: 'IGNORADO' },
+    });
+    await this.calendarSync.removeEvent(userId, lancamento.googleEventId);
+    return atualizado;
+  }
+
+  async remove(userId: string, id: string): Promise<void> {
+    const lancamento = await this.getOwnedOrThrow(userId, id);
+    if (lancamento.status === 'CONFIRMADO') {
+      throw new ConflictException('Lançamento confirmado não pode ser excluído — use ignorar');
+    }
+    await this.prisma.lancamentoFinanceiro.delete({ where: { id } });
+    await this.calendarSync.removeEvent(userId, lancamento.googleEventId);
   }
 
   protected async getOwnedOrThrow(userId: string, id: string) {

@@ -7,6 +7,7 @@ function buildDeps() {
       create: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
       update: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
       findFirst: jest.fn(),
+      delete: jest.fn(),
     },
   };
   const calendarSync = { syncOnConfirm: jest.fn(), removeEvent: jest.fn() };
@@ -65,5 +66,76 @@ describe('LancamentosService — createManual', () => {
         dataCompetencia: new Date('2026-09-20'),
       }),
     });
+  });
+});
+
+describe('LancamentosService — confirmar', () => {
+  it('applies the adjustment, sets status CONFIRMADO, and syncs the calendar event', async () => {
+    const { prisma, calendarSync, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({
+      id: 'lanc-1', userId: 'user-1', status: 'PENDENTE_REVISAO', googleEventId: null,
+    });
+    prisma.lancamentoFinanceiro.update.mockResolvedValue({
+      id: 'lanc-1', status: 'CONFIRMADO', descricao: 'Fatura Nubank', instituicao: 'Nubank',
+      valor: 500, dataVencimento: new Date(Date.UTC(2026, 9, 10)), googleEventId: null,
+    });
+    calendarSync.syncOnConfirm.mockResolvedValue('evt-novo');
+
+    await service.confirmar('user-1', 'lanc-1', { valor: 500 });
+
+    expect(prisma.lancamentoFinanceiro.update).toHaveBeenCalledWith({
+      where: { id: 'lanc-1' },
+      data: { valor: 500, status: 'CONFIRMADO' },
+    });
+    expect(calendarSync.syncOnConfirm).toHaveBeenCalled();
+    expect(prisma.lancamentoFinanceiro.update).toHaveBeenLastCalledWith({
+      where: { id: 'lanc-1' },
+      data: { googleEventId: 'evt-novo' },
+    });
+  });
+
+  it('throws when the lançamento does not belong to the user', async () => {
+    const { prisma, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue(null);
+
+    await expect(service.confirmar('user-1', 'lanc-x', {})).rejects.toThrow();
+  });
+});
+
+describe('LancamentosService — ignorar', () => {
+  it('sets status IGNORADO and removes any linked calendar event', async () => {
+    const { prisma, calendarSync, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({
+      id: 'lanc-1', userId: 'user-1', status: 'PENDENTE_REVISAO', googleEventId: 'evt-1',
+    });
+    prisma.lancamentoFinanceiro.update.mockResolvedValue({ id: 'lanc-1', status: 'IGNORADO' });
+
+    await service.ignorar('user-1', 'lanc-1');
+
+    expect(prisma.lancamentoFinanceiro.update).toHaveBeenCalledWith({
+      where: { id: 'lanc-1' },
+      data: { status: 'IGNORADO' },
+    });
+    expect(calendarSync.removeEvent).toHaveBeenCalledWith('user-1', 'evt-1');
+  });
+});
+
+describe('LancamentosService — remove', () => {
+  it('refuses to delete a CONFIRMADO lançamento', async () => {
+    const { prisma, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({ id: 'lanc-1', status: 'CONFIRMADO', googleEventId: null });
+
+    await expect(service.remove('user-1', 'lanc-1')).rejects.toThrow();
+  });
+
+  it('deletes a PENDENTE_REVISAO lançamento and removes its calendar event if any', async () => {
+    const { prisma, calendarSync, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({ id: 'lanc-1', status: 'PENDENTE_REVISAO', googleEventId: 'evt-1' });
+    prisma.lancamentoFinanceiro.delete = jest.fn();
+
+    await service.remove('user-1', 'lanc-1');
+
+    expect(prisma.lancamentoFinanceiro.delete).toHaveBeenCalledWith({ where: { id: 'lanc-1' } });
+    expect(calendarSync.removeEvent).toHaveBeenCalledWith('user-1', 'evt-1');
   });
 });

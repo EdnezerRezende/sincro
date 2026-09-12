@@ -5,6 +5,7 @@ import { SensoryProfileModule } from '../sensory-profile/sensory-profile.module'
 import { EmailClassificationModule } from '../email-classification/email-classification.module';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { FinancasModule } from '../financas/financas.module';
 import { EmailSyncService } from './email-sync.service';
 import { EmailSyncScheduler } from './email-sync.scheduler';
 import { EmailSummaryController } from './email-summary.controller';
@@ -17,6 +18,7 @@ import { EmailSummaryController } from './email-summary.controller';
     EmailClassificationModule,
     UsersModule,
     NotificationsModule,
+    FinancasModule,
   ],
   providers: [EmailSyncService, EmailSyncScheduler],
   controllers: [EmailSummaryController],

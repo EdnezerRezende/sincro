@@ -7,6 +7,7 @@ import { HeuristicEmailClassifier } from '../email-classification/heuristic-emai
 import { LlmEmailClassifier } from '../email-classification/llm-email-classifier.service';
 import { EmailClassifier } from '../email-classification/email-classifier.interface';
 import { UsersService } from '../users/users.service';
+import { EmailFinanceRegexParserService } from '../financas/parser/email-finance-regex-parser.service';
 
 @Injectable()
 export class EmailSyncService {
@@ -20,6 +21,7 @@ export class EmailSyncService {
     private readonly heuristicClassifier: HeuristicEmailClassifier,
     private readonly llmClassifier: LlmEmailClassifier,
     private readonly usersService: UsersService,
+    private readonly financeParser: EmailFinanceRegexParserService,
   ) {}
 
   async syncUser(userId: string): Promise<{ novosPrecisamAtencao: number }> {
@@ -59,6 +61,15 @@ export class EmailSyncService {
       } catch (error) {
         this.logger.error(`Classification failed for message ${email.gmailMessageId}`, error as Error);
         classification = { categoria: 'PODE_ESPERAR' as const, resumoCurto: email.assunto };
+      }
+
+      try {
+        if (this.financeParser.matches(email.remetente, email.assunto)) {
+          const { texto } = await this.gmailApiClient.fetchFullBody(refreshToken, email.gmailMessageId);
+          await this.financeParser.processEmail(userId, email, texto);
+        }
+      } catch (error) {
+        this.logger.error(`Finance parser failed for message ${email.gmailMessageId}`, error as Error);
       }
 
       try {

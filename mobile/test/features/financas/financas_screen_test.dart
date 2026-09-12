@@ -18,7 +18,8 @@ class _FakeFinanceSummaryRepository extends FinanceSummaryRepository {
 }
 
 class _FakeLancamentosRepository extends LancamentosRepository {
-  _FakeLancamentosRepository({required this.pendentes, required this.doMes}) : super(Dio());
+  _FakeLancamentosRepository({required this.pendentes, required this.doMes})
+    : super(Dio());
   final List<LancamentoFinanceiro> pendentes;
   final List<LancamentoFinanceiro> doMes;
 
@@ -55,12 +56,18 @@ LancamentoFinanceiro _pendente({required String descricao, double? valor}) {
   );
 }
 
-Widget _app({required List<LancamentoFinanceiro> pendentes, required List<LancamentoFinanceiro> doMes}) {
+Widget _app({
+  required List<LancamentoFinanceiro> pendentes,
+  required List<LancamentoFinanceiro> doMes,
+}) {
   return ProviderScope(
     overrides: [
-      financeSummaryRepositoryProvider.overrideWithValue(_FakeFinanceSummaryRepository(_summaryVazio)),
-      lancamentosRepositoryProvider
-          .overrideWithValue(_FakeLancamentosRepository(pendentes: pendentes, doMes: doMes)),
+      financeSummaryRepositoryProvider.overrideWithValue(
+        _FakeFinanceSummaryRepository(_summaryVazio),
+      ),
+      lancamentosRepositoryProvider.overrideWithValue(
+        _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
+      ),
     ],
     child: MaterialApp(theme: sincroLightTheme, home: const FinancasScreen()),
   );
@@ -74,32 +81,44 @@ void main() {
     expect(find.textContaining('1.000,00'), findsOneWidget);
   });
 
-  testWidgets('defaults to the Pendentes tab and lists pending lançamentos', (tester) async {
-    await tester.pumpWidget(_app(
-      pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
-      doMes: const [],
-    ));
+  testWidgets('defaults to the Pendentes tab and lists pending lançamentos', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+        doMes: const [],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Fatura Nubank'), findsOneWidget);
     expect(find.textContaining('512,40'), findsOneWidget);
   });
 
-  testWidgets('shows "informar valor" instead of a value when valor is null', (tester) async {
-    await tester.pumpWidget(_app(
-      pendentes: [_pendente(descricao: 'Conta de luz', valor: null)],
-      doMes: const [],
-    ));
+  testWidgets('shows "informar valor" instead of a value when valor is null', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [_pendente(descricao: 'Conta de luz', valor: null)],
+        doMes: const [],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('informar valor'), findsOneWidget);
   });
 
-  testWidgets('switching to "Lançamentos do mês" shows that list instead', (tester) async {
-    await tester.pumpWidget(_app(
-      pendentes: [_pendente(descricao: 'Pendente A')],
-      doMes: [_pendente(descricao: 'Confirmado B')],
-    ));
+  testWidgets('switching to "Lançamentos do mês" shows that list instead', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [_pendente(descricao: 'Pendente A')],
+        doMes: [_pendente(descricao: 'Confirmado B')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Pendente A'), findsOneWidget);
@@ -110,5 +129,20 @@ void main() {
 
     expect(find.text('Pendente A'), findsNothing);
     expect(find.text('Confirmado B'), findsOneWidget);
+  });
+
+  testWidgets('tapping Revisar opens the confirmation sheet', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+        doMes: const [],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Revisar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Confirmar lançamento'), findsOneWidget);
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_chip.dart';
+import 'confirmar_lancamento_sheet.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
 import 'lancamento_financeiro.dart';
@@ -39,8 +40,10 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
             ),
             error: (error, stackTrace) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Text('Não foi possível carregar seu resumo agora.',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              child: Text(
+                'Não foi possível carregar seu resumo agora.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
             data: (summary) => _SaldoLivreCard(summary: summary),
           ),
@@ -63,23 +66,35 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
           ),
           const SizedBox(height: 16),
           if (_aba == _Aba.pendentes)
-            ref.watch(lancamentosPendentesProvider).when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (error, stackTrace) => const Text('Não foi possível carregar seus lançamentos.'),
+            ref
+                .watch(lancamentosPendentesProvider)
+                .when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stackTrace) =>
+                      const Text('Não foi possível carregar seus lançamentos.'),
                   data: (pendentes) => Column(
                     children: [
                       for (final lancamento in pendentes)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: _LancamentoPendenteCard(lancamento: lancamento, onRevisar: (_) {}),
+                          child: _LancamentoPendenteCard(
+                            lancamento: lancamento,
+                            onRevisar: (l) =>
+                                showConfirmarLancamentoSheet(context, ref, l),
+                          ),
                         ),
                     ],
                   ),
                 )
           else
-            ref.watch(lancamentosDoMesProvider(mesAtual)).when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (error, stackTrace) => const Text('Não foi possível carregar seus lançamentos.'),
+            ref
+                .watch(lancamentosDoMesProvider(mesAtual))
+                .when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stackTrace) =>
+                      const Text('Não foi possível carregar seus lançamentos.'),
                   data: (doMes) => Column(
                     children: [
                       for (final lancamento in doMes)
@@ -108,7 +123,12 @@ class _SaldoLivreCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: Theme.of(context).colorScheme.primary, width: 4)),
+        border: Border(
+          left: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 4,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,9 +138,9 @@ class _SaldoLivreCard extends StatelessWidget {
           Text(
             _currency.format(summary.saldoLivre),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -129,7 +149,10 @@ class _SaldoLivreCard extends StatelessWidget {
 }
 
 class _LancamentoPendenteCard extends StatelessWidget {
-  const _LancamentoPendenteCard({required this.lancamento, required this.onRevisar});
+  const _LancamentoPendenteCard({
+    required this.lancamento,
+    required this.onRevisar,
+  });
 
   final LancamentoFinanceiro lancamento;
   final void Function(LancamentoFinanceiro) onRevisar;
@@ -154,19 +177,28 @@ class _LancamentoPendenteCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(lancamento.descricao, style: Theme.of(context).textTheme.titleMedium),
-                    Text('Sugestão automática · vence ${_dateFormat.format(lancamento.dataVencimento)}',
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      lancamento.descricao,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      'Sugestão automática · vence ${_dateFormat.format(lancamento.dataVencimento)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
               valor == null
-                  ? Text('informar valor',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontStyle: FontStyle.italic))
-                  : Text(_currency.format(valor), style: Theme.of(context).textTheme.titleMedium),
+                  ? Text(
+                      'informar valor',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  : Text(
+                      _currency.format(valor),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
             ],
           ),
           const SizedBox(height: 8),
@@ -192,7 +224,9 @@ class _LancamentoDoMesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.sincroColors;
     final valor = lancamento.valor;
-    final diasParaVencer = lancamento.dataVencimento.difference(DateTime.now()).inDays;
+    final diasParaVencer = lancamento.dataVencimento
+        .difference(DateTime.now())
+        .inDays;
     final corUrgencia = lancamento.isPago
         ? colors.success
         : (diasParaVencer <= 3 ? colors.caution : colors.success);
@@ -210,9 +244,16 @@ class _LancamentoDoMesCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(lancamento.descricao, style: Theme.of(context).textTheme.titleMedium),
-                Text(lancamento.isPago ? 'Pago' : 'Vence em ${_dateFormat.format(lancamento.dataVencimento)}',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  lancamento.descricao,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Text(
+                  lancamento.isPago
+                      ? 'Pago'
+                      : 'Vence em ${_dateFormat.format(lancamento.dataVencimento)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),

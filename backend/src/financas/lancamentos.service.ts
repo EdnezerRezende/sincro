@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FinanceCalendarSyncService } from './calendar-sync.service';
 import { ConfirmarLancamentoDto } from './dto/confirmar-lancamento.dto';
@@ -95,9 +95,6 @@ export class LancamentosService {
 
   async remove(userId: string, id: string): Promise<void> {
     const lancamento = await this.getOwnedOrThrow(userId, id);
-    if (lancamento.status === 'CONFIRMADO') {
-      throw new ConflictException('Lançamento confirmado não pode ser excluído — use ignorar');
-    }
     await this.prisma.lancamentoFinanceiro.delete({ where: { id } });
     await this.calendarSync.removeEvent(userId, lancamento.googleEventId);
   }

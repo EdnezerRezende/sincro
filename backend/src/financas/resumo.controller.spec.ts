@@ -74,6 +74,57 @@ describe('ResumoController', () => {
     }
   });
 
+  it('adds a CONFIRMADO RECEITA lançamento marked isPago to saldoLivre', async () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 8, 3));
+    try {
+      const { prisma, usersService, calculator } = buildDeps();
+      prisma.contaFinanceira.findMany.mockResolvedValue([
+        { id: 'conta-1', tipo: 'CORRENTE', saldoAtual: decimal(0) },
+      ]);
+      prisma.lancamentoFinanceiro.findMany.mockResolvedValue([
+        {
+          id: 'lanc-1', tipo: 'RECEITA', valor: decimal(2000), cartaoId: null,
+          dataVencimento: new Date(2026, 8, 10), isPago: true,
+        },
+        {
+          id: 'lanc-2', tipo: 'DESPESA', valor: decimal(1000), cartaoId: null,
+          dataVencimento: new Date(2026, 8, 15), isPago: false,
+        },
+      ]);
+      const controller = new ResumoController(prisma as any, usersService as any, calculator);
+
+      const resumo = await controller.getResumo('firebase-uid-1');
+
+      expect(resumo.saldoLivre).toBe(1000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not subtract a paid FATURA_CARTAO from faturasAbertas/saldoLivre', async () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 8, 3));
+    try {
+      const { prisma, usersService, calculator } = buildDeps();
+      prisma.contaFinanceira.findMany.mockResolvedValue([
+        { id: 'conta-1', tipo: 'CORRENTE', saldoAtual: decimal(1000) },
+      ]);
+      prisma.lancamentoFinanceiro.findMany.mockResolvedValue([
+        {
+          id: 'lanc-1', tipo: 'FATURA_CARTAO', valor: decimal(300), cartaoId: 'cartao-1',
+          dataVencimento: new Date(2026, 8, 15), isPago: true,
+        },
+      ]);
+      const controller = new ResumoController(prisma as any, usersService as any, calculator);
+
+      const resumo = await controller.getResumo('firebase-uid-1');
+
+      expect(resumo.faturasAbertas).toBe(0);
+      expect(resumo.saldoLivre).toBe(1000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('subtracts an open FATURA_CARTAO within the cycle', async () => {
     jest.useFakeTimers().setSystemTime(new Date(2026, 8, 3));
     try {

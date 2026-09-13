@@ -170,11 +170,15 @@ describe('LancamentosService — ignorar', () => {
 });
 
 describe('LancamentosService — remove', () => {
-  it('refuses to delete a CONFIRMADO lançamento', async () => {
-    const { prisma, service } = buildDeps();
-    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({ id: 'lanc-1', status: 'CONFIRMADO', googleEventId: null });
+  it('deletes a CONFIRMADO lançamento too (users need to be able to undo manual entries)', async () => {
+    const { prisma, calendarSync, service } = buildDeps();
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({ id: 'lanc-1', status: 'CONFIRMADO', googleEventId: 'evt-2' });
+    prisma.lancamentoFinanceiro.delete = jest.fn();
 
-    await expect(service.remove('user-1', 'lanc-1')).rejects.toThrow();
+    await service.remove('user-1', 'lanc-1');
+
+    expect(prisma.lancamentoFinanceiro.delete).toHaveBeenCalledWith({ where: { id: 'lanc-1' } });
+    expect(calendarSync.removeEvent).toHaveBeenCalledWith('user-1', 'evt-2');
   });
 
   it('deletes a PENDENTE_REVISAO lançamento and removes its calendar event if any', async () => {

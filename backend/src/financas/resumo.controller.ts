@@ -31,17 +31,24 @@ export class ResumoController {
       saldoOuFatura: c.saldoAtual.toNumber(),
     }));
 
+    // Faturas já pagas pelo usuário não devem continuar sendo subtraídas do
+    // Saldo Livre — o mesmo raciocínio já aplicado a DESPESA via `!b.pago`
+    // dentro do SaldoLivreCalculator.
     const faturasAbertas: ContaParaCalculo[] = lancamentosRaw
-      .filter((l) => l.tipo === 'FATURA_CARTAO' && l.valor !== null)
+      .filter((l) => l.tipo === 'FATURA_CARTAO' && l.valor !== null && !l.isPago)
       .map((l) => ({ tipo: 'CARTAO_CREDITO', saldoOuFatura: l.valor!.toNumber() }));
 
-    // RECEITA lançamentos are informational only for now: SaldoLivreCalculator
-    // (shared, unmodified) has no concept of adding income to a point-in-time
-    // snapshot, so only DESPESA feeds the subtracted `boletos` list — never
-    // subtract income from Saldo Livre.
     const boletos: BoletoParaCalculo[] = lancamentosRaw
       .filter((l) => l.tipo === 'DESPESA' && l.valor !== null)
       .map((l) => ({ valor: l.valor!.toNumber(), vencimento: l.dataVencimento, pago: l.isPago }));
+
+    // RECEITA só entra no Saldo Livre quando o usuário confirma que o dinheiro
+    // já foi de fato recebido (isPago=true) — receita esperada mas ainda não
+    // recebida não é somada, para não inflar artificialmente o saldo com
+    // dinheiro que ainda não está disponível.
+    const receitasRecebidas = lancamentosRaw
+      .filter((l) => l.tipo === 'RECEITA' && l.valor !== null && l.isPago)
+      .reduce((sum, l) => sum + l.valor!.toNumber(), 0);
 
     const resultado = this.calculator.calcular({
       contas: [...contas, ...faturasAbertas],
@@ -51,7 +58,7 @@ export class ResumoController {
     });
 
     return {
-      saldoLivre: resultado.saldoLivre,
+      saldoLivre: resultado.saldoLivre + receitasRecebidas,
       saldoContas: contas.reduce((sum, c) => sum + c.saldoOuFatura, 0),
       faturasAbertas: faturasAbertas.reduce((sum, c) => sum + c.saldoOuFatura, 0),
       despesasPendentesCiclo: boletos

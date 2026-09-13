@@ -15,6 +15,17 @@ TipoLancamento tipoLancamentoFromJson(String value) {
   }
 }
 
+String tipoLancamentoToJson(TipoLancamento tipo) {
+  switch (tipo) {
+    case TipoLancamento.despesa:
+      return 'DESPESA';
+    case TipoLancamento.receita:
+      return 'RECEITA';
+    case TipoLancamento.faturaCartao:
+      return 'FATURA_CARTAO';
+  }
+}
+
 StatusLancamento statusLancamentoFromJson(String value) {
   switch (value) {
     case 'PENDENTE_REVISAO':

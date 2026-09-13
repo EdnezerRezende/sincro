@@ -74,6 +74,16 @@ Widget _app({
 }
 
 void main() {
+  testWidgets('tapping the + action opens NovoLancamentoScreen', (tester) async {
+    await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Novo lançamento'), findsOneWidget);
+  });
+
   testWidgets('shows the Saldo Livre value from the summary', (tester) async {
     await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
     await tester.pumpAndSettle();

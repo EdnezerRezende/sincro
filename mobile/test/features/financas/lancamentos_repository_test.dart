@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sincro_mobile/features/financas/lancamento_financeiro.dart';
 import 'package:sincro_mobile/features/financas/lancamentos_repository.dart';
 
 void main() {
@@ -64,5 +65,74 @@ void main() {
     final repository = LancamentosRepository(dio);
 
     await repository.ignorar('l1');
+  });
+
+  test('create() POSTs to /financas/lancamentos with only the provided fields', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      expect(options.path, '/financas/lancamentos');
+      expect(options.method, 'POST');
+      expect(options.data, {
+        'tipo': 'DESPESA',
+        'descricao': 'Mercado',
+        'dataVencimento': '2026-09-20T00:00:00.000Z',
+      });
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 201,
+        data: {
+          'id': 'l9', 'tipo': 'DESPESA', 'descricao': 'Mercado', 'instituicao': null,
+          'valor': null, 'dataVencimento': '2026-09-20T00:00:00.000Z',
+          'dataCompetencia': '2026-09-20T00:00:00.000Z', 'status': 'CONFIRMADO',
+          'origem': 'MANUAL', 'isPago': false, 'codigoBarras': null,
+          'cartaoId': null, 'contaId': null,
+        },
+      ));
+    }));
+    final repository = LancamentosRepository(dio);
+
+    final lancamento = await repository.create(
+      tipo: TipoLancamento.despesa,
+      descricao: 'Mercado',
+      dataVencimento: DateTime.utc(2026, 9, 20),
+    );
+
+    expect(lancamento.id, 'l9');
+    expect(lancamento.status, StatusLancamento.confirmado);
+  });
+
+  test('create() includes optional fields (valor, contaId, cartaoId, isPago) when provided', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      expect(options.data, {
+        'tipo': 'RECEITA',
+        'descricao': 'Freela',
+        'dataVencimento': '2026-09-05T00:00:00.000Z',
+        'valor': 800.0,
+        'contaId': 'conta-1',
+        'isPago': true,
+      });
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 201,
+        data: {
+          'id': 'l10', 'tipo': 'RECEITA', 'descricao': 'Freela', 'instituicao': null,
+          'valor': '800.00', 'dataVencimento': '2026-09-05T00:00:00.000Z',
+          'dataCompetencia': '2026-09-05T00:00:00.000Z', 'status': 'CONFIRMADO',
+          'origem': 'MANUAL', 'isPago': true, 'codigoBarras': null,
+          'cartaoId': null, 'contaId': 'conta-1',
+        },
+      ));
+    }));
+    final repository = LancamentosRepository(dio);
+
+    await repository.create(
+      tipo: TipoLancamento.receita,
+      descricao: 'Freela',
+      dataVencimento: DateTime.utc(2026, 9, 5),
+      valor: 800.0,
+      contaId: 'conta-1',
+      isPago: true,
+    );
   });
 }

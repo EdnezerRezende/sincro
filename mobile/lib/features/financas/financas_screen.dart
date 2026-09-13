@@ -7,6 +7,7 @@ import 'confirmar_lancamento_sheet.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
 import 'lancamento_financeiro.dart';
+import 'novo_lancamento_screen.dart';
 
 final _currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 final _dateFormat = DateFormat('dd/MM');
@@ -29,7 +30,18 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
     final mesAtual = DateFormat('yyyy-MM').format(DateTime.now());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Finanças')),
+      appBar: AppBar(
+        title: const Text('Finanças'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Novo lançamento',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NovoLancamentoScreen()),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         children: [

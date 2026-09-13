@@ -36,4 +36,30 @@ class LancamentosRepository {
   Future<void> ignorar(String id) async {
     await _dio.patch('/financas/lancamentos/$id/ignorar');
   }
+
+  Future<LancamentoFinanceiro> create({
+    required TipoLancamento tipo,
+    required String descricao,
+    required DateTime dataVencimento,
+    double? valor,
+    String? instituicao,
+    DateTime? dataCompetencia,
+    String? contaId,
+    String? cartaoId,
+    bool? isPago,
+  }) async {
+    final data = <String, dynamic>{
+      'tipo': tipoLancamentoToJson(tipo),
+      'descricao': descricao,
+      'dataVencimento': dataVencimento.toIso8601String(),
+      if (valor != null) 'valor': valor,
+      if (instituicao != null) 'instituicao': instituicao,
+      if (dataCompetencia != null) 'dataCompetencia': dataCompetencia.toIso8601String(),
+      if (contaId != null) 'contaId': contaId,
+      if (cartaoId != null) 'cartaoId': cartaoId,
+      if (isPago != null) 'isPago': isPago,
+    };
+    final response = await _dio.post('/financas/lancamentos', data: data);
+    return LancamentoFinanceiro.fromJson(response.data as Map<String, dynamic>);
+  }
 }

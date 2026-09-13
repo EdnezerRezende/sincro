@@ -31,7 +31,7 @@ class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
     super.initState();
     final existente = widget.existente;
     _descricaoController = TextEditingController(text: existente?.descricao ?? '');
-    _valorController = TextEditingController(text: existente?.valor?.toString() ?? '');
+    _valorController = TextEditingController(text: _formatarValorParaCampo(existente?.valor));
     _tipo = existente?.tipo ?? TipoLancamento.despesa;
     _dataVencimento = existente?.dataVencimento ?? DateTime.now();
     _contaOuCartaoId = existente?.contaId;
@@ -43,6 +43,15 @@ class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
     _descricaoController.dispose();
     _valorController.dispose();
     super.dispose();
+  }
+
+  /// Precisa produzir o mesmo formato que `_parseValor` espera ler de volta (vírgula como
+  /// separador decimal, sem separador de milhar) — `valor.toString()` usava ponto (ex.: "100.0"),
+  /// que `_parseValor` tratava como separador de milhar e descartava, inflando 100,00 para 1000,00
+  /// ao editar e salvar um lançamento sem sequer tocar no campo de valor.
+  String _formatarValorParaCampo(double? valor) {
+    if (valor == null) return '';
+    return valor.toStringAsFixed(2).replaceAll('.', ',');
   }
 
   double? _parseValor() {

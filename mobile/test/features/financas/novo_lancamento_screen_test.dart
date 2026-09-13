@@ -205,7 +205,7 @@ void main() {
 
     expect(find.text('Editar lançamento'), findsOneWidget);
     expect(find.text('Aluguel'), findsOneWidget);
-    expect(find.text('1450.0'), findsOneWidget);
+    expect(find.text('1450,00'), findsOneWidget);
   });
 
   testWidgets('saving an edit calls update(), not create()', (tester) async {
@@ -221,6 +221,50 @@ void main() {
     expect(repo.lastUpdateArgs, isNotNull);
     expect(repo.lastUpdateArgs!['id'], 'l-existente');
     expect(repo.lastUpdateArgs!['descricao'], 'Aluguel (novo valor)');
+  });
+
+  testWidgets('saving an edit without touching the valor field keeps the value unchanged', (
+    tester,
+  ) async {
+    final repo = _FakeLancamentosRepository();
+    await tester.pumpWidget(_app(repo, existente: _lancamentoExistente));
+    await tester.pumpAndSettle();
+
+    // Regressão: abrir para edição e salvar sem mexer em nada não pode inflar 1450,00 para 14500,00.
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Salvar'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastUpdateArgs!['valor'], 1450.0);
+  });
+
+  testWidgets('editing a lançamento with a decimal valor pre-fills it in comma format', (
+    tester,
+  ) async {
+    final repo = _FakeLancamentosRepository();
+    final comCentavos = LancamentoFinanceiro(
+      id: 'l-centavos',
+      tipo: TipoLancamento.despesa,
+      descricao: 'Mercado',
+      instituicao: null,
+      valor: 512.4,
+      dataVencimento: DateTime.utc(2026, 9, 10),
+      dataCompetencia: DateTime.utc(2026, 9, 10),
+      status: StatusLancamento.confirmado,
+      origem: OrigemLancamento.manual,
+      isPago: false,
+      codigoBarras: null,
+      cartaoId: null,
+      contaId: null,
+    );
+    await tester.pumpWidget(_app(repo, existente: comCentavos));
+    await tester.pumpAndSettle();
+
+    expect(find.text('512,40'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Salvar'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastUpdateArgs!['valor'], 512.4);
   });
 
   testWidgets('shows a delete button only when editing, and confirming it removes and pops', (tester) async {

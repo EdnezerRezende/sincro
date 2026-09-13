@@ -22,12 +22,14 @@ class FinancasScreen extends ConsumerStatefulWidget {
 enum _Aba { pendentes, mes }
 
 class _FinancasScreenState extends ConsumerState<FinancasScreen> {
-  _Aba _aba = _Aba.pendentes;
+  _Aba _aba = _Aba.mes;
 
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesAsync = ref.watch(lancamentosPendentesProvider);
     final mesAtual = DateFormat('yyyy-MM').format(DateTime.now());
+    final pendentesCount = pendentesAsync.maybeWhen(data: (p) => p.length, orElse: () => 0);
 
     return Scaffold(
       appBar: AppBar(
@@ -63,23 +65,22 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
           AppChipGroup(
             chips: [
               AppChip(
-                label: 'Pendentes de revisão',
-                selected: _aba == _Aba.pendentes,
-                variant: AppChipVariant.filter,
-                onSelected: (_) => setState(() => _aba = _Aba.pendentes),
-              ),
-              AppChip(
                 label: 'Lançamentos do mês',
                 selected: _aba == _Aba.mes,
                 variant: AppChipVariant.filter,
                 onSelected: (_) => setState(() => _aba = _Aba.mes),
               ),
+              AppChip(
+                label: 'Pendentes de revisão ($pendentesCount)',
+                selected: _aba == _Aba.pendentes,
+                variant: AppChipVariant.filter,
+                onSelected: (_) => setState(() => _aba = _Aba.pendentes),
+              ),
             ],
           ),
           const SizedBox(height: 16),
           if (_aba == _Aba.pendentes)
-            ref
-                .watch(lancamentosPendentesProvider)
+            pendentesAsync
                 .when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
@@ -238,13 +239,46 @@ class _LancamentoPendenteCard extends StatelessWidget {
   }
 }
 
-class _LancamentoDoMesCard extends StatelessWidget {
+class _LancamentoDoMesCard extends ConsumerWidget {
   const _LancamentoDoMesCard({required this.lancamento});
 
   final LancamentoFinanceiro lancamento;
 
+  Future<void> _excluir(BuildContext context, WidgetRef ref) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir lançamento'),
+        content: const Text('Tem certeza? Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    try {
+      await ref.read(lancamentosRepositoryProvider).remove(lancamento.id);
+      ref.invalidate(lancamentosDoMesProvider);
+      ref.invalidate(financeSummaryProvider);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível excluir agora. Tente novamente.')),
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.sincroColors;
     final valor = lancamento.valor;
     final diasParaVencer = lancamento.dataVencimento
@@ -261,26 +295,50 @@ class _LancamentoDoMesCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border(left: BorderSide(color: corUrgencia, width: 4)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  lancamento.descricao,
-                  style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lancamento.descricao,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      lancamento.isPago
+                          ? 'Pago'
+                          : 'Vence em ${_dateFormat.format(lancamento.dataVencimento)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                Text(
-                  lancamento.isPago
-                      ? 'Pago'
-                      : 'Vence em ${_dateFormat.format(lancamento.dataVencimento)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
+              ),
+              if (valor != null) Text(_currency.format(valor)),
+            ],
           ),
-          if (valor != null) Text(_currency.format(valor)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Editar',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NovoLancamentoScreen(existente: lancamento),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Excluir',
+                onPressed: () => _excluir(context, ref),
+              ),
+            ],
+          ),
         ],
       ),
     );

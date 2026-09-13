@@ -62,4 +62,35 @@ class LancamentosRepository {
     final response = await _dio.post('/financas/lancamentos', data: data);
     return LancamentoFinanceiro.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<LancamentoFinanceiro> update(
+    String id, {
+    TipoLancamento? tipo,
+    String? descricao,
+    DateTime? dataVencimento,
+    double? valor,
+    String? instituicao,
+    DateTime? dataCompetencia,
+    String? contaId,
+    String? cartaoId,
+    bool? isPago,
+  }) async {
+    final data = <String, dynamic>{
+      if (tipo != null) 'tipo': tipoLancamentoToJson(tipo),
+      if (descricao != null) 'descricao': descricao,
+      if (dataVencimento != null) 'dataVencimento': dataVencimento.toIso8601String(),
+      if (valor != null) 'valor': valor,
+      if (instituicao != null) 'instituicao': instituicao,
+      if (dataCompetencia != null) 'dataCompetencia': dataCompetencia.toIso8601String(),
+      if (contaId != null) 'contaId': contaId,
+      if (cartaoId != null) 'cartaoId': cartaoId,
+      if (isPago != null) 'isPago': isPago,
+    };
+    final response = await _dio.patch('/financas/lancamentos/$id', data: data);
+    return LancamentoFinanceiro.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> remove(String id) async {
+    await _dio.delete('/financas/lancamentos/$id');
+  }
 }

@@ -5,20 +5,38 @@ import 'finance_providers.dart';
 import 'lancamento_financeiro.dart';
 
 class NovoLancamentoScreen extends ConsumerStatefulWidget {
-  const NovoLancamentoScreen({super.key});
+  const NovoLancamentoScreen({super.key, this.existente});
+
+  /// Quando não-nulo, a tela edita este lançamento em vez de criar um novo,
+  /// e ganha um botão de excluir.
+  final LancamentoFinanceiro? existente;
 
   @override
   ConsumerState<NovoLancamentoScreen> createState() => _NovoLancamentoScreenState();
 }
 
 class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
-  final _descricaoController = TextEditingController();
-  final _valorController = TextEditingController();
-  TipoLancamento _tipo = TipoLancamento.despesa;
-  DateTime _dataVencimento = DateTime.now();
+  late final TextEditingController _descricaoController;
+  late final TextEditingController _valorController;
+  late TipoLancamento _tipo;
+  late DateTime _dataVencimento;
   String? _contaOuCartaoId;
-  bool _isPago = false;
+  late bool _isPago;
   bool _isSaving = false;
+
+  bool get _editando => widget.existente != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existente = widget.existente;
+    _descricaoController = TextEditingController(text: existente?.descricao ?? '');
+    _valorController = TextEditingController(text: existente?.valor?.toString() ?? '');
+    _tipo = existente?.tipo ?? TipoLancamento.despesa;
+    _dataVencimento = existente?.dataVencimento ?? DateTime.now();
+    _contaOuCartaoId = existente?.contaId;
+    _isPago = existente?.isPago ?? false;
+  }
 
   @override
   void dispose() {
@@ -44,35 +62,81 @@ class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
     setState(() => _dataVencimento = escolhida);
   }
 
+  void _mostrarErro(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem)));
+  }
+
   Future<void> _salvar() async {
     final descricao = _descricaoController.text.trim();
     if (descricao.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dê uma descrição para o lançamento.')),
-      );
+      _mostrarErro('Dê uma descrição para o lançamento.');
       return;
     }
 
     setState(() => _isSaving = true);
     try {
-      await ref.read(lancamentosRepositoryProvider).create(
-            tipo: _tipo,
-            descricao: descricao,
-            dataVencimento: _dataVencimento,
-            valor: _parseValor(),
-            contaId: _tipo == TipoLancamento.despesa ? null : _contaOuCartaoId,
-            cartaoId: null,
-            isPago: _isPago,
-          );
+      final existente = widget.existente;
+      if (existente != null) {
+        await ref.read(lancamentosRepositoryProvider).update(
+              existente.id,
+              tipo: _tipo,
+              descricao: descricao,
+              dataVencimento: _dataVencimento,
+              valor: _parseValor(),
+              contaId: _tipo == TipoLancamento.despesa ? null : _contaOuCartaoId,
+              isPago: _isPago,
+            );
+      } else {
+        await ref.read(lancamentosRepositoryProvider).create(
+              tipo: _tipo,
+              descricao: descricao,
+              dataVencimento: _dataVencimento,
+              valor: _parseValor(),
+              contaId: _tipo == TipoLancamento.despesa ? null : _contaOuCartaoId,
+              cartaoId: null,
+              isPago: _isPago,
+            );
+      }
       ref.invalidate(lancamentosDoMesProvider);
+      ref.invalidate(lancamentosPendentesProvider);
       ref.invalidate(financeSummaryProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível salvar agora. Tente novamente.')),
-        );
-      }
+      _mostrarErro('Não foi possível salvar agora. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _excluir() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir lançamento'),
+        content: const Text('Tem certeza? Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await ref.read(lancamentosRepositoryProvider).remove(widget.existente!.id);
+      ref.invalidate(lancamentosDoMesProvider);
+      ref.invalidate(lancamentosPendentesProvider);
+      ref.invalidate(financeSummaryProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      _mostrarErro('Não foi possível excluir agora. Tente novamente.');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -84,7 +148,17 @@ class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
     final contasAsync = ref.watch(contasProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Novo lançamento')),
+      appBar: AppBar(
+        title: Text(_editando ? 'Editar lançamento' : 'Novo lançamento'),
+        actions: [
+          if (_editando)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Excluir',
+              onPressed: _isSaving ? null : _excluir,
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

@@ -22,11 +22,17 @@ class _FakeLancamentosRepository extends LancamentosRepository {
     : super(Dio());
   final List<LancamentoFinanceiro> pendentes;
   final List<LancamentoFinanceiro> doMes;
+  String? lastRemovedId;
 
   @override
   Future<List<LancamentoFinanceiro>> list({String? status, String? mes}) async {
     if (status == 'PENDENTE_REVISAO') return pendentes;
     return doMes;
+  }
+
+  @override
+  Future<void> remove(String id) async {
+    lastRemovedId = id;
   }
 }
 
@@ -59,6 +65,7 @@ LancamentoFinanceiro _pendente({required String descricao, double? valor}) {
 Widget _app({
   required List<LancamentoFinanceiro> pendentes,
   required List<LancamentoFinanceiro> doMes,
+  _FakeLancamentosRepository? repository,
 }) {
   return ProviderScope(
     overrides: [
@@ -66,7 +73,7 @@ Widget _app({
         _FakeFinanceSummaryRepository(_summaryVazio),
       ),
       lancamentosRepositoryProvider.overrideWithValue(
-        _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
+        repository ?? _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
       ),
     ],
     child: MaterialApp(theme: sincroLightTheme, home: const FinancasScreen()),
@@ -91,19 +98,58 @@ void main() {
     expect(find.textContaining('1.000,00'), findsOneWidget);
   });
 
-  testWidgets('defaults to the Pendentes tab and lists pending lançamentos', (
-    tester,
-  ) async {
+  testWidgets('defaults to the "Lançamentos do mês" tab, not Pendentes', (tester) async {
     await tester.pumpWidget(
       _app(
-        pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+        pendentes: [_pendente(descricao: 'Pendente A')],
+        doMes: [_pendente(descricao: 'Confirmado B')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Confirmado B'), findsOneWidget);
+    expect(find.text('Pendente A'), findsNothing);
+  });
+
+  testWidgets('the Pendentes chip shows the pending count, 0 when there are none', (tester) async {
+    await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pendentes de revisão (0)'), findsOneWidget);
+  });
+
+  testWidgets('the Pendentes chip shows the pending count when there are pendências', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [
+          _pendente(descricao: 'A'),
+          _pendente(descricao: 'B'),
+          _pendente(descricao: 'C'),
+        ],
         doMes: const [],
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Fatura Nubank'), findsOneWidget);
-    expect(find.textContaining('512,40'), findsOneWidget);
+    expect(find.text('Pendentes de revisão (3)'), findsOneWidget);
+  });
+
+  testWidgets('switching to "Pendentes de revisão" shows pending lançamentos instead', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        pendentes: [_pendente(descricao: 'Pendente A')],
+        doMes: [_pendente(descricao: 'Confirmado B')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Pendentes de revisão'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pendente A'), findsOneWidget);
+    expect(find.text('Confirmado B'), findsNothing);
   });
 
   testWidgets('shows "informar valor" instead of a value when valor is null', (
@@ -116,29 +162,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Pendentes de revisão'));
+    await tester.pumpAndSettle();
 
     expect(find.text('informar valor'), findsOneWidget);
-  });
-
-  testWidgets('switching to "Lançamentos do mês" shows that list instead', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(
-        pendentes: [_pendente(descricao: 'Pendente A')],
-        doMes: [_pendente(descricao: 'Confirmado B')],
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pendente A'), findsOneWidget);
-    expect(find.text('Confirmado B'), findsNothing);
-
-    await tester.tap(find.text('Lançamentos do mês'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pendente A'), findsNothing);
-    expect(find.text('Confirmado B'), findsOneWidget);
   });
 
   testWidgets(
@@ -150,6 +177,8 @@ void main() {
           doMes: const [],
         ),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Pendentes de revisão'));
       await tester.pumpAndSettle();
 
       expect(find.text('Nubank'), findsOneWidget);
@@ -164,10 +193,43 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Pendentes de revisão'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Revisar'));
     await tester.pumpAndSettle();
 
     expect(find.text('Confirmar lançamento'), findsOneWidget);
+  });
+
+  testWidgets('tapping the edit icon on a "do mês" card opens it pre-filled for editing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(pendentes: const [], doMes: [_pendente(descricao: 'Aluguel', valor: 1450)]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editar lançamento'), findsOneWidget);
+    expect(find.text('Aluguel'), findsOneWidget);
+  });
+
+  testWidgets('tapping the delete icon and confirming removes the lançamento', (tester) async {
+    final repository = _FakeLancamentosRepository(
+      pendentes: const [],
+      doMes: [_pendente(descricao: 'Aluguel', valor: 1450)],
+    );
+    await tester.pumpWidget(_app(pendentes: const [], doMes: const [], repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastRemovedId, 'l-Aluguel');
   });
 }

@@ -135,4 +135,47 @@ void main() {
       isPago: true,
     );
   });
+
+  test('update() PATCHes /financas/lancamentos/:id with only the provided fields', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      expect(options.path, '/financas/lancamentos/l1');
+      expect(options.method, 'PATCH');
+      expect(options.data, {'descricao': 'Mercado (ajustado)', 'valor': 120.0, 'isPago': true});
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: {
+          'id': 'l1', 'tipo': 'DESPESA', 'descricao': 'Mercado (ajustado)', 'instituicao': null,
+          'valor': '120.00', 'dataVencimento': '2026-09-20T00:00:00.000Z',
+          'dataCompetencia': '2026-09-20T00:00:00.000Z', 'status': 'CONFIRMADO',
+          'origem': 'MANUAL', 'isPago': true, 'codigoBarras': null,
+          'cartaoId': null, 'contaId': null,
+        },
+      ));
+    }));
+    final repository = LancamentosRepository(dio);
+
+    final lancamento = await repository.update(
+      'l1',
+      descricao: 'Mercado (ajustado)',
+      valor: 120.0,
+      isPago: true,
+    );
+
+    expect(lancamento.descricao, 'Mercado (ajustado)');
+    expect(lancamento.valor, 120.0);
+  });
+
+  test('remove() DELETEs /financas/lancamentos/:id', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      expect(options.path, '/financas/lancamentos/l1');
+      expect(options.method, 'DELETE');
+      handler.resolve(Response(requestOptions: options, statusCode: 200, data: {'removed': true}));
+    }));
+    final repository = LancamentosRepository(dio);
+
+    await repository.remove('l1');
+  });
 }

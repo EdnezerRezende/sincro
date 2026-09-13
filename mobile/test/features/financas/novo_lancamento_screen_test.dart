@@ -29,6 +29,8 @@ class _FakeCartoesRepository extends CartoesRepository {
 class _FakeLancamentosRepository extends LancamentosRepository {
   _FakeLancamentosRepository() : super(Dio());
   Map<String, dynamic>? lastCreateArgs;
+  Map<String, dynamic>? lastUpdateArgs;
+  String? lastRemovedId;
   bool shouldFail = false;
 
   @override
@@ -69,18 +71,75 @@ class _FakeLancamentosRepository extends LancamentosRepository {
       contaId: contaId,
     );
   }
+
+  @override
+  Future<LancamentoFinanceiro> update(
+    String id, {
+    TipoLancamento? tipo,
+    String? descricao,
+    DateTime? dataVencimento,
+    double? valor,
+    String? instituicao,
+    DateTime? dataCompetencia,
+    String? contaId,
+    String? cartaoId,
+    bool? isPago,
+  }) async {
+    if (shouldFail) throw DioException(requestOptions: RequestOptions(path: '/financas/lancamentos/$id'));
+    lastUpdateArgs = {'id': id, 'descricao': descricao, 'valor': valor, 'isPago': isPago};
+    return LancamentoFinanceiro(
+      id: id,
+      tipo: tipo ?? TipoLancamento.despesa,
+      descricao: descricao ?? '',
+      instituicao: instituicao,
+      valor: valor,
+      dataVencimento: dataVencimento ?? DateTime.now(),
+      dataCompetencia: dataVencimento ?? DateTime.now(),
+      status: StatusLancamento.confirmado,
+      origem: OrigemLancamento.manual,
+      isPago: isPago ?? false,
+      codigoBarras: null,
+      cartaoId: cartaoId,
+      contaId: contaId,
+    );
+  }
+
+  @override
+  Future<void> remove(String id) async {
+    if (shouldFail) throw DioException(requestOptions: RequestOptions(path: '/financas/lancamentos/$id'));
+    lastRemovedId = id;
+  }
 }
 
-Widget _app(_FakeLancamentosRepository lancamentosRepo) {
+Widget _app(_FakeLancamentosRepository lancamentosRepo, {LancamentoFinanceiro? existente}) {
   return ProviderScope(
     overrides: [
       contasRepositoryProvider.overrideWithValue(_FakeContasRepository()),
       cartoesRepositoryProvider.overrideWithValue(_FakeCartoesRepository()),
       lancamentosRepositoryProvider.overrideWithValue(lancamentosRepo),
     ],
-    child: MaterialApp(theme: sincroLightTheme, home: const NovoLancamentoScreen()),
+    child: MaterialApp(
+      theme: sincroLightTheme,
+      home: NovoLancamentoScreen(existente: existente),
+    ),
   );
 }
+
+final _lancamentoExistente = LancamentoFinanceiro(
+  id: 'l-existente',
+  tipo: TipoLancamento.despesa,
+  descricao: 'Aluguel',
+  instituicao: null,
+  valor: 1450.0,
+  dataVencimento: DateTime.utc(2026, 9, 10),
+  dataCompetencia: DateTime.utc(2026, 9, 10),
+  status: StatusLancamento.confirmado,
+  origem: OrigemLancamento.manual,
+  isPago: false,
+  codigoBarras: null,
+  cartaoId: null,
+  contaId: null,
+);
 
 void main() {
   testWidgets('defaults to Despesa and saves with the entered fields', (tester) async {
@@ -137,5 +196,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.lastCreateArgs, isNull);
+  });
+
+  testWidgets('editing an existing lançamento pre-fills the fields and shows "Editar lançamento"', (tester) async {
+    final repo = _FakeLancamentosRepository();
+    await tester.pumpWidget(_app(repo, existente: _lancamentoExistente));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editar lançamento'), findsOneWidget);
+    expect(find.text('Aluguel'), findsOneWidget);
+    expect(find.text('1450.0'), findsOneWidget);
+  });
+
+  testWidgets('saving an edit calls update(), not create()', (tester) async {
+    final repo = _FakeLancamentosRepository();
+    await tester.pumpWidget(_app(repo, existente: _lancamentoExistente));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Descrição'), 'Aluguel (novo valor)');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Salvar'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastCreateArgs, isNull);
+    expect(repo.lastUpdateArgs, isNotNull);
+    expect(repo.lastUpdateArgs!['id'], 'l-existente');
+    expect(repo.lastUpdateArgs!['descricao'], 'Aluguel (novo valor)');
+  });
+
+  testWidgets('shows a delete button only when editing, and confirming it removes and pops', (tester) async {
+    final repo = _FakeLancamentosRepository();
+    await tester.pumpWidget(_app(repo, existente: _lancamentoExistente));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastRemovedId, 'l-existente');
+  });
+
+  testWidgets('does not show a delete button when creating a new lançamento', (tester) async {
+    final repo = _FakeLancamentosRepository();
+    await tester.pumpWidget(_app(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
   });
 }

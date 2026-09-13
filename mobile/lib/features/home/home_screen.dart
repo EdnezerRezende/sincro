@@ -204,13 +204,16 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _FinancasCard(),
+          ),
           const TabBar(
             tabs: [
               Tab(text: 'Hoje'),
-              Tab(text: 'Finanças'),
               Tab(text: 'Apoio'),
             ],
           ),
@@ -226,10 +229,6 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
                     const SizedBox(height: 16),
                     _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
                   ],
-                ),
-                ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: const [_FinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(16),
@@ -362,6 +361,11 @@ class _FinancasCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    'Finanças',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     'Saldo Livre',
                     style: Theme.of(context).textTheme.bodyMedium,
@@ -644,11 +648,11 @@ class _HomeModernoResumoView extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 20),
+          const _ModernoFinancasCard(),
+          const SizedBox(height: 11),
           _ModernoGmailCard(statusAsync: gmailStatusAsync),
           const SizedBox(height: 11),
           _ModernoCalendarCard(eventsAsync: calendarEventsAsync),
-          const SizedBox(height: 11),
-          const _ModernoFinancasCard(),
           const SizedBox(height: 11),
           _ModernoBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
           const SizedBox(height: 11),
@@ -673,13 +677,16 @@ class _HomeModernoAbasView extends ConsumerWidget {
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _ModernoFinancasCard(),
+          ),
           const TabBar(
             tabs: [
               Tab(text: 'Hoje'),
-              Tab(text: 'Finanças'),
               Tab(text: 'Apoio'),
             ],
           ),
@@ -695,10 +702,6 @@ class _HomeModernoAbasView extends ConsumerWidget {
                     const SizedBox(height: 11),
                     _ModernoBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
                   ],
-                ),
-                ListView(
-                  padding: const EdgeInsets.all(14),
-                  children: const [_ModernoFinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(14),
@@ -868,6 +871,11 @@ class _ModernoFinancasCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    'Finanças',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(
@@ -1138,6 +1146,8 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
+          const _FuncionalFinancasCard(),
+          const SizedBox(height: 16),
           _FuncionalStatusSummary(),
           const SizedBox(height: 16),
           Text('CONEXÕES', style: Theme.of(context).textTheme.labelSmall),
@@ -1145,8 +1155,6 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
           _FuncionalGmailCard(statusAsync: gmailStatusAsync),
           const SizedBox(height: 8),
           _FuncionalCalendarCard(eventsAsync: calendarEventsAsync),
-          const SizedBox(height: 8),
-          const _FuncionalFinancasCard(),
           const SizedBox(height: 8),
           _FuncionalBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
           const SizedBox(height: 16),
@@ -1173,13 +1181,16 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _FuncionalFinancasCard(),
+          ),
           const TabBar(
             tabs: [
               Tab(text: 'Hoje'),
-              Tab(text: 'Finanças'),
               Tab(text: 'Apoio'),
             ],
           ),
@@ -1199,10 +1210,6 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
                       ativoAsync: biofeedbackAtivoAsync,
                     ),
                   ],
-                ),
-                ListView(
-                  padding: const EdgeInsets.all(12),
-                  children: const [_FuncionalFinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(12),

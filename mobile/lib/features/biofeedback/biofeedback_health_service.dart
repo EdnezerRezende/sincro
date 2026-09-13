@@ -19,6 +19,12 @@ HealthDataType get _tipoVfc => !kIsWeb && Platform.isIOS
     ? HealthDataType.HEART_RATE_VARIABILITY_SDNN
     : HealthDataType.HEART_RATE_VARIABILITY_RMSSD;
 
+/// Tempo máximo tolerado para uma chamada ao plugin `health`. Sem isso, um relógio lento para
+/// sincronizar ou um Health Connect ocupado pode deixar a chamada pendurada indefinidamente — a
+/// tela de Biofeedback ficaria "carregando" para sempre, sem cair nem no caminho de sucesso nem
+/// no de erro.
+const _timeoutLeitura = Duration(seconds: 15);
+
 class BiofeedbackHealthService {
   final Health _health = Health();
 
@@ -40,6 +46,18 @@ class BiofeedbackHealthService {
     );
   }
 
+  /// `null` quando a plataforma não informa o estado com confiança — o HealthKit no iOS pode
+  /// devolver isso por design mesmo com a permissão concedida. Quem chama deve tratar `null` como
+  /// "desconhecido", nunca como "negado".
+  Future<bool?> verificarPermissao() async {
+    await _garantirConfigurado();
+    final tipos = _tipos;
+    return _health.hasPermissions(
+      tipos,
+      permissions: tipos.map((_) => HealthDataAccess.READ).toList(),
+    );
+  }
+
   Future<List<HealthReading>> lerFrequenciaCardiacaHoje() {
     return _lerTipoHoje(HealthDataType.HEART_RATE);
   }
@@ -56,11 +74,13 @@ class BiofeedbackHealthService {
     await _garantirConfigurado();
     final agora = DateTime.now();
     final inicioDoDia = DateTime(agora.year, agora.month, agora.day);
-    final pontos = await _health.getHealthDataFromTypes(
-      types: [HealthDataType.WORKOUT],
-      startTime: inicioDoDia,
-      endTime: agora,
-    );
+    final pontos = await _health
+        .getHealthDataFromTypes(
+          types: [HealthDataType.WORKOUT],
+          startTime: inicioDoDia,
+          endTime: agora,
+        )
+        .timeout(_timeoutLeitura, onTimeout: () => []);
     return pontos
         .map((p) => TreinoIntervalo(inicio: p.dateFrom, fim: p.dateTo))
         .toList();
@@ -70,11 +90,9 @@ class BiofeedbackHealthService {
     await _garantirConfigurado();
     final agora = DateTime.now();
     final inicioDoDia = DateTime(agora.year, agora.month, agora.day);
-    final pontos = await _health.getHealthDataFromTypes(
-      types: [tipo],
-      startTime: inicioDoDia,
-      endTime: agora,
-    );
+    final pontos = await _health
+        .getHealthDataFromTypes(types: [tipo], startTime: inicioDoDia, endTime: agora)
+        .timeout(_timeoutLeitura, onTimeout: () => []);
     return pontos
         .map(
           (p) => HealthReading(

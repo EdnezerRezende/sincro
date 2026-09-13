@@ -56,3 +56,10 @@ final biofeedbackDiasNoHistoricoProvider = FutureProvider.autoDispose<int>((ref)
 final biofeedbackAlertasAtivosProvider = FutureProvider.autoDispose<bool>((ref) {
   return ref.watch(biofeedbackCacheProvider).getAlertasAtivos();
 });
+
+/// `null` = a plataforma não informa o estado com confiança (comum no iOS); tratar como
+/// "desconhecido", nunca como "negado". `false` é o único caso em que a UI deve orientar a
+/// pessoa a conceder acesso.
+final biofeedbackPermissaoProvider = FutureProvider.autoDispose<bool?>((ref) {
+  return ref.watch(biofeedbackHealthServiceProvider).verificarPermissao();
+});

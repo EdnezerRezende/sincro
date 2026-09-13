@@ -13,16 +13,26 @@ const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
 class BiofeedbackScreen extends ConsumerWidget {
   const BiofeedbackScreen({super.key});
 
-  Future<void> _sincronizar(WidgetRef ref) async {
+  Future<void> _sincronizar(BuildContext context, WidgetRef ref) async {
+    var falhou = false;
     try {
       await ref.read(biofeedbackSyncServiceProvider).sincronizar();
     } catch (_) {
-      // Sincronização sob demanda é best-effort: se falhar, ainda mostramos os dados em cache.
+      // Sincronização sob demanda é best-effort: se falhar, ainda mostramos os dados em cache —
+      // mas a pessoa precisa saber que o "puxar para atualizar" não funcionou, em vez de a tela
+      // simplesmente não mudar nada e parecer que não fez nada.
+      falhou = true;
     }
     ref.invalidate(biofeedbackResumoProvider);
     // O histórico de repouso também muda na sincronização e é o que alimenta o contador
     // "(N de 7 dias)" — sem invalidar aqui, ele ficaria preso no valor anterior.
     ref.invalidate(biofeedbackDiasNoHistoricoProvider);
+    ref.invalidate(biofeedbackPermissaoProvider);
+    if (falhou && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível sincronizar agora. Tente novamente.')),
+      );
+    }
   }
 
   @override
@@ -36,8 +46,8 @@ class BiofeedbackScreen extends ConsumerWidget {
       return Scaffold(
         appBar: AppBar(title: const Text('Biofeedback')),
         body: RefreshIndicator(
-          onRefresh: () => _sincronizar(ref),
-          child: _ErrorState(onRetry: () => _sincronizar(ref)),
+          onRefresh: () => _sincronizar(context, ref),
+          child: _ErrorState(onRetry: () => _sincronizar(context, ref)),
         ),
       );
     }
@@ -45,7 +55,7 @@ class BiofeedbackScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Biofeedback')),
       body: RefreshIndicator(
-        onRefresh: () => _sincronizar(ref),
+        onRefresh: () => _sincronizar(context, ref),
         child: resumoAsync.when(
           data: (resumo) => _BiofeedbackContent(
             resumo: resumo,
@@ -58,7 +68,7 @@ class BiofeedbackScreen extends ConsumerWidget {
               Center(child: CircularProgressIndicator()),
             ],
           ),
-          error: (_, __) => _ErrorState(onRetry: () => _sincronizar(ref)),
+          error: (_, __) => _ErrorState(onRetry: () => _sincronizar(context, ref)),
         ),
       ),
     );
@@ -111,12 +121,31 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+class _EmptyState extends ConsumerWidget {
   const _EmptyState();
 
+  Future<void> _concederAcesso(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(biofeedbackHealthServiceProvider).solicitarPermissao();
+    } catch (_) {
+      // Best-effort: se o pedido falhar, o botão continua disponível para tentar de novo.
+    }
+    ref.invalidate(biofeedbackPermissaoProvider);
+    if (context.mounted) {
+      await ref.read(biofeedbackSyncServiceProvider).sincronizar().catchError((_) {});
+      ref.invalidate(biofeedbackResumoProvider);
+      ref.invalidate(biofeedbackDiasNoHistoricoProvider);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
+    // `null` (estado desconhecido, comum no iOS) é tratado como "sem dado ainda" — só `false`
+    // (negado com confiança, típico do Android/Health Connect) muda a mensagem e mostra o botão.
+    final semPermissao = ref
+        .watch(biofeedbackPermissaoProvider)
+        .maybeWhen(data: (permitido) => permitido == false, orElse: () => false);
     // ListView (em vez de Center) garante um descendente rolável: o RefreshIndicator que envolve
     // esta tela depende disso para reconhecer o gesto de puxar-para-atualizar.
     return ListView(
@@ -128,7 +157,7 @@ class _EmptyState extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.monitor_heart_outlined,
+                semPermissao ? Icons.lock_outline : Icons.monitor_heart_outlined,
                 size: 48,
                 color: colors.onSurfaceVariant,
               ),
@@ -136,14 +165,23 @@ class _EmptyState extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Text(
-                  'Nenhum dado ainda. Conecte seu wearable ou conceda acesso ao Apple Health / '
-                  'Google Fit.',
+                  semPermissao
+                      ? 'Sem acesso aos dados de saúde. Toque abaixo para conceder permissão.'
+                      : 'Nenhum dado ainda. Conecte seu wearable ou conceda acesso ao Apple '
+                          'Health / Google Fit.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
                 ),
               ),
+              if (semPermissao) ...[
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => _concederAcesso(context, ref),
+                  child: const Text('Conceder acesso'),
+                ),
+              ],
             ],
           ),
         ),

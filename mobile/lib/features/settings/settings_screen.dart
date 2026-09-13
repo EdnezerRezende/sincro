@@ -4,8 +4,6 @@ import '../auth/auth_providers.dart';
 import '../biofeedback/biofeedback_frequencia.dart';
 import '../biofeedback/biofeedback_providers.dart';
 import '../email_triage/gmail_connection_actions.dart';
-import '../financas/finance_connection.dart';
-import '../financas/finance_connection_actions.dart';
 import '../financas/finance_providers.dart';
 import '../guide/guide_content.dart';
 import '../guide/guide_screen.dart';
@@ -274,20 +272,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  // Mesmo padrão de extração do Gmail acima: a lógica vive em
-  // `confirmarEDesconectarFinanceConnection` (finance_connection_actions.dart), compartilhada
-  // com a tela de Finanças.
-  Future<void> _disconnectFinanceConnection(FinanceConnection connection) async {
-    await confirmarEDesconectarFinanceConnection(
-      context,
-      ref,
-      connection,
-      setBusy: (busy) {
-        if (mounted) setState(() => _busy = busy);
-      },
-    );
-  }
-
   Future<void> _editBiofeedbackFrequencia() async {
     final atual = await ref.read(biofeedbackCacheProvider).getFrequenciaMinutos();
     if (!mounted) return;
@@ -404,7 +388,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final connectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivo = ref.watch(biofeedbackAtivoProvider).maybeWhen(
           data: (ativo) => ativo,
           orElse: () => false,
@@ -417,19 +400,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           data: (status) => status.isAdmin,
           orElse: () => false,
         );
-    final financeConnectionTiles = connectionsAsync.maybeWhen(
-      data: (connections) => connections
-          .map(
-            (c) => ListTile(
-              leading: const Icon(Icons.account_balance_outlined),
-              title: Text('Desconectar ${c.instituicao}'),
-              onTap: _busy ? null : () => _disconnectFinanceConnection(c),
-            ),
-          )
-          .toList(),
-      orElse: () => <Widget>[],
-    );
-
     final destructiveColor = Theme.of(context).colorScheme.error;
 
     return Scaffold(
@@ -478,7 +448,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Definir dia de recebimento'),
             onTap: _busy ? null : _editDiaRecebimento,
           ),
-          ...financeConnectionTiles,
           // Ambos os itens só fazem sentido com o Biofeedback ativo: a frequência só governa o
           // agendamento em background, que nem existe enquanto o pilar está desativado.
           if (biofeedbackAtivo) ...[

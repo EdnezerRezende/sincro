@@ -1,145 +1,163 @@
-// Covers the "disconnect a finance connection from Finanças itself" bar: each connected
-// institution is listed with its own disconnect action (there can be more than one), the action
-// requires confirmation, and confirming calls the repository and refreshes both the connections
-// list and the summary — reusing the same helper Configurações uses, never a second
-// implementation.
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sincro_mobile/core/theme.dart';
-import 'package:sincro_mobile/features/financas/finance_connection.dart';
-import 'package:sincro_mobile/features/financas/finance_connection_repository.dart';
 import 'package:sincro_mobile/features/financas/finance_providers.dart';
 import 'package:sincro_mobile/features/financas/finance_summary.dart';
 import 'package:sincro_mobile/features/financas/finance_summary_repository.dart';
 import 'package:sincro_mobile/features/financas/financas_screen.dart';
-
-class _FakeFinanceConnectionRepository extends FinanceConnectionRepository {
-  _FakeFinanceConnectionRepository(this._connections, {this.disconnectError}) : super(Dio());
-
-  List<FinanceConnection> _connections;
-  final Object? disconnectError;
-  int chamadasDisconnect = 0;
-  String? ultimoIdDesconectado;
-
-  @override
-  Future<List<FinanceConnection>> listConnections() async => List.of(_connections);
-
-  @override
-  Future<void> disconnect(String connectionId) async {
-    chamadasDisconnect++;
-    ultimoIdDesconectado = connectionId;
-    final erro = disconnectError;
-    if (erro != null) throw erro;
-    _connections = _connections.where((c) => c.id != connectionId).toList();
-  }
-}
+import 'package:sincro_mobile/features/financas/lancamento_financeiro.dart';
+import 'package:sincro_mobile/features/financas/lancamentos_repository.dart';
 
 class _FakeFinanceSummaryRepository extends FinanceSummaryRepository {
   _FakeFinanceSummaryRepository(this._summary) : super(Dio());
-
   final FinanceSummary _summary;
-  int chamadasSync = 0;
-
   @override
   Future<FinanceSummary> getResumo() async => _summary;
+}
+
+class _FakeLancamentosRepository extends LancamentosRepository {
+  _FakeLancamentosRepository({required this.pendentes, required this.doMes})
+    : super(Dio());
+  final List<LancamentoFinanceiro> pendentes;
+  final List<LancamentoFinanceiro> doMes;
 
   @override
-  Future<void> sync() async {
-    chamadasSync++;
+  Future<List<LancamentoFinanceiro>> list({String? status, String? mes}) async {
+    if (status == 'PENDENTE_REVISAO') return pendentes;
+    return doMes;
   }
 }
 
-const _summaryVazio = FinanceSummary(saldoLivre: 0, contas: [], boletos: []);
+final _summaryVazio = FinanceSummary(
+  saldoLivre: 1000,
+  saldoContas: 1000,
+  faturasAbertas: 0,
+  despesasPendentesCiclo: 0,
+  cicloFim: DateTime.utc(2026, 9, 30),
+);
+
+LancamentoFinanceiro _pendente({required String descricao, double? valor}) {
+  return LancamentoFinanceiro(
+    id: 'l-$descricao',
+    tipo: TipoLancamento.despesa,
+    descricao: descricao,
+    instituicao: 'Nubank',
+    valor: valor,
+    dataVencimento: DateTime.utc(2026, 9, 20),
+    dataCompetencia: DateTime.utc(2026, 9, 20),
+    status: StatusLancamento.pendenteRevisao,
+    origem: OrigemLancamento.emailParser,
+    isPago: false,
+    codigoBarras: null,
+    cartaoId: null,
+    contaId: null,
+  );
+}
 
 Widget _app({
-  required List<FinanceConnection> connections,
-  Object? disconnectError,
+  required List<LancamentoFinanceiro> pendentes,
+  required List<LancamentoFinanceiro> doMes,
 }) {
-  final connectionRepo = _FakeFinanceConnectionRepository(connections, disconnectError: disconnectError);
-  final summaryRepo = _FakeFinanceSummaryRepository(_summaryVazio);
   return ProviderScope(
     overrides: [
-      financeConnectionRepositoryProvider.overrideWithValue(connectionRepo),
-      financeSummaryRepositoryProvider.overrideWithValue(summaryRepo),
+      financeSummaryRepositoryProvider.overrideWithValue(
+        _FakeFinanceSummaryRepository(_summaryVazio),
+      ),
+      lancamentosRepositoryProvider.overrideWithValue(
+        _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
+      ),
     ],
     child: MaterialApp(theme: sincroLightTheme, home: const FinancasScreen()),
   );
 }
 
 void main() {
-  testWidgets('lists each connected institution with its own disconnect action', (tester) async {
+  testWidgets('shows the Saldo Livre value from the summary', (tester) async {
+    await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1.000,00'), findsOneWidget);
+  });
+
+  testWidgets('defaults to the Pendentes tab and lists pending lançamentos', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(
-        connections: const [
-          FinanceConnection(id: 'conn-1', instituicao: 'Banco A', status: 'UPDATED'),
-          FinanceConnection(id: 'conn-2', instituicao: 'Banco B', status: 'UPDATED'),
-        ],
+        pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+        doMes: const [],
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Conexões'), findsOneWidget);
-    expect(find.text('Banco A'), findsOneWidget);
-    expect(find.text('Banco B'), findsOneWidget);
-    expect(find.byIcon(Icons.link_off), findsNWidgets(2));
+    expect(find.text('Fatura Nubank'), findsOneWidget);
+    expect(find.textContaining('512,40'), findsOneWidget);
   });
 
-  testWidgets('disconnecting one institution asks for confirmation before acting', (tester) async {
+  testWidgets('shows "informar valor" instead of a value when valor is null', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(
-        connections: const [FinanceConnection(id: 'conn-1', instituicao: 'Banco A', status: 'UPDATED')],
+        pendentes: [_pendente(descricao: 'Conta de luz', valor: null)],
+        doMes: const [],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Desconectar Banco A'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Desconectar Banco A?'), findsOneWidget);
+    expect(find.text('informar valor'), findsOneWidget);
   });
 
-  testWidgets('confirming disconnects, calls the repository and refreshes the list', (tester) async {
+  testWidgets('switching to "Lançamentos do mês" shows that list instead', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(
-        connections: const [FinanceConnection(id: 'conn-1', instituicao: 'Banco A', status: 'UPDATED')],
+        pendentes: [_pendente(descricao: 'Pendente A')],
+        doMes: [_pendente(descricao: 'Confirmado B')],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Desconectar Banco A'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Desconectar'));
+    expect(find.text('Pendente A'), findsOneWidget);
+    expect(find.text('Confirmado B'), findsNothing);
+
+    await tester.tap(find.text('Lançamentos do mês'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Banco A desconectado.'), findsOneWidget);
-    // The list is re-fetched from the (now updated) repository — the disconnected institution
-    // is gone instead of lingering as stale state.
-    expect(find.text('Banco A'), findsNothing);
-    expect(find.text('Conexões'), findsNothing);
+    expect(find.text('Pendente A'), findsNothing);
+    expect(find.text('Confirmado B'), findsOneWidget);
   });
 
-  testWidgets('cancelling the confirmation keeps the connection listed', (tester) async {
+  testWidgets(
+    'shows the instituicao as a badge next to the pending lançamento',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+          doMes: const [],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nubank'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tapping Revisar opens the confirmation sheet', (tester) async {
     await tester.pumpWidget(
       _app(
-        connections: const [FinanceConnection(id: 'conn-1', instituicao: 'Banco A', status: 'UPDATED')],
+        pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+        doMes: const [],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Desconectar Banco A'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Cancelar'));
+    await tester.tap(find.text('Revisar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Banco A'), findsOneWidget);
-  });
-
-  testWidgets('no connections at all: no "Conexões" section is shown', (tester) async {
-    await tester.pumpWidget(_app(connections: const []));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Conexões'), findsNothing);
+    expect(find.text('Confirmar lançamento'), findsOneWidget);
   });
 }

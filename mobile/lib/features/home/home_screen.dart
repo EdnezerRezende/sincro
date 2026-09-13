@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
@@ -9,9 +10,8 @@ import '../biofeedback/biofeedback_providers.dart';
 import '../biofeedback/estado_estresse.dart';
 import '../calendar/calendar_providers.dart';
 import '../calendar/calendar_event.dart';
-import '../financas/finance_connection.dart';
 import '../financas/finance_providers.dart';
-import '../financas/pluggy_connect_webview_screen.dart';
+import '../financas/financas_screen.dart';
 import '../guide/guide_content.dart';
 import '../guide/guide_providers.dart';
 import '../guide/guide_screen.dart';
@@ -24,37 +24,6 @@ import 'home_providers.dart';
 // Reusa os mesmos tokens já aprovados em AppInput e AppChip.
 const Color _kBorderLight = Color(0xFF9C9690); // 2.76:1 vs #FAF8F5
 const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
-
-/// Dispara o mesmo caminho de `_connectFinance` em `financas_screen.dart` — os três atalhos de
-/// Finanças na Home (`_FinancasCard`, `_ModernoFinancasCard`, `_FuncionalFinancasCard`) chamam
-/// esta função em vez de reimplementar a navegação, porque construir `PluggyConnectWebviewScreen`
-/// sem `connectionRepository` faz o widget cair no estado "unavailable" no web (ver o doc daquela
-/// classe) em vez de usar o fluxo real de abrir o Pluggy Connect numa aba e fazer polling em
-/// `/financas/conexoes`. Devolve `true` só quando uma conexão foi de fato persistida — nativo
-/// (`itemId` trocado via `finalizeConnection`) ou web (o próprio widget já confirmou o polling
-/// antes de devolver `true`, e não deve ser finalizado de novo).
-Future<bool> _connectFinanceAccount(BuildContext context, WidgetRef ref) async {
-  final repository = ref.read(financeConnectionRepositoryProvider);
-  final connectToken = await repository.createConnectToken();
-  if (!context.mounted) return false;
-  final result = await Navigator.of(context).push<Object>(
-    MaterialPageRoute(
-      builder: (_) => PluggyConnectWebviewScreen(
-        connectToken: connectToken,
-        connectionRepository: repository,
-      ),
-    ),
-  );
-  if (result == null) return false;
-  if (result is String) {
-    // Caminho nativo: itemId real, precisa ser trocado com o backend.
-    await repository.finalizeConnection(result);
-  }
-  // Caminho web (result == true): a conexão já foi confirmada por polling dentro do próprio
-  // PluggyConnectWebviewScreen — nada a finalizar aqui.
-  ref.invalidate(financeConnectionsProvider);
-  return true;
-}
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -191,7 +160,6 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return SingleChildScrollView(
@@ -208,7 +176,7 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
           const SizedBox(height: 16),
           _CalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 16),
-          _FinancasCard(connectionsAsync: financeConnectionsAsync),
+          const _FinancasCard(),
           const SizedBox(height: 16),
           _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
           const SizedBox(height: 16),
@@ -233,7 +201,6 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
@@ -262,9 +229,7 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
                 ),
                 ListView(
                   padding: const EdgeInsets.all(16),
-                  children: [
-                    _FinancasCard(connectionsAsync: financeConnectionsAsync),
-                  ],
+                  children: const [_FinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(16),
@@ -351,141 +316,98 @@ class _GmailCard extends ConsumerWidget {
   }
 }
 
+/// Card calmo de Finanças na Home: uma prévia somente-leitura do saldo livre vindo de
+/// `financeSummaryProvider`, que abre a tela completa ao ser tocado. Não há mais estado
+/// "conectar conta" aqui — a conexão via e-mail acontece automaticamente no servidor.
 class _FinancasCard extends ConsumerWidget {
-  const _FinancasCard({required this.connectionsAsync});
-
-  final AsyncValue<List<FinanceConnection>> connectionsAsync;
-
-  Future<void> _connect(BuildContext context, WidgetRef ref) async {
-    // Capturado antes do finalize: o prompt de dia de recebimento só faz sentido na PRIMEIRA
-    // conta conectada, não a cada banco novo que o usuário adicionar depois.
-    final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
-    try {
-      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc daquela função e de
-      // `_connectFinanceAccount` aqui em cima do arquivo para o porquê de não reimplementar a
-      // navegação sem `connectionRepository`.
-      final connected = await _connectFinanceAccount(context, ref);
-      if (!connected) return;
-      if (isFirstConnection && context.mounted) {
-        await _promptDiaRecebimento(context, ref);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Não foi possível conectar sua conta. Tente novamente.',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  /// Pergunta o dia de recebimento logo após a primeira conexão, já que ele é o que define o
-  /// ciclo do saldo livre. É um nice-to-have: recusar ou digitar algo inválido só segue o
-  /// fluxo em silêncio — o usuário pode definir depois em Configurações.
-  Future<void> _promptDiaRecebimento(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final controller = TextEditingController();
-    final dia = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Em que dia do mês você costuma receber?'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Ex: 5 (dia 5 de cada mês)',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Agora não'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              int.tryParse(controller.text.trim()),
-            ),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (dia == null || dia < 1 || dia > 31) return;
-
-    try {
-      await ref.read(diaRecebimentoRepositoryProvider).update(dia);
-    } catch (_) {
-      // Silencioso de propósito: não transformar um extra em erro logo após conectar.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return connectionsAsync.when(
-      data: (connections) {
-        if (connections.isEmpty) {
-          return Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_balance_outlined),
-              title: const Text('Finanças'),
-              subtitle: const Text(
-                'Conecte uma conta para ver seu saldo livre.',
-              ),
-              trailing: ElevatedButton(
-                onPressed: () => _connect(context, ref),
-                child: const Text('Conectar conta'),
-              ),
-            ),
-          );
-        }
-        return Card(
-          child: ListTile(
-            leading: const Icon(Icons.account_balance_outlined),
-            title: const Text('Finanças'),
-            subtitle: _SaldoLivreSubtitle(connectionCount: connections.length),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).pushNamed('/financas'),
-          ),
-        );
-      },
-      loading: () => const Card(
-        child: ListTile(
-          title: Text('Finanças'),
-          subtitle: Text('Carregando...'),
-        ),
-      ),
-      error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// Saldo livre é o número que justifica esse pilar inteiro, então ele vem para o card da Home.
-/// Enquanto o resumo carrega — ou se ele falhar — caímos na contagem de contas, que já veio do
-/// provider de conexões, para o card nunca parecer quebrado.
-class _SaldoLivreSubtitle extends ConsumerWidget {
-  const _SaldoLivreSubtitle({required this.connectionCount});
-
-  final int connectionCount;
+  const _FinancasCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(financeSummaryProvider);
-    final fallback = Text('$connectionCount conta(s) conectada(s)');
+    final pendentesCount = _pendentesCount(ref);
+
     return summaryAsync.when(
-      data: (summary) =>
-          Text('Saldo livre: R\$ ${summary.saldoLivre.toStringAsFixed(2)}'),
-      loading: () => fallback,
-      error: (_, __) => fallback,
+      loading: () => const Card(
+        child: SizedBox(
+          height: 96,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (error, stackTrace) => Card(
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
+      ),
+      data: (summary) {
+        final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        return Card(
+          child: InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FinancasScreen()),
+            ),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Saldo Livre',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    currency.format(summary.saldoLivre),
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  if (pendentesCount != null && pendentesCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ver finanças →',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
+}
+
+/// Contagem de pendências para o card calmo de Finanças da Home. Nice-to-have sobre o resumo
+/// principal: se a lista de pendentes ainda está carregando ou falhou, cai em `null` (sem linha
+/// de contagem) em vez de propagar um estado de erro/loading próprio.
+int? _pendentesCount(WidgetRef ref) {
+  return ref
+      .watch(lancamentosPendentesProvider)
+      .maybeWhen(data: (lista) => lista.length, orElse: () => null);
 }
 
 class _BiofeedbackCard extends ConsumerWidget {
@@ -705,7 +627,6 @@ class _HomeModernoResumoView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return SingleChildScrollView(
@@ -727,7 +648,7 @@ class _HomeModernoResumoView extends ConsumerWidget {
           const SizedBox(height: 11),
           _ModernoCalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 11),
-          _ModernoFinancasCard(connectionsAsync: financeConnectionsAsync),
+          const _ModernoFinancasCard(),
           const SizedBox(height: 11),
           _ModernoBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
           const SizedBox(height: 11),
@@ -749,7 +670,6 @@ class _HomeModernoAbasView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
@@ -778,11 +698,7 @@ class _HomeModernoAbasView extends ConsumerWidget {
                 ),
                 ListView(
                   padding: const EdgeInsets.all(14),
-                  children: [
-                    _ModernoFinancasCard(
-                      connectionsAsync: financeConnectionsAsync,
-                    ),
-                  ],
+                  children: const [_ModernoFinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(14),
@@ -890,85 +806,54 @@ class _ModernoGmailCard extends ConsumerWidget {
   }
 }
 
+/// Card calmo de Finanças na Home (design Moderno): mesma prévia de saldo livre de
+/// `_FinancasCard`, com o gradiente sutil característico deste estilo. Ver o doc de
+/// `_FinancasCard` para o porquê de não haver mais estado "conectar conta" aqui.
 class _ModernoFinancasCard extends ConsumerWidget {
-  const _ModernoFinancasCard({required this.connectionsAsync});
-
-  final AsyncValue<List<FinanceConnection>> connectionsAsync;
-
-  Future<void> _connect(BuildContext context, WidgetRef ref) async {
-    final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
-    try {
-      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc de
-      // `_connectFinanceAccount` aqui em cima do arquivo.
-      final connected = await _connectFinanceAccount(context, ref);
-      if (!connected) return;
-      if (isFirstConnection && context.mounted) {
-        await _promptDiaRecebimento(context, ref);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Não foi possível conectar sua conta. Tente novamente.',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _promptDiaRecebimento(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final controller = TextEditingController();
-    final dia = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Em que dia do mês você costuma receber?'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Ex: 5 (dia 5 de cada mês)',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Agora não'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              int.tryParse(controller.text.trim()),
-            ),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (dia == null || dia < 1 || dia > 31) return;
-
-    try {
-      await ref.read(diaRecebimentoRepositoryProvider).update(dia);
-    } catch (_) {}
-  }
+  const _ModernoFinancasCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return connectionsAsync.when(
-      data: (connections) {
-        if (connections.isEmpty) {
-          return Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+    final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesCount = _pendentesCount(ref);
+
+    return summaryAsync.when(
+      loading: () => const Card(
+        elevation: 0,
+        child: SizedBox(
+          height: 96,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (error, stackTrace) => Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
+          ),
+        ),
+      ),
+      data: (summary) {
+        final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FinancasScreen()),
+            ),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -980,50 +865,53 @@ class _ModernoFinancasCard extends ConsumerWidget {
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: ListTile(
-                leading: Icon(
-                  Icons.account_balance_outlined,
-                  color: Colors.green[600],
-                ),
-                title: const Text('Finanças'),
-                subtitle: const Text(
-                  'Conecte uma conta para ver seu saldo livre.',
-                ),
-                trailing: ElevatedButton(
-                  onPressed: () => _connect(context, ref),
-                  child: const Text('Conectar conta'),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_outlined,
+                        color: Colors.green[600],
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Saldo Livre',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    currency.format(summary.saldoLivre),
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  if (pendentesCount != null && pendentesCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ver finanças →',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-          );
-        }
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          child: ListTile(
-            leading: Icon(
-              Icons.account_balance_outlined,
-              color: Colors.green[600],
-            ),
-            title: const Text('Finanças'),
-            subtitle: _SaldoLivreSubtitle(connectionCount: connections.length),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).pushNamed('/financas'),
           ),
         );
       },
-      loading: () => Card(
-        elevation: 0,
-        child: ListTile(
-          title: const Text('Finanças'),
-          subtitle: const Text('Carregando...'),
-          leading: Icon(
-            Icons.account_balance_outlined,
-            color: Colors.green[600],
-          ),
-        ),
-      ),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
@@ -1238,7 +1126,6 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return SingleChildScrollView(
@@ -1259,7 +1146,7 @@ class _HomeFuncionalResumoView extends ConsumerWidget {
           const SizedBox(height: 8),
           _FuncionalCalendarCard(eventsAsync: calendarEventsAsync),
           const SizedBox(height: 8),
-          _FuncionalFinancasCard(connectionsAsync: financeConnectionsAsync),
+          const _FuncionalFinancasCard(),
           const SizedBox(height: 8),
           _FuncionalBiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
           const SizedBox(height: 16),
@@ -1283,7 +1170,6 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
-    final financeConnectionsAsync = ref.watch(financeConnectionsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
     return DefaultTabController(
@@ -1316,11 +1202,7 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
                 ),
                 ListView(
                   padding: const EdgeInsets.all(12),
-                  children: [
-                    _FuncionalFinancasCard(
-                      connectionsAsync: financeConnectionsAsync,
-                    ),
-                  ],
+                  children: const [_FuncionalFinancasCard()],
                 ),
                 ListView(
                   padding: const EdgeInsets.all(12),
@@ -1551,167 +1433,131 @@ class _FuncionalGmailCard extends ConsumerWidget {
   }
 }
 
+/// Card calmo de Finanças na Home (design Funcional): mesma prévia de saldo livre de
+/// `_FinancasCard`, com o chrome compacto e bordado deste estilo. Ver o doc de `_FinancasCard`
+/// para o porquê de não haver mais estado "conectar conta" aqui.
 class _FuncionalFinancasCard extends ConsumerWidget {
-  const _FuncionalFinancasCard({required this.connectionsAsync});
-
-  final AsyncValue<List<FinanceConnection>> connectionsAsync;
-
-  Future<void> _connect(BuildContext context, WidgetRef ref) async {
-    final isFirstConnection = connectionsAsync.value?.isEmpty ?? true;
-    try {
-      // Mesmo caminho de `_connectFinance` em financas_screen.dart — ver doc de
-      // `_connectFinanceAccount` aqui em cima do arquivo.
-      final connected = await _connectFinanceAccount(context, ref);
-      if (!connected) return;
-      if (isFirstConnection && context.mounted) {
-        await _promptDiaRecebimento(context, ref);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Não foi possível conectar sua conta. Tente novamente.',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _promptDiaRecebimento(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final controller = TextEditingController();
-    final dia = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Em que dia do mês você costuma receber?'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Ex: 5'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Agora não'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              int.tryParse(controller.text.trim()),
-            ),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (dia == null || dia < 1 || dia > 31) return;
-
-    try {
-      await ref.read(diaRecebimentoRepositoryProvider).update(dia);
-    } catch (_) {}
-  }
+  const _FuncionalFinancasCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return connectionsAsync.when(
-      data: (connections) {
-        if (connections.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Theme.of(context).brightness == Brightness.light
-                    ? _kBorderLight
-                    : _kBorderDark,
-                width: 1,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.account_balance_outlined, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Finanças',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const Text('Conectar', style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () => _connect(context, ref),
-                  child: const Text('Conectar'),
-                ),
-              ],
-            ),
-          );
-        }
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(context).brightness == Brightness.light
-                  ? _kBorderLight
-                  : _kBorderDark,
-              width: 1,
-            ),
-            borderRadius: BorderRadius.circular(8),
+    final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesCount = _pendentesCount(ref);
+
+    return summaryAsync.when(
+      loading: () => const SizedBox(
+        height: 96,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stackTrace) => Semantics(
+        button: true,
+        excludeSemantics: true,
+        label: 'Finanças — não foi possível carregar seu resumo agora',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FinancasScreen()),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
           ),
-          child: Row(
-            children: [
-              const Icon(Icons.account_balance_outlined, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? _kBorderLight
+                      : _kBorderDark,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ),
+        ),
+      ),
+      data: (summary) {
+        final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        final saldoFormatado = currency.format(summary.saldoLivre);
+        return Semantics(
+          button: true,
+          excludeSemantics: true,
+          label: 'Finanças — saldo livre $saldoFormatado',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FinancasScreen()),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? _kBorderLight
+                        : _kBorderDark,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
                   children: [
-                    const Text(
-                      'Finanças',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    const Icon(Icons.account_balance_outlined, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Finanças',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            'Saldo livre: $saldoFormatado',
+                            style: const TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (pendentesCount != null && pendentesCount > 0)
+                            Text(
+                              '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          Text(
+                            'Ver finanças →',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      '${connections.length} conta(s)',
-                      style: const TextStyle(fontSize: 12),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.check_circle, size: 20, color: Colors.green[700]),
-            ],
+            ),
           ),
         );
       },
-      loading: () => Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).brightness == Brightness.light
-                ? _kBorderLight
-                : _kBorderDark,
-            width: 1,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.account_balance_outlined, size: 20),
-            SizedBox(width: 10),
-            Expanded(child: Text('Finanças')),
-          ],
-        ),
-      ),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

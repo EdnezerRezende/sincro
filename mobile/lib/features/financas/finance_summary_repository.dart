@@ -10,8 +10,4 @@ class FinanceSummaryRepository {
     final response = await _dio.get('/financas/resumo');
     return FinanceSummary.fromJson(response.data as Map<String, dynamic>);
   }
-
-  Future<void> sync() async {
-    await _dio.post('/financas/sync');
-  }
 }

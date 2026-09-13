@@ -13,22 +13,82 @@ Future<void> showConfirmarLancamentoSheet(
   LancamentoFinanceiro lancamento,
 ) {
   final repository = ref.read(lancamentosRepositoryProvider);
+
+  void invalidateAfterMudanca() {
+    // Confirmar/ignorar muda o que `GET /financas/resumo` retorna (Saldo Livre,
+    // despesas pendentes) e, no caso de confirmar, move o item para o mês —
+    // por isso invalidamos as duas outras fontes de dados da tela de Finanças
+    // além da lista de pendentes. `lancamentosDoMesProvider` é `.family`;
+    // invalidar sem argumento invalida todas as instâncias, o que está correto
+    // aqui porque não sabemos qual mês a tela tem aberto no momento.
+    ref.invalidate(lancamentosPendentesProvider);
+    ref.invalidate(financeSummaryProvider);
+    ref.invalidate(lancamentosDoMesProvider);
+  }
+
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    builder: (sheetContext) => ConfirmarLancamentoSheetContent(
-      lancamento: lancamento,
-      onConfirmar: () async {
-        await repository.confirmar(lancamento.id, valor: lancamento.valor);
-        ref.invalidate(lancamentosPendentesProvider);
-        if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-      },
-      onIgnorar: () async {
-        await repository.ignorar(lancamento.id);
-        ref.invalidate(lancamentosPendentesProvider);
-        if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-      },
-    ),
+    builder: (sheetContext) {
+      // `isSubmitting` precisa viver FORA do builder do StatefulBuilder: esse builder
+      // interno é re-invocado a cada setState, então uma variável declarada dentro dele
+      // seria reinicializada para `false` em todo rebuild, e o guard contra duplo toque
+      // nunca teria efeito de verdade. Este builder externo (o do showModalBottomSheet) só
+      // roda uma vez para a vida da sheet, então a variável aqui persiste entre os
+      // rebuilds do StatefulBuilder interno.
+      var isSubmitting = false;
+
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> confirmar() async {
+            setState(() => isSubmitting = true);
+            try {
+              await repository.confirmar(lancamento.id, valor: lancamento.valor);
+              invalidateAfterMudanca();
+              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+            } catch (_) {
+              if (sheetContext.mounted) {
+                setState(() => isSubmitting = false);
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Não foi possível confirmar agora. Tente novamente.',
+                    ),
+                  ),
+                );
+              }
+            }
+          }
+
+          Future<void> ignorar() async {
+            setState(() => isSubmitting = true);
+            try {
+              await repository.ignorar(lancamento.id);
+              invalidateAfterMudanca();
+              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+            } catch (_) {
+              if (sheetContext.mounted) {
+                setState(() => isSubmitting = false);
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Não foi possível ignorar agora. Tente novamente.',
+                    ),
+                  ),
+                );
+              }
+            }
+          }
+
+          return ConfirmarLancamentoSheetContent(
+            lancamento: lancamento,
+            isSubmitting: isSubmitting,
+            onConfirmar: confirmar,
+            onIgnorar: ignorar,
+          );
+        },
+      );
+    },
   );
 }
 
@@ -38,11 +98,13 @@ class ConfirmarLancamentoSheetContent extends StatelessWidget {
     required this.lancamento,
     required this.onConfirmar,
     required this.onIgnorar,
+    this.isSubmitting = false,
   });
 
   final LancamentoFinanceiro lancamento;
   final VoidCallback onConfirmar;
   final VoidCallback onIgnorar;
+  final bool isSubmitting;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +168,7 @@ class ConfirmarLancamentoSheetContent extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: onIgnorar,
+                  onPressed: isSubmitting ? null : onIgnorar,
                   child: const Text('Ignorar'),
                 ),
               ),
@@ -114,8 +176,14 @@ class ConfirmarLancamentoSheetContent extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: FilledButton(
-                  onPressed: onConfirmar,
-                  child: const Text('Confirmar'),
+                  onPressed: isSubmitting ? null : onConfirmar,
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Confirmar'),
                 ),
               ),
             ],

@@ -131,6 +131,21 @@ void main() {
     expect(find.text('Confirmado B'), findsOneWidget);
   });
 
+  testWidgets(
+    'shows the instituicao as a badge next to the pending lançamento',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          pendentes: [_pendente(descricao: 'Fatura Nubank', valor: 512.40)],
+          doMes: const [],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nubank'), findsOneWidget);
+    },
+  );
+
   testWidgets('tapping Revisar opens the confirmation sheet', (tester) async {
     await tester.pumpWidget(
       _app(

@@ -325,6 +325,7 @@ class _FinancasCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesCount = _pendentesCount(ref);
 
     return summaryAsync.when(
       loading: () => const Card(
@@ -333,7 +334,21 @@ class _FinancasCard extends ConsumerWidget {
           child: Center(child: CircularProgressIndicator()),
         ),
       ),
-      error: (error, stackTrace) => const SizedBox.shrink(),
+      error: (error, stackTrace) => Card(
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
+      ),
       data: (summary) {
         final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
         return Card(
@@ -360,6 +375,22 @@ class _FinancasCard extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                         ),
                   ),
+                  if (pendentesCount != null && pendentesCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ver finanças →',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -368,6 +399,15 @@ class _FinancasCard extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Contagem de pendências para o card calmo de Finanças da Home. Nice-to-have sobre o resumo
+/// principal: se a lista de pendentes ainda está carregando ou falhou, cai em `null` (sem linha
+/// de contagem) em vez de propagar um estado de erro/loading próprio.
+int? _pendentesCount(WidgetRef ref) {
+  return ref
+      .watch(lancamentosPendentesProvider)
+      .maybeWhen(data: (lista) => lista.length, orElse: () => null);
 }
 
 class _BiofeedbackCard extends ConsumerWidget {
@@ -775,6 +815,7 @@ class _ModernoFinancasCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesCount = _pendentesCount(ref);
 
     return summaryAsync.when(
       loading: () => const Card(
@@ -784,7 +825,23 @@ class _ModernoFinancasCard extends ConsumerWidget {
           child: Center(child: CircularProgressIndicator()),
         ),
       ),
-      error: (error, stackTrace) => const SizedBox.shrink(),
+      error: (error, stackTrace) => Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
+      ),
       data: (summary) {
         final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
         return Card(
@@ -832,6 +889,22 @@ class _ModernoFinancasCard extends ConsumerWidget {
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w800,
                         ),
+                  ),
+                  if (pendentesCount != null && pendentesCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ver finanças →',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -1369,13 +1442,46 @@ class _FuncionalFinancasCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentesCount = _pendentesCount(ref);
 
     return summaryAsync.when(
       loading: () => const SizedBox(
         height: 96,
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (error, stackTrace) => const SizedBox.shrink(),
+      error: (error, stackTrace) => Semantics(
+        button: true,
+        excludeSemantics: true,
+        label: 'Finanças — não foi possível carregar seu resumo agora',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FinancasScreen()),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FinancasScreen()),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? _kBorderLight
+                      : _kBorderDark,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ),
+        ),
+      ),
       data: (summary) {
         final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
         final saldoFormatado = currency.format(summary.saldoLivre);
@@ -1421,6 +1527,21 @@ class _FuncionalFinancasCard extends ConsumerWidget {
                             style: const TextStyle(fontSize: 12),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                          if (pendentesCount != null && pendentesCount > 0)
+                            Text(
+                              '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          Text(
+                            'Ver finanças →',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ),
                         ],
                       ),

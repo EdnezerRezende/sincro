@@ -185,6 +185,17 @@ class _LancamentoPendenteCard extends StatelessWidget {
                       'Sugestão automática · vence ${_dateFormat.format(lancamento.dataVencimento)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (lancamento.instituicao != null) ...[
+                      const SizedBox(height: 6),
+                      AppChip(
+                        label: lancamento.instituicao!,
+                        variant: AppChipVariant.suggestion,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

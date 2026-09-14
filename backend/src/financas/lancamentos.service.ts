@@ -5,6 +5,25 @@ import { ConfirmarLancamentoDto } from './dto/confirmar-lancamento.dto';
 import { CreateLancamentoDto } from './dto/create-lancamento.dto';
 import { UpdateLancamentoDto } from './dto/update-lancamento.dto';
 
+const TIPOS_ELEGIVEIS_PARA_AGENDA = ['DESPESA', 'FATURA_CARTAO'];
+
+/** Superset dos campos que `sincronizarCalendarioParaResultado` precisa: `tipo`/`status`/`isPago`
+ *  para a decisão de criar/remover, e o restante (`descricao`, `instituicao`, `valor`,
+ *  `dataVencimento`) porque é exatamente o que `FinanceCalendarSyncService.syncOnConfirm` espera
+ *  (`LancamentoParaCalendar` em `calendar-sync.service.ts`) — mantendo os dois em sincronia evita
+ *  um cast manual ao repassar `resultado` para `syncOnConfirm`. */
+interface LancamentoParaSincCalendario {
+  id: string;
+  tipo: string;
+  status: string;
+  isPago: boolean;
+  googleEventId: string | null;
+  descricao: string;
+  instituicao: string | null;
+  valor: unknown;
+  dataVencimento: Date;
+}
+
 @Injectable()
 export class LancamentosService {
   constructor(
@@ -29,7 +48,7 @@ export class LancamentosService {
     await this.assertContaECartaoPertencemAoUsuario(userId, dto.contaId, dto.cartaoId);
     const dataVencimento = new Date(dto.dataVencimento);
     const dataCompetencia = dto.dataCompetencia ? new Date(dto.dataCompetencia) : dataVencimento;
-    return this.prisma.lancamentoFinanceiro.create({
+    const criado = await this.prisma.lancamentoFinanceiro.create({
       data: {
         userId,
         tipo: dto.tipo,
@@ -45,23 +64,19 @@ export class LancamentosService {
         isPago: dto.isPago ?? false,
       },
     });
+    await this.sincronizarCalendarioParaResultado(userId, criado);
+    return criado;
   }
 
   async update(userId: string, id: string, dto: UpdateLancamentoDto) {
-    const lancamento = await this.getOwnedOrThrow(userId, id);
+    await this.getOwnedOrThrow(userId, id); // garante posse; o resultado não é mais lido — a decisão de calendário usa `atualizado`, não o estado anterior
     await this.assertContaECartaoPertencemAoUsuario(userId, dto.contaId, dto.cartaoId);
     const data: Record<string, unknown> = { ...dto };
     if (dto.dataVencimento) data.dataVencimento = new Date(dto.dataVencimento);
     if (dto.dataCompetencia) data.dataCompetencia = new Date(dto.dataCompetencia);
 
     const atualizado = await this.prisma.lancamentoFinanceiro.update({ where: { id }, data });
-
-    if (lancamento.status === 'CONFIRMADO' && atualizado.status === 'CONFIRMADO') {
-      const googleEventId = await this.calendarSync.syncOnConfirm(userId, atualizado);
-      if (googleEventId) {
-        await this.prisma.lancamentoFinanceiro.update({ where: { id }, data: { googleEventId } });
-      }
-    }
+    await this.sincronizarCalendarioParaResultado(userId, atualizado);
     return atualizado;
   }
 
@@ -75,11 +90,7 @@ export class LancamentosService {
     if (dto.cartaoId !== undefined) data.cartaoId = dto.cartaoId;
 
     const atualizado = await this.prisma.lancamentoFinanceiro.update({ where: { id }, data });
-
-    const googleEventId = await this.calendarSync.syncOnConfirm(userId, atualizado);
-    if (googleEventId) {
-      await this.prisma.lancamentoFinanceiro.update({ where: { id }, data: { googleEventId } });
-    }
+    await this.sincronizarCalendarioParaResultado(userId, atualizado);
     return atualizado;
   }
 
@@ -97,6 +108,39 @@ export class LancamentosService {
     const lancamento = await this.getOwnedOrThrow(userId, id);
     await this.prisma.lancamentoFinanceiro.delete({ where: { id } });
     await this.calendarSync.removeEvent(userId, lancamento.googleEventId);
+  }
+
+  /** Único ponto de decisão de calendário para o resultado de uma escrita em
+   *  `LancamentoFinanceiro` (`createManual`, `update`, `confirmar`) — evita que as três
+   *  chamadas divirjam sobre quando um evento deve existir. Regra: só lançamento CONFIRMADO
+   *  de tipo DESPESA/FATURA_CARTAO tem evento; se `isPago` for true, o evento (se houver) é
+   *  removido em vez de sincronizado. `ignorar`/`remove` continuam removendo incondicionalmente
+   *  fora deste método, pois ali o lançamento deixa de existir/valer independente de tipo. */
+  private async sincronizarCalendarioParaResultado(
+    userId: string,
+    resultado: LancamentoParaSincCalendario,
+  ): Promise<void> {
+    if (resultado.status !== 'CONFIRMADO') return;
+
+    if (resultado.isPago) {
+      if (!resultado.googleEventId) return;
+      await this.calendarSync.removeEvent(userId, resultado.googleEventId);
+      await this.prisma.lancamentoFinanceiro.update({
+        where: { id: resultado.id },
+        data: { googleEventId: null },
+      });
+      return;
+    }
+
+    if (!TIPOS_ELEGIVEIS_PARA_AGENDA.includes(resultado.tipo)) return;
+
+    const googleEventId = await this.calendarSync.syncOnConfirm(userId, resultado);
+    if (googleEventId) {
+      await this.prisma.lancamentoFinanceiro.update({
+        where: { id: resultado.id },
+        data: { googleEventId },
+      });
+    }
   }
 
   protected async getOwnedOrThrow(userId: string, id: string) {

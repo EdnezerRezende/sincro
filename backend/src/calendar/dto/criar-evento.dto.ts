@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, IsString, IsBoolean, MinLength } from 'class-validator';
+import { IsIn, IsISO8601, IsOptional, IsString, IsBoolean, MinLength } from 'class-validator';
 
 export class CriarEventoDto {
   @IsString()
@@ -18,4 +18,11 @@ export class CriarEventoDto {
   @IsOptional()
   @IsBoolean()
   ehDiaInteiro?: boolean; // true se o evento é um evento de dia inteiro (all-day)
+
+  /** 'FINANCEIRO' é reservado ao fluxo de sincronização de Finanças (`FinanceCalendarSyncService`)
+   *  e nunca é aceito vindo do cliente — só as três categorias abaixo, escolhidas manualmente
+   *  pelo usuário ao criar/editar um compromisso na Agenda. */
+  @IsOptional()
+  @IsIn(['SOCIAL', 'TRABALHO', 'GERAL'])
+  categoria?: 'SOCIAL' | 'TRABALHO' | 'GERAL';
 }

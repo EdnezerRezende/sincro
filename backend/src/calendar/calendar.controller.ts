@@ -94,6 +94,7 @@ export class CalendarController {
       dataHoraInicio: dto.dataHoraInicio,
       dataHoraFim: dto.dataHoraFim,
       ehDiaInteiro: dto.ehDiaInteiro ?? false,
+      categoria: dto.categoria ?? 'GERAL',
     });
   }
 
@@ -111,6 +112,7 @@ export class CalendarController {
       dataHoraInicio: dto.dataHoraInicio,
       dataHoraFim: dto.dataHoraFim,
       ehDiaInteiro: dto.ehDiaInteiro ?? false,
+      categoria: dto.categoria ?? 'GERAL',
     });
   }
 

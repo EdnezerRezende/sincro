@@ -62,7 +62,7 @@ describe('CalendarController — guarda de escopo de agenda', () => {
 });
 
 describe('CalendarController — roteamento para o client', () => {
-  it('criarEvento repassa os campos do dto para criarEventoCompleto', async () => {
+  it('criarEvento repassa os campos do dto para criarEventoCompleto, default GERAL sem categoria', async () => {
     const { controller, calendarApiClient } = buildController();
 
     await controller.criarEvento('fb1', dtoValido);
@@ -75,11 +75,23 @@ describe('CalendarController — roteamento para o client', () => {
         dataHoraInicio: '2026-09-01T15:00:00-03:00',
         dataHoraFim: '2026-09-01T16:00:00-03:00',
         ehDiaInteiro: false,
+        categoria: 'GERAL',
       },
     );
   });
 
-  it('atualizarEvento repassa o id e os campos do dto para atualizarEvento do client', async () => {
+  it('criarEvento repassa a categoria informada no dto', async () => {
+    const { controller, calendarApiClient } = buildController();
+
+    await controller.criarEvento('fb1', { ...dtoValido, categoria: 'TRABALHO' });
+
+    expect(calendarApiClient.criarEventoCompleto).toHaveBeenCalledWith(
+      'rt-123',
+      expect.objectContaining({ categoria: 'TRABALHO' }),
+    );
+  });
+
+  it('atualizarEvento repassa o id e os campos do dto para atualizarEvento do client, default GERAL sem categoria', async () => {
     const { controller, calendarApiClient } = buildController();
 
     await controller.atualizarEvento('fb1', 'ev1', dtoValido);
@@ -93,6 +105,7 @@ describe('CalendarController — roteamento para o client', () => {
         dataHoraInicio: '2026-09-01T15:00:00-03:00',
         dataHoraFim: '2026-09-01T16:00:00-03:00',
         ehDiaInteiro: false,
+        categoria: 'GERAL',
       },
     );
   });

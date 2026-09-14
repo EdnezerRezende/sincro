@@ -18,7 +18,7 @@ function buildDeps() {
   };
   const calendarSync = {
     syncOnConfirm: jest.fn().mockResolvedValue(null),
-    removeEvent: jest.fn().mockResolvedValue(undefined),
+    removeEvent: jest.fn().mockResolvedValue(true),
   };
   return { prisma, calendarSync, service: new LancamentosService(prisma as any, calendarSync as any) };
 }
@@ -235,6 +235,23 @@ describe('LancamentosService — update', () => {
       where: { id: 'lanc-1' },
       data: { googleEventId: null },
     });
+  });
+
+  it('keeps googleEventId when isPago becomes true but the calendar removal could not be confirmed', async () => {
+    const { prisma, calendarSync, service } = buildDeps();
+    calendarSync.removeEvent.mockResolvedValue(false);
+    prisma.lancamentoFinanceiro.findFirst.mockResolvedValue({
+      id: 'lanc-1', userId: 'user-1', status: 'CONFIRMADO', googleEventId: 'evt-existente',
+    });
+    prisma.lancamentoFinanceiro.update.mockResolvedValue({
+      id: 'lanc-1', tipo: 'DESPESA', status: 'CONFIRMADO', isPago: true, googleEventId: 'evt-existente',
+    });
+
+    await service.update('user-1', 'lanc-1', { isPago: true });
+
+    expect(calendarSync.removeEvent).toHaveBeenCalledWith('user-1', 'evt-existente');
+    // Não confirma remoção no Google Calendar -> não limpa googleEventId, para tentar de novo depois.
+    expect(prisma.lancamentoFinanceiro.update).toHaveBeenCalledTimes(1); // só a atualização principal
   });
 
   it('does nothing to the calendar when isPago becomes true but there was no event yet', async () => {

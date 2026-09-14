@@ -53,15 +53,35 @@ export class FinanceCalendarSyncService {
     }
   }
 
-  async removeEvent(userId: string, googleEventId: string | null): Promise<void> {
-    if (!googleEventId) return;
+  /** Retorna `true` quando o fim confirmado é "evento não existe mais no Google Calendar" —
+   *  inclui o caso de a exclusão de fato ter ocorrido e o caso de o evento já não existir mais
+   *  lá (Google responde 404/410 para excluir um evento inexistente, o que já é o estado
+   *  desejado). Retorna `false` quando isso NÃO pôde ser confirmado: sem conexão Gmail, ou a
+   *  chamada à API falhou por outro motivo (rede, token revogado, erro 5xx do Google) — nesses
+   *  casos o chamador deve manter `googleEventId` para tentar de novo depois, em vez de perder a
+   *  única referência ao evento que pode continuar existindo. */
+  async removeEvent(userId: string, googleEventId: string | null): Promise<boolean> {
+    if (!googleEventId) return true;
     try {
       const refreshToken = await this.gmailConnectionsService.getDecryptedRefreshToken(userId);
-      if (!refreshToken) return;
+      if (!refreshToken) return false;
       await this.calendarApiClient.deletarEvento(refreshToken, googleEventId);
+      return true;
     } catch (error) {
+      if (this.isEventoJaInexistente(error)) return true;
       this.logger.warn(`Calendar event deletion failed for event ${googleEventId}: ${(error as Error).message}`);
+      return false;
     }
+  }
+
+  /** Erros do pacote `googleapis` normalmente carregam o status HTTP em `error.code` ou
+   *  `error.response.status`. 404/410 significam que o evento já não existe no Google Calendar —
+   *  o estado final desejado já vale, então não é uma falha real de remoção. */
+  private isEventoJaInexistente(error: unknown): boolean {
+    const bruto = (error as { code?: unknown; response?: { status?: unknown } })?.code
+      ?? (error as { response?: { status?: unknown } })?.response?.status;
+    const status = typeof bruto === 'string' ? Number(bruto) : bruto;
+    return status === 404 || status === 410;
   }
 
   private toNumberOrNull(value: unknown): number | null {

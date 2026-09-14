@@ -124,11 +124,17 @@ export class LancamentosService {
 
     if (resultado.isPago) {
       if (!resultado.googleEventId) return;
-      await this.calendarSync.removeEvent(userId, resultado.googleEventId);
-      await this.prisma.lancamentoFinanceiro.update({
-        where: { id: resultado.id },
-        data: { googleEventId: null },
-      });
+      // Só limpa `googleEventId` quando a remoção no Google Calendar foi confirmada — do
+      // contrário, uma falha silenciosa (sem conexão Gmail, erro de rede/token) perderia a
+      // única referência ao evento sem ele ter sido de fato removido, deixando-o órfão para
+      // sempre na Agenda. Mantendo o id, a próxima escrita neste lançamento tenta de novo.
+      const removido = await this.calendarSync.removeEvent(userId, resultado.googleEventId);
+      if (removido) {
+        await this.prisma.lancamentoFinanceiro.update({
+          where: { id: resultado.id },
+          data: { googleEventId: null },
+        });
+      }
       return;
     }
 

@@ -783,6 +783,53 @@ class _DayCellState extends State<_DayCell> {
   }
 }
 
+/// Badge redondo com o ícone da categoria do evento — mesmo padrão visual do
+/// `_TipoIconBadge` de Finanças (círculo com alpha 15%, ícone colorido, tooltip +
+/// semantics), para que os dois módulos leiam visualmente como parte do mesmo sistema.
+class _CategoriaIconBadge extends StatelessWidget {
+  const _CategoriaIconBadge({required this.categoria});
+
+  final CategoriaEvento categoria;
+
+  (IconData, Color, String) _visual(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    switch (categoria) {
+      case CategoriaEvento.financeiro:
+        return (Icons.payments_rounded, colorScheme.error, 'Financeiro');
+      case CategoriaEvento.social:
+        return (Icons.celebration_rounded, colorScheme.tertiary, 'Social');
+      case CategoriaEvento.trabalho:
+        return (Icons.work_rounded, colorScheme.primary, 'Trabalho');
+      case CategoriaEvento.geral:
+        return (Icons.event_note_rounded, colorScheme.onSurfaceVariant, 'Compromisso');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (icone, cor, label) = _visual(context);
+    // Sem `container: true`: o badge se funde no nó de semântica do `_EventCard` ancestral,
+    // mesmo raciocínio do `_TipoIconBadge` em Finanças.
+    return Semantics(
+      label: label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: cor.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icone, size: 18, color: cor),
+        ),
+      ),
+    );
+  }
+}
+
 /// Card individual de evento com título, horário e botão de edição.
 class _EventCard extends ConsumerWidget {
   const _EventCard({required this.event});
@@ -826,12 +873,21 @@ class _EventCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Horário (secundário, pequeno)
-            Text(
-              '$horaInicio – $horaFim',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+            // Categoria (ícone) + horário
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _CategoriaIconBadge(categoria: event.categoria),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$horaInicio – $horaFim',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             // Título (principal)

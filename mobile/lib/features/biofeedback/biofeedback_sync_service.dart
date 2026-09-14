@@ -69,8 +69,13 @@ class BiofeedbackSyncService {
     await _cache.setResumo(
       BiofeedbackSummary(
         ultimaFc: resumoBase.ultimaFc,
-        mediaFcHoje: resumoBase.mediaFcHoje,
-        mediaVfcHoje: resumoBase.mediaVfcHoje,
+        // Usa a mesma média filtrada por repouso que alimenta `estado` acima, não a média bruta
+        // do dia inteiro (`resumoBase.mediaFcHoje`) — senão o número mostrado na tela de detalhe
+        // inclui picos de exercício/movimento que o algoritmo de estresse já exclui, e o app
+        // acaba exibindo um valor que não é o que decide "calmo"/"elevado" nem se aproxima do
+        // repouso que o usuário vê no relógio.
+        mediaFcHoje: medias.mediaFc,
+        mediaVfcHoje: medias.mediaVfc,
         estadoEstresse: estado,
         atualizadoEm: resumoBase.atualizadoEm,
       ),

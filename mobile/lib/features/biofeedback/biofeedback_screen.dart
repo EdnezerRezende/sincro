@@ -273,7 +273,7 @@ class _BiofeedbackContent extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Frequência cardíaca média ${rotulos.sufixoMedia}',
+                  'Frequência cardíaca em repouso ${rotulos.sufixoMedia}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -309,7 +309,7 @@ class _BiofeedbackContent extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Variabilidade média ${rotulos.sufixoMedia}',
+                  'Variabilidade em repouso ${rotulos.sufixoMedia}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

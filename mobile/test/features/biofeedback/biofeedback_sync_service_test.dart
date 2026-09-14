@@ -350,7 +350,10 @@ void main() {
       ],
     );
     when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
-      (_) async => [HealthReading(valor: 45, timestamp: DateTime(2026, 8, 3, 8, 0))],
+      (_) async => [
+        HealthReading(valor: 45, timestamp: DateTime(2026, 8, 3, 8, 0)), // em repouso
+        HealthReading(valor: 15, timestamp: DateTime(2026, 8, 3, 10, 0)), // durante treino
+      ],
     );
     final service = buildService(
       healthService,
@@ -369,6 +372,47 @@ void main() {
     expect(historicoSalvo, hasLength(1));
     // Só a leitura em repouso (70) entra na média do dia — a de 150 durante o treino é descartada.
     expect(historicoSalvo.single.mediaFcRepouso, 70);
+
+    // O resumo salvo (o que a tela de detalhe mostra) também precisa refletir só o repouso: se
+    // `mediaFcHoje`/`mediaVfcHoje` voltassem a ser a média bruta do dia (110 e 30, incluindo as
+    // leituras durante o treino), o número exibido não bateria mais com o estado calmo/elevado
+    // calculado a partir do mesmo filtro — exatamente a incoerência que este ajuste elimina.
+    final resumoSalvo =
+        verify(() => cache.setResumo(captureAny())).captured.single as BiofeedbackSummary;
+    expect(resumoSalvo.mediaFcHoje, 70);
+    expect(resumoSalvo.mediaVfcHoje, 45);
+  });
+
+  test('mediaFcHoje/mediaVfcHoje are null when every reading falls during a workout, even '
+      'though ultimaFc (last raw sample) is still available', () async {
+    final healthService = MockBiofeedbackHealthService();
+    final cache = MockBiofeedbackCache();
+    final alertService = MockBiofeedbackAlertService();
+    final sensoryProfileRepository = MockSensoryProfileRepository();
+    final agora = DateTime(2026, 8, 3, 15, 0);
+    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 150, timestamp: DateTime(2026, 8, 3, 10, 0))],
+    );
+    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+      (_) async => [HealthReading(valor: 15, timestamp: DateTime(2026, 8, 3, 10, 0))],
+    );
+    final service = buildService(
+      healthService,
+      cache,
+      alertService,
+      sensoryProfileRepository,
+      treinos: [
+        TreinoIntervalo(inicio: DateTime(2026, 8, 3, 9, 45), fim: DateTime(2026, 8, 3, 10, 15)),
+      ],
+    );
+
+    await service.sincronizar(agora: agora);
+
+    final resumoSalvo =
+        verify(() => cache.setResumo(captureAny())).captured.single as BiofeedbackSummary;
+    expect(resumoSalvo.ultimaFc, 150);
+    expect(resumoSalvo.mediaFcHoje, isNull);
+    expect(resumoSalvo.mediaVfcHoje, isNull);
   });
 
   test('detects elevado when today is far outside a stable 7-day baseline', () async {

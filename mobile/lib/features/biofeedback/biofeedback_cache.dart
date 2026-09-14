@@ -5,7 +5,12 @@ import 'dia_repouso.dart';
 
 const _chaveAtivo = 'biofeedback_ativo';
 const _chaveFrequenciaMinutos = 'biofeedback_frequencia_minutos';
-const _chaveResumo = 'biofeedback_resumo';
+// v2: `mediaFcHoje`/`mediaVfcHoje` passaram a guardar a média filtrada por repouso (a mesma que
+// decide `estadoEstresse`), não mais a média bruta do dia inteiro. Trocar a chave faz um resumo
+// gravado pela versão antiga do app ser tratado como ausente (`getResumo` volta `null`) em vez de
+// ser lido e exibido sob o rótulo novo com o valor antigo — que seria exatamente a incoerência que
+// essa mudança existe para eliminar.
+const _chaveResumo = 'biofeedback_resumo_v2';
 const _chaveHistoricoRepouso = 'biofeedback_historico_repouso';
 const _chavePermissoesVersao = 'biofeedback_permissoes_versao';
 const _chaveAlertasAtivos = 'biofeedback_alertas_ativos';

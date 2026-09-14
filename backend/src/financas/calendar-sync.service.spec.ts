@@ -22,7 +22,7 @@ const lancamentoBase = {
 };
 
 describe('FinanceCalendarSyncService — syncOnConfirm', () => {
-  it('creates a new event when the lançamento has no googleEventId yet', async () => {
+  it('creates a new event when the lançamento has no googleEventId yet, tagged as FINANCEIRO', async () => {
     const deps = buildDeps();
     const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
 
@@ -35,6 +35,8 @@ describe('FinanceCalendarSyncService — syncOnConfirm', () => {
       dataHoraFim: '2026-10-10',
       ehDiaInteiro: true,
       lembretesMinutosAntes: [1440],
+      categoria: 'FINANCEIRO',
+      lancamentoId: 'lanc-1',
     });
     expect(eventId).toBe('evt-1');
   });

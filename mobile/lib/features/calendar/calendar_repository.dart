@@ -96,6 +96,7 @@ class CalendarRepository {
     required DateTime dataHoraInicio,
     required DateTime dataHoraFim,
     bool ehDiaInteiro = false,
+    CategoriaEvento categoria = CategoriaEvento.geral,
   }) async {
     final response = await _dio.post(
       '/calendario/criar-evento',
@@ -105,6 +106,7 @@ class CalendarRepository {
         'dataHoraInicio': _isoComOffsetLocal(dataHoraInicio),
         'dataHoraFim': _isoComOffsetLocal(dataHoraFim),
         'ehDiaInteiro': ehDiaInteiro,
+        'categoria': categoriaEventoToJson(categoria),
       },
     );
     return CalendarEvent.fromJson(response.data as Map<String, dynamic>);
@@ -120,6 +122,7 @@ class CalendarRepository {
     required DateTime dataHoraInicio,
     required DateTime dataHoraFim,
     bool ehDiaInteiro = false,
+    CategoriaEvento categoria = CategoriaEvento.geral,
   }) async {
     final response = await _dio.put(
       '/calendario/evento/$eventId',
@@ -129,6 +132,7 @@ class CalendarRepository {
         'dataHoraInicio': _isoComOffsetLocal(dataHoraInicio),
         'dataHoraFim': _isoComOffsetLocal(dataHoraFim),
         'ehDiaInteiro': ehDiaInteiro,
+        'categoria': categoriaEventoToJson(categoria),
       },
     );
     return CalendarEvent.fromJson(response.data as Map<String, dynamic>);

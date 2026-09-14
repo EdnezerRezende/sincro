@@ -961,9 +961,11 @@ class _FinanceEventInfoDialog extends StatelessWidget {
             Text(event.descricao),
             const SizedBox(height: 12),
           ],
+          Text(_formatarData(event)),
+          const SizedBox(height: 12),
           Text(
-            'Gerado a partir de uma despesa em Finanças. Marque como paga em Finanças '
-            'para remover da agenda.',
+            'Gerado a partir de uma despesa ou fatura em Finanças. Marque como paga em '
+            'Finanças para remover da agenda.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -975,6 +977,22 @@ class _FinanceEventInfoDialog extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// Eventos financeiros de dia inteiro (o caso comum, ver
+  /// `FinanceCalendarSyncService.syncOnConfirm` no backend) mostram só a data; um evento com
+  /// horário mostra data e hora, no mesmo formato usado em `_EventFormDialogState._formatarDataHora`.
+  String _formatarData(CalendarEvent event) {
+    final dt = event.dataHoraInicio;
+    final dia = dt.day.toString().padLeft(2, '0');
+    final mes = dt.month.toString().padLeft(2, '0');
+    final ano = dt.year.toString();
+    if (event.ehDiaInteiro) {
+      return '$dia/$mes/$ano';
+    }
+    final hora = dt.hour.toString().padLeft(2, '0');
+    final minuto = dt.minute.toString().padLeft(2, '0');
+    return '$dia/$mes/$ano às $hora:$minuto';
   }
 }
 

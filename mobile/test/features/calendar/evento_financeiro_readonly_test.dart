@@ -42,9 +42,12 @@ void main() {
 
     expect(find.text('Pagar: Nubank'), findsWidgets);
     expect(
-      find.textContaining('Gerado a partir de uma despesa em Finanças'),
+      find.textContaining('Gerado a partir de uma despesa ou fatura em Finanças'),
       findsOneWidget,
     );
+    final dataEsperada =
+        '${hoje.day.toString().padLeft(2, '0')}/${hoje.month.toString().padLeft(2, '0')}/${hoje.year}';
+    expect(find.text(dataEsperada), findsOneWidget);
     expect(find.text('Editar'), findsNothing);
     expect(find.text('Excluir'), findsNothing);
     expect(find.text('Salvar'), findsNothing);

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'finance_providers.dart';
 import 'lancamento_financeiro.dart';
+import '../calendar/calendar_providers.dart';
 
 class NovoLancamentoScreen extends ConsumerStatefulWidget {
   const NovoLancamentoScreen({super.key, this.existente});
@@ -109,6 +110,11 @@ class _NovoLancamentoScreenState extends ConsumerState<NovoLancamentoScreen> {
       ref.invalidate(lancamentosDoMesProvider);
       ref.invalidate(lancamentosPendentesProvider);
       ref.invalidate(financeSummaryProvider);
+      // Salvar aqui pode ter criado, atualizado ou removido um evento na Agenda (despesa/
+      // fatura confirmada, ou isPago mudando) — invalida para que a aba de Agenda, se já
+      // montada, reflita sem precisar de refresh manual.
+      ref.invalidate(upcomingEventsProvider);
+      ref.invalidate(monthEventsProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       _mostrarErro('Não foi possível salvar agora. Tente novamente.');

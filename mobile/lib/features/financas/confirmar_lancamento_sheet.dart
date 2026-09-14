@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'finance_providers.dart';
 import 'lancamento_financeiro.dart';
+import '../calendar/calendar_providers.dart';
 
 final _currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 final _dateFormat = DateFormat('dd/MM/yyyy');
@@ -24,6 +25,10 @@ Future<void> showConfirmarLancamentoSheet(
     ref.invalidate(lancamentosPendentesProvider);
     ref.invalidate(financeSummaryProvider);
     ref.invalidate(lancamentosDoMesProvider);
+    // Confirmar uma despesa/fatura cria um evento real na Agenda; ignorar remove o
+    // eventual evento já existente. Mesmo raciocínio de invalidação cruzada.
+    ref.invalidate(upcomingEventsProvider);
+    ref.invalidate(monthEventsProvider);
   }
 
   return showModalBottomSheet<void>(

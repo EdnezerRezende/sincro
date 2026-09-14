@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_chip.dart';
+import '../calendar/calendar_providers.dart';
 import 'confirmar_lancamento_sheet.dart';
 import 'finance_providers.dart';
 import 'finance_summary.dart';
@@ -596,6 +597,10 @@ class _LancamentoDoMesCard extends ConsumerWidget {
       await ref.read(lancamentosRepositoryProvider).remove(lancamento.id);
       ref.invalidate(lancamentosDoMesProvider);
       ref.invalidate(financeSummaryProvider);
+      // Excluir pode ter removido um evento real na Agenda (ver LancamentosService.remove no
+      // backend) — invalida para que a aba de Agenda, se já montada, pare de mostrar o card.
+      ref.invalidate(upcomingEventsProvider);
+      ref.invalidate(monthEventsProvider);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

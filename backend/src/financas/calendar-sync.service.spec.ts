@@ -22,7 +22,7 @@ const lancamentoBase = {
 };
 
 describe('FinanceCalendarSyncService — syncOnConfirm', () => {
-  it('creates a new event when the lançamento has no googleEventId yet', async () => {
+  it('creates a new event when the lançamento has no googleEventId yet, tagged as FINANCEIRO', async () => {
     const deps = buildDeps();
     const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
 
@@ -35,6 +35,8 @@ describe('FinanceCalendarSyncService — syncOnConfirm', () => {
       dataHoraFim: '2026-10-10',
       ehDiaInteiro: true,
       lembretesMinutosAntes: [1440],
+      categoria: 'FINANCEIRO',
+      lancamentoId: 'lanc-1',
     });
     expect(eventId).toBe('evt-1');
   });
@@ -73,29 +75,60 @@ describe('FinanceCalendarSyncService — syncOnConfirm', () => {
 });
 
 describe('FinanceCalendarSyncService — removeEvent', () => {
-  it('deletes the event when a googleEventId is present', async () => {
+  it('deletes the event when a googleEventId is present and returns true', async () => {
     const deps = buildDeps();
     const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
 
-    await service.removeEvent('user-1', 'evt-1');
+    const removido = await service.removeEvent('user-1', 'evt-1');
 
     expect(deps.calendarApiClient.deletarEvento).toHaveBeenCalledWith('refresh-token', 'evt-1');
+    expect(removido).toBe(true);
   });
 
-  it('does nothing when googleEventId is null', async () => {
+  it('does nothing and returns true when googleEventId is null (nothing to remove)', async () => {
     const deps = buildDeps();
     const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
 
-    await service.removeEvent('user-1', null);
+    const removido = await service.removeEvent('user-1', null);
 
     expect(deps.calendarApiClient.deletarEvento).not.toHaveBeenCalled();
+    expect(removido).toBe(true);
   });
 
-  it('never throws when the delete call fails', async () => {
+  it('returns false without throwing when there is no Gmail connection', async () => {
+    const deps = buildDeps();
+    deps.gmailConnectionsService.getDecryptedRefreshToken.mockResolvedValue(null);
+    const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
+
+    const removido = await service.removeEvent('user-1', 'evt-1');
+
+    expect(deps.calendarApiClient.deletarEvento).not.toHaveBeenCalled();
+    expect(removido).toBe(false);
+  });
+
+  it('returns false without throwing when the delete call fails for an unrelated reason', async () => {
     const deps = buildDeps();
     deps.calendarApiClient.deletarEvento.mockRejectedValue(new Error('token revogado'));
     const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
 
-    await expect(service.removeEvent('user-1', 'evt-1')).resolves.toBeUndefined();
+    await expect(service.removeEvent('user-1', 'evt-1')).resolves.toBe(false);
+  });
+
+  it('returns true when the Calendar API reports the event is already gone (404)', async () => {
+    const deps = buildDeps();
+    const erro404 = Object.assign(new Error('Not Found'), { code: 404 });
+    deps.calendarApiClient.deletarEvento.mockRejectedValue(erro404);
+    const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
+
+    await expect(service.removeEvent('user-1', 'evt-1')).resolves.toBe(true);
+  });
+
+  it('returns true when the Calendar API reports the event is gone (410)', async () => {
+    const deps = buildDeps();
+    const erro410 = Object.assign(new Error('Gone'), { response: { status: 410 } });
+    deps.calendarApiClient.deletarEvento.mockRejectedValue(erro410);
+    const service = new FinanceCalendarSyncService(deps.calendarApiClient as any, deps.gmailConnectionsService as any);
+
+    await expect(service.removeEvent('user-1', 'evt-1')).resolves.toBe(true);
   });
 });

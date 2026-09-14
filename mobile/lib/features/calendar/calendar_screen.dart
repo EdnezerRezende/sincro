@@ -783,6 +783,53 @@ class _DayCellState extends State<_DayCell> {
   }
 }
 
+/// Badge redondo com o ícone da categoria do evento — mesmo padrão visual do
+/// `_TipoIconBadge` de Finanças (círculo com alpha 15%, ícone colorido, tooltip +
+/// semantics), para que os dois módulos leiam visualmente como parte do mesmo sistema.
+class _CategoriaIconBadge extends StatelessWidget {
+  const _CategoriaIconBadge({required this.categoria});
+
+  final CategoriaEvento categoria;
+
+  (IconData, Color, String) _visual(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    switch (categoria) {
+      case CategoriaEvento.financeiro:
+        return (Icons.payments_rounded, colorScheme.error, 'Financeiro');
+      case CategoriaEvento.social:
+        return (Icons.celebration_rounded, colorScheme.tertiary, 'Social');
+      case CategoriaEvento.trabalho:
+        return (Icons.work_rounded, colorScheme.primary, 'Trabalho');
+      case CategoriaEvento.geral:
+        return (Icons.event_note_rounded, colorScheme.onSurfaceVariant, 'Compromisso');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (icone, cor, label) = _visual(context);
+    // Sem `container: true`: o badge se funde no nó de semântica do `_EventCard` ancestral,
+    // mesmo raciocínio do `_TipoIconBadge` em Finanças.
+    return Semantics(
+      label: label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: cor.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icone, size: 18, color: cor),
+        ),
+      ),
+    );
+  }
+}
+
 /// Card individual de evento com título, horário e botão de edição.
 class _EventCard extends ConsumerWidget {
   const _EventCard({required this.event});
@@ -826,12 +873,21 @@ class _EventCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Horário (secundário, pequeno)
-            Text(
-              '$horaInicio – $horaFim',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+            // Categoria (ícone) + horário
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _CategoriaIconBadge(categoria: event.categoria),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$horaInicio – $horaFim',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             // Título (principal)
@@ -854,19 +910,25 @@ class _EventCard extends ConsumerWidget {
               ),
             ],
             const SizedBox(height: 12),
-            // Botão de edição (altura explícita de 48dp — o mínimo recomendado de alvo de toque;
-            // os 40dp anteriores ficavam abaixo disso).
+            // Botão de edição/detalhes (altura explícita de 48dp — o mínimo recomendado de
+            // alvo de toque). Evento gerado por Finanças abre em modo somente leitura — ver
+            // `_FinanceEventInfoDialog`.
             SizedBox(
               height: 48,
               child: OutlinedButton.icon(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Editar'),
+                icon: Icon(
+                  event.isGeradoPorFinancas ? Icons.info_outline : Icons.edit_outlined,
+                  size: 18,
+                ),
+                label: Text(event.isGeradoPorFinancas ? 'Ver detalhes' : 'Editar'),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: corBorda, width: 1.5),
                 ),
                 onPressed: () => showDialog<void>(
                   context: context,
-                  builder: (_) => _EventFormDialog(event: event),
+                  builder: (_) => event.isGeradoPorFinancas
+                      ? _FinanceEventInfoDialog(event: event)
+                      : _EventFormDialog(event: event),
                 ),
               ),
             ),
@@ -874,6 +936,63 @@ class _EventCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Visualização somente leitura de um evento gerado a partir de uma despesa/fatura em
+/// Finanças. Sem botões de editar/excluir de propósito: Finanças é a fonte da verdade para
+/// esse evento (o backend recria/atualiza o evento a cada sincronização), então permitir
+/// edição direta pela Agenda criaria um estado divergente que seria sobrescrito na próxima
+/// confirmação de Finanças, confundindo o usuário sobre onde a mudança "pegou".
+class _FinanceEventInfoDialog extends StatelessWidget {
+  const _FinanceEventInfoDialog({required this.event});
+
+  final CalendarEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(event.titulo),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (event.descricao.isNotEmpty) ...[
+            Text(event.descricao),
+            const SizedBox(height: 12),
+          ],
+          Text(_formatarData(event)),
+          const SizedBox(height: 12),
+          Text(
+            'Gerado a partir de uma despesa ou fatura em Finanças. Marque como paga em '
+            'Finanças para remover da agenda.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Fechar'),
+        ),
+      ],
+    );
+  }
+
+  /// Eventos financeiros de dia inteiro (o caso comum, ver
+  /// `FinanceCalendarSyncService.syncOnConfirm` no backend) mostram só a data; um evento com
+  /// horário mostra data e hora, no mesmo formato usado em `_EventFormDialogState._formatarDataHora`.
+  String _formatarData(CalendarEvent event) {
+    final dt = event.dataHoraInicio;
+    final dia = dt.day.toString().padLeft(2, '0');
+    final mes = dt.month.toString().padLeft(2, '0');
+    final ano = dt.year.toString();
+    if (event.ehDiaInteiro) {
+      return '$dia/$mes/$ano';
+    }
+    final hora = dt.hour.toString().padLeft(2, '0');
+    final minuto = dt.minute.toString().padLeft(2, '0');
+    return '$dia/$mes/$ano às $hora:$minuto';
   }
 }
 
@@ -897,6 +1016,7 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
   late DateTime _startTime;
   late DateTime _endTime;
   late bool _ehDiaInteiro;
+  late CategoriaEvento _categoria;
   bool _hasChanges = false;
   bool _saving = false;
 
@@ -911,6 +1031,10 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
       text: event?.descricao ?? '',
     );
     _ehDiaInteiro = event?.ehDiaInteiro ?? false;
+    // Eventos financeiros nunca chegam a este formulário (ver `_EventCard`, que os abre em
+    // `_FinanceEventInfoDialog` em vez deste diálogo) — `event?.categoria` aqui é sempre
+    // social/trabalho/geral quando editando, ou null (novo evento, default geral).
+    _categoria = event?.categoria ?? CategoriaEvento.geral;
     if (event != null) {
       _startTime = event.dataHoraInicio;
       _endTime = event.dataHoraFim;
@@ -1009,6 +1133,7 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
           dataHoraInicio: _startTime,
           dataHoraFim: _endTime,
           ehDiaInteiro: _ehDiaInteiro,
+          categoria: _categoria,
         );
       } else {
         await repo.createEvent(
@@ -1017,6 +1142,7 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
           dataHoraInicio: _startTime,
           dataHoraFim: _endTime,
           ehDiaInteiro: _ehDiaInteiro,
+          categoria: _categoria,
         );
       }
       if (!mounted) return;
@@ -1123,6 +1249,38 @@ class _EventFormDialogState extends ConsumerState<_EventFormDialog> {
               subtitle: Text(_formatarDataHora(_endTime)),
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: _saving ? null : () => _escolherDataHora(ehInicio: false),
+            ),
+            const SizedBox(height: 16),
+            Text('Categoria', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Social'),
+                  selected: _categoria == CategoriaEvento.social,
+                  onSelected: (_) => setState(() {
+                    _categoria = CategoriaEvento.social;
+                    _hasChanges = true;
+                  }),
+                ),
+                ChoiceChip(
+                  label: const Text('Trabalho'),
+                  selected: _categoria == CategoriaEvento.trabalho,
+                  onSelected: (_) => setState(() {
+                    _categoria = CategoriaEvento.trabalho;
+                    _hasChanges = true;
+                  }),
+                ),
+                ChoiceChip(
+                  label: const Text('Geral'),
+                  selected: _categoria == CategoriaEvento.geral,
+                  onSelected: (_) => setState(() {
+                    _categoria = CategoriaEvento.geral;
+                    _hasChanges = true;
+                  }),
+                ),
+              ],
             ),
           ],
         ),

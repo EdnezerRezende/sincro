@@ -8,8 +8,15 @@ export interface CriarEventoParams {
   antecedenciaMinutos: number;
 }
 
+/** Categoria visual do evento, exibida como ícone na Agenda do app mobile. `FINANCEIRO` é
+ *  reservado ao fluxo de sincronização de Finanças — nunca aceito vindo do cliente no endpoint
+ *  de evento manual (ver `CriarEventoDto`). */
+export type CategoriaEvento = 'FINANCEIRO' | 'SOCIAL' | 'TRABALHO' | 'GERAL';
+
 /** Shape geral de um evento de agenda exposto ao app mobile — distinto de `CriarEventoParams`,
- *  que é específico do fluxo de compromisso sugerido por e-mail. */
+ *  que é específico do fluxo de compromisso sugerido por e-mail. `categoria` e `lancamentoId`
+ *  vêm de `extendedProperties.private` do evento real no Google Calendar (metadado invisível ao
+ *  usuário no app do Google, só lido/escrito via API) — não existe tabela própria de evento. */
 export interface EventoCalendario {
   id: string;
   titulo: string;
@@ -17,6 +24,8 @@ export interface EventoCalendario {
   dataHoraInicio: string;
   dataHoraFim: string;
   ehDiaInteiro: boolean; // true se o evento é um evento de dia inteiro (all-day)
+  categoria: CategoriaEvento; // 'GERAL' quando o evento não tem a extended property (inclusive todo evento pré-existente)
+  lancamentoId?: string; // presente só quando categoria === 'FINANCEIRO', liga o evento ao LancamentoFinanceiro de origem
 }
 
 /** Parâmetros para criar/atualizar um evento completo (agenda sempre-editável do usuário),
@@ -29,6 +38,8 @@ export interface EventoCompletoParams {
   dataHoraFim: string;
   ehDiaInteiro?: boolean; // true se o evento é um evento de dia inteiro (all-day)
   lembretesMinutosAntes?: number[];
+  categoria?: CategoriaEvento; // omitido: nenhum extendedProperties é enviado (preserva chamadas antigas)
+  lancamentoId?: string; // só tem efeito quando categoria também é informada
 }
 
 const DURACAO_EVENTO_MINUTOS = 30;
@@ -128,6 +139,7 @@ export class CalendarApiClient {
           start: { date: dataInicio },
           end: { date: dataFim },
           ...this.remindersOverride(params.lembretesMinutosAntes),
+          ...this.extendedPropertiesOverride(params.categoria, params.lancamentoId),
         },
       });
       return this.paraEventoCalendario(data);
@@ -144,6 +156,7 @@ export class CalendarApiClient {
         start: { dateTime: inicio },
         end: { dateTime: fim },
         ...this.remindersOverride(params.lembretesMinutosAntes),
+        ...this.extendedPropertiesOverride(params.categoria, params.lancamentoId),
       },
     });
     return this.paraEventoCalendario(data);
@@ -179,6 +192,7 @@ export class CalendarApiClient {
           start: { date: dataInicio },
           end: { date: dataFim },
           ...this.remindersOverride(params.lembretesMinutosAntes),
+          ...this.extendedPropertiesOverride(params.categoria, params.lancamentoId),
         },
       });
       return this.paraEventoCalendario(data);
@@ -196,6 +210,7 @@ export class CalendarApiClient {
         start: { dateTime: inicio },
         end: { dateTime: fim },
         ...this.remindersOverride(params.lembretesMinutosAntes),
+        ...this.extendedPropertiesOverride(params.categoria, params.lancamentoId),
       },
     });
     return this.paraEventoCalendario(data);
@@ -223,6 +238,24 @@ export class CalendarApiClient {
     };
   }
 
+  /** Monta `extendedProperties.private` quando `categoria` é informada — omitido inteiramente
+   *  quando não é, para não alterar o payload de chamadas que ainda não passam esse parâmetro
+   *  (ex.: fluxo de compromisso sugerido por e-mail, que usa `criarEvento`, não este método). */
+  private extendedPropertiesOverride(
+    categoria?: CategoriaEvento,
+    lancamentoId?: string,
+  ): { extendedProperties: calendar_v3.Schema$Event['extendedProperties'] } | Record<string, never> {
+    if (!categoria) return {};
+    return {
+      extendedProperties: {
+        private: {
+          categoria,
+          ...(lancamentoId ? { lancamentoId } : {}),
+        },
+      },
+    };
+  }
+
   private paraEventoCalendario(
     item: calendar_v3.Schema$Event,
   ): EventoCalendario {
@@ -230,6 +263,14 @@ export class CalendarApiClient {
     // `dateTime` para esses eventos. A presença de `start.date` (sem `start.dateTime`) indica
     // um evento all-day. Essencial para a mobile app não corromper all-day events ao editá-los.
     const ehDiaInteiro = !item.start?.dateTime && !!item.start?.date;
+    const categoriaBruta = item.extendedProperties?.private?.categoria;
+    const categoria: CategoriaEvento =
+      categoriaBruta === 'FINANCEIRO' ||
+      categoriaBruta === 'SOCIAL' ||
+      categoriaBruta === 'TRABALHO'
+        ? categoriaBruta
+        : 'GERAL';
+    const lancamentoId = item.extendedProperties?.private?.lancamentoId;
     return {
       id: item.id ?? '',
       titulo: item.summary ?? '',
@@ -237,6 +278,8 @@ export class CalendarApiClient {
       dataHoraInicio: item.start?.dateTime ?? item.start?.date ?? '',
       dataHoraFim: item.end?.dateTime ?? item.end?.date ?? '',
       ehDiaInteiro,
+      categoria,
+      ...(lancamentoId ? { lancamentoId } : {}),
     };
   }
 

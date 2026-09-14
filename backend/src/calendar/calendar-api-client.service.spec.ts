@@ -170,8 +170,62 @@ describe('CalendarApiClient.listarEventos', () => {
         dataHoraInicio: '2026-09-01T15:00:00-03:00',
         dataHoraFim: '2026-09-01T16:00:00-03:00',
         ehDiaInteiro: false,
+        categoria: 'GERAL',
       },
     ]);
+  });
+
+  it('lê a categoria e o lancamentoId de extendedProperties.private quando presentes', async () => {
+    const { __list } = mocksGoogleapis();
+    __list.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 'ev2',
+            summary: 'Pagar: Nubank',
+            description: 'Valor: R$ 500.00',
+            start: { date: '2026-09-10' },
+            end: { date: '2026-09-10' },
+            extendedProperties: { private: { categoria: 'FINANCEIRO', lancamentoId: 'lanc-1' } },
+          },
+        ],
+      },
+    });
+
+    const eventos = await buildClient().listarEventos(
+      'rt-123',
+      '2026-09-01T00:00:00.000Z',
+      '2026-10-01T00:00:00.000Z',
+    );
+
+    expect(eventos[0].categoria).toBe('FINANCEIRO');
+    expect(eventos[0].lancamentoId).toBe('lanc-1');
+  });
+
+  it('cai em GERAL quando extendedProperties.private.categoria é um valor desconhecido', async () => {
+    const { __list } = mocksGoogleapis();
+    __list.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 'ev3',
+            summary: 'Evento antigo',
+            start: { dateTime: '2026-09-01T15:00:00-03:00' },
+            end: { dateTime: '2026-09-01T16:00:00-03:00' },
+            extendedProperties: { private: { categoria: 'ALGO_INVALIDO' } },
+          },
+        ],
+      },
+    });
+
+    const eventos = await buildClient().listarEventos(
+      'rt-123',
+      '2026-09-01T00:00:00.000Z',
+      '2026-10-01T00:00:00.000Z',
+    );
+
+    expect(eventos[0].categoria).toBe('GERAL');
+    expect(eventos[0].lancamentoId).toBeUndefined();
   });
 
   it('retorna lista vazia quando o Google não devolve items', async () => {
@@ -234,6 +288,57 @@ describe('CalendarApiClient.criarEventoCompleto', () => {
 
     expect(evento.id).toBe('ev-real-id');
   });
+
+  it('inclui extendedProperties.private com a categoria quando informada', async () => {
+    const { __insert } = mocksGoogleapis();
+    __insert.mockResolvedValueOnce({ data: { id: 'ev1' } });
+
+    await buildClient().criarEventoCompleto('rt-123', {
+      titulo: 'Pagar: Nubank',
+      descricao: '',
+      dataHoraInicio: '2026-09-01',
+      dataHoraFim: '2026-09-01',
+      ehDiaInteiro: true,
+      categoria: 'FINANCEIRO',
+      lancamentoId: 'lanc-1',
+    });
+
+    const body = corpoEnviado();
+    expect(body.extendedProperties).toEqual({
+      private: { categoria: 'FINANCEIRO', lancamentoId: 'lanc-1' },
+    });
+  });
+
+  it('inclui extendedProperties.private só com a categoria quando lancamentoId não é informado', async () => {
+    const { __insert } = mocksGoogleapis();
+    __insert.mockResolvedValueOnce({ data: { id: 'ev1' } });
+
+    await buildClient().criarEventoCompleto('rt-123', {
+      titulo: 'Aniversário',
+      descricao: '',
+      dataHoraInicio: '2026-09-01T15:00:00-03:00',
+      dataHoraFim: '2026-09-01T16:00:00-03:00',
+      categoria: 'SOCIAL',
+    });
+
+    const body = corpoEnviado();
+    expect(body.extendedProperties).toEqual({ private: { categoria: 'SOCIAL' } });
+  });
+
+  it('não inclui extendedProperties quando categoria não é informada (preserva chamadas antigas)', async () => {
+    const { __insert } = mocksGoogleapis();
+    __insert.mockResolvedValueOnce({ data: { id: 'ev1' } });
+
+    await buildClient().criarEventoCompleto('rt-123', {
+      titulo: 'Consulta',
+      descricao: 'Com o dentista',
+      dataHoraInicio: '2026-09-01T15:00:00-03:00',
+      dataHoraFim: '2026-09-01T16:00:00-03:00',
+    });
+
+    const body = corpoEnviado();
+    expect(body.extendedProperties).toBeUndefined();
+  });
 });
 
 describe('CalendarApiClient.atualizarEvento', () => {
@@ -279,6 +384,26 @@ describe('CalendarApiClient.atualizarEvento', () => {
     const body = __patch.mock.calls[0][0].requestBody;
     expect(body.start.dateTime).toBe('2026-09-01T23:50:00+05:30');
     expect(body.end.dateTime).toBe('2026-09-02T00:20:00+05:30');
+  });
+
+  it('inclui extendedProperties.private no patch quando categoria é informada', async () => {
+    const { __patch } = mocksGoogleapis();
+    __patch.mockResolvedValueOnce({ data: { id: 'ev1' } });
+
+    await buildClient().atualizarEvento('rt-123', 'ev1', {
+      titulo: 'Pagar: Nubank',
+      descricao: '',
+      dataHoraInicio: '2026-09-01',
+      dataHoraFim: '2026-09-01',
+      ehDiaInteiro: true,
+      categoria: 'FINANCEIRO',
+      lancamentoId: 'lanc-1',
+    });
+
+    const body = __patch.mock.calls[0][0].requestBody;
+    expect(body.extendedProperties).toEqual({
+      private: { categoria: 'FINANCEIRO', lancamentoId: 'lanc-1' },
+    });
   });
 });
 

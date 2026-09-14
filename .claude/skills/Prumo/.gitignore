@@ -1,0 +1,7 @@
+# Dados locais do Prumo (planos, sessões e config do dono) — nunca versionar
+.prumo/
+
+# Ruído do sistema / Python
+__pycache__/
+*.pyc
+.DS_Store

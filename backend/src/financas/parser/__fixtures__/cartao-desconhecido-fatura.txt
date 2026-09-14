@@ -1,0 +1,8 @@
+Olá,
+
+A fatura do seu cartão fechou e já está disponível para consulta.
+
+Valor da fatura: R$ 789,00
+Vencimento: 20/11/2026
+
+Acesse o app do banco para mais detalhes.

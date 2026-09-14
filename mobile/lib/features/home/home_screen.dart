@@ -206,10 +206,11 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _FinancasCard(),
+            child: _FinancasCard(showTitle: false),
           ),
           const TabBar(
             tabs: [
@@ -319,7 +320,20 @@ class _GmailCard extends ConsumerWidget {
 /// `financeSummaryProvider`, que abre a tela completa ao ser tocado. Não há mais estado
 /// "conectar conta" aqui — a conexão via e-mail acontece automaticamente no servidor.
 class _FinancasCard extends ConsumerWidget {
-  const _FinancasCard();
+  const _FinancasCard({this.showTitle = true});
+
+  /// No layout Abas o card já se lê como uma prévia de valores à primeira vista (ícone + saldo),
+  /// então a view de abas passa `false` aqui para tirar o título "Finanças" redundante. Quando
+  /// `false`, o card ganha um `Semantics(excludeSemantics: true, ...)` explícito (ver `data:`
+  /// abaixo) para que a leitura por voz continue anunciando "Finanças" mesmo sem o texto
+  /// visível — não basta contar com o "Ver finanças →" incidental no fim do card.
+  /// `excludeSemantics: true` substitui TODO o conteúdo anunciado do card pelo `label`, não só
+  /// o título: por isso `_financasSemanticsLabel` inclui a contagem de pendências quando existe
+  /// — sem isso, a linha "N lançamentos para revisar" continuaria visível na tela mas sumiria
+  /// da leitura por voz. O layout Resumo Simples mantém o título (`true` por padrão), já que
+  /// ali o card divide a tela com vários outros cards não relacionados e o título ajuda a
+  /// diferenciá-los.
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -350,59 +364,84 @@ class _FinancasCard extends ConsumerWidget {
       ),
       data: (summary) {
         final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        final saldoFormatado = currency.format(summary.saldoLivre);
+        final conteudo = Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showTitle) ...[
+                Text(
+                  'Finanças',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+              ],
+              Text(
+                'Saldo Livre',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                saldoFormatado,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (pendentesCount != null && pendentesCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Text(
+                'Ver finanças →',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
         return Card(
           child: InkWell(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const FinancasScreen()),
             ),
             borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Finanças',
-                    style: Theme.of(context).textTheme.titleMedium,
+            child: showTitle
+                ? conteudo
+                // Sem o título visível, o rótulo de acessibilidade precisa dizer "Finanças"
+                // explicitamente — sem isso, a leitura por voz começaria em "Saldo Livre" e só
+                // mencionaria "Finanças" incidentalmente no "Ver finanças →" do final.
+                : Semantics(
+                    button: true,
+                    label: _financasSemanticsLabel(saldoFormatado, pendentesCount),
+                    excludeSemantics: true,
+                    child: conteudo,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Saldo Livre',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    currency.format(summary.saldoLivre),
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  if (pendentesCount != null && pendentesCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Ver finanças →',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       },
     );
   }
+}
+
+/// Rótulo de acessibilidade do card de Finanças quando o título visível "Finanças" está
+/// escondido (`showTitle: false`, layout Abas). `excludeSemantics: true` no `Semantics` que usa
+/// este rótulo substitui TODO o conteúdo anunciado do card pelos nós filhos — inclusive a linha
+/// "N lançamentos para revisar, sem pressa", que continua visível na tela mas desapareceria da
+/// leitura por voz se não fosse incluída aqui explicitamente.
+String _financasSemanticsLabel(String saldoFormatado, int? pendentesCount) {
+  final base = 'Finanças — saldo livre $saldoFormatado';
+  if (pendentesCount == null || pendentesCount <= 0) return base;
+  final sufixo = pendentesCount == 1 ? 'lançamento' : 'lançamentos';
+  return '$base, $pendentesCount $sufixo para revisar, sem pressa';
 }
 
 /// Contagem de pendências para o card calmo de Finanças da Home. Nice-to-have sobre o resumo
@@ -679,10 +718,11 @@ class _HomeModernoAbasView extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: _ModernoFinancasCard(),
+            child: _ModernoFinancasCard(showTitle: false),
           ),
           const TabBar(
             tabs: [
@@ -813,7 +853,12 @@ class _ModernoGmailCard extends ConsumerWidget {
 /// `_FinancasCard`, com o gradiente sutil característico deste estilo. Ver o doc de
 /// `_FinancasCard` para o porquê de não haver mais estado "conectar conta" aqui.
 class _ModernoFinancasCard extends ConsumerWidget {
-  const _ModernoFinancasCard();
+  const _ModernoFinancasCard({this.showTitle = true});
+
+  /// Ver `_FinancasCard.showTitle`: a view de abas passa `false` para tirar o título "Finanças"
+  /// redundante. Quando `false`, o card ganha um `Semantics` explícito (ver `data:` abaixo) para
+  /// que a leitura por voz continue anunciando "Finanças" mesmo sem o texto visível.
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -847,6 +892,70 @@ class _ModernoFinancasCard extends ConsumerWidget {
       ),
       data: (summary) {
         final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        final saldoFormatado = currency.format(summary.saldoLivre);
+        final conteudo = Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.green.withAlpha(25),
+                Colors.teal.withAlpha(15),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showTitle) ...[
+                Text(
+                  'Finanças',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Icon(
+                    Icons.account_balance_outlined,
+                    color: Colors.green[600],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Saldo Livre',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                saldoFormatado,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (pendentesCount != null && pendentesCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Text(
+                'Ver finanças →',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
         return Card(
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -855,68 +964,14 @@ class _ModernoFinancasCard extends ConsumerWidget {
               MaterialPageRoute(builder: (_) => const FinancasScreen()),
             ),
             borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.green.withAlpha(25),
-                    Colors.teal.withAlpha(15),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Finanças',
-                    style: Theme.of(context).textTheme.titleMedium,
+            child: showTitle
+                ? conteudo
+                : Semantics(
+                    button: true,
+                    label: _financasSemanticsLabel(saldoFormatado, pendentesCount),
+                    excludeSemantics: true,
+                    child: conteudo,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.account_balance_outlined,
-                        color: Colors.green[600],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Saldo Livre',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    currency.format(summary.saldoLivre),
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  if (pendentesCount != null && pendentesCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '$pendentesCount ${pendentesCount == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Ver finanças →',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       },
@@ -1183,10 +1238,11 @@ class _HomeFuncionalAbasView extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: _FuncionalFinancasCard(),
+            child: _FuncionalFinancasCard(showTitle: false),
           ),
           const TabBar(
             tabs: [
@@ -1444,7 +1500,13 @@ class _FuncionalGmailCard extends ConsumerWidget {
 /// `_FinancasCard`, com o chrome compacto e bordado deste estilo. Ver o doc de `_FinancasCard`
 /// para o porquê de não haver mais estado "conectar conta" aqui.
 class _FuncionalFinancasCard extends ConsumerWidget {
-  const _FuncionalFinancasCard();
+  const _FuncionalFinancasCard({this.showTitle = true});
+
+  /// Ver `_FinancasCard.showTitle`. Diferente dos cards Minimalista/Moderno, este já carrega um
+  /// `Semantics(label: 'Finanças — ...')` explícito em volta de toda a área tocável (abaixo),
+  /// então esconder o texto visível "Finanças" não muda em nada o que a leitura por voz anuncia
+  /// — só o título redundante na tela é que desaparece.
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1495,7 +1557,7 @@ class _FuncionalFinancasCard extends ConsumerWidget {
         return Semantics(
           button: true,
           excludeSemantics: true,
-          label: 'Finanças — saldo livre $saldoFormatado',
+          label: _financasSemanticsLabel(saldoFormatado, pendentesCount),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const FinancasScreen()),
           ),
@@ -1525,10 +1587,11 @@ class _FuncionalFinancasCard extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Finanças',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
+                          if (showTitle)
+                            const Text(
+                              'Finanças',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
                           Text(
                             'Saldo livre: $saldoFormatado',
                             style: const TextStyle(fontSize: 12),

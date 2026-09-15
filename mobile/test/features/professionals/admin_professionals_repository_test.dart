@@ -97,4 +97,19 @@ void main() {
 
     expect(result.single.ativo, false);
   });
+
+  test('reactivate patches ativo=true', () async {
+    String? method; Map<String, dynamic>? body; String? path;
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (o, h) {
+      method = o.method; body = o.data as Map<String, dynamic>; path = o.path;
+      h.resolve(Response(requestOptions: o, statusCode: 200, data: {}));
+    }));
+
+    await AdminProfessionalsRepository(dio).reactivate('p1');
+
+    expect(method, 'PATCH');
+    expect(path, '/admin/professionals/p1');
+    expect(body, {'ativo': true});
+  });
 }

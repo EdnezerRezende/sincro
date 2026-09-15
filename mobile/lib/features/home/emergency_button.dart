@@ -17,10 +17,10 @@ class EmergencyButton extends ConsumerWidget {
         return;
       }
       await showEmergencySheet(context, contacts: contacts);
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao preparar mensagem: ${e.toString()}')),
+          const SnackBar(content: Text('Erro ao preparar mensagem. Tente novamente.')),
         );
       }
     }

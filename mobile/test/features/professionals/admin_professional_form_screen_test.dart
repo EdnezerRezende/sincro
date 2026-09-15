@@ -7,6 +7,7 @@ import 'package:sincro_mobile/core/dio_error_message.dart';
 import 'package:sincro_mobile/features/professionals/admin_professional_form_screen.dart';
 import 'package:sincro_mobile/features/professionals/location_service.dart';
 import 'package:sincro_mobile/features/professionals/professionals_providers.dart';
+import 'package:sincro_mobile/features/professionals/professionals_search_screen.dart';
 
 class _FakeLocationService extends LocationService {
   _FakeLocationService(this.resultado);
@@ -28,6 +29,14 @@ class _FakeLocationService extends LocationService {
         speed: 0,
         speedAccuracy: 0,
       );
+}
+
+class _ThrowingPositionLocationService extends LocationService {
+  @override
+  Future<LocationPermissionResult> solicitarPermissao() async => LocationPermissionResult.granted;
+
+  @override
+  Future<Position> obterPosicaoAtual() async => throw Exception('sem sinal de GPS');
 }
 
 DioException _buildDioException({dynamic responseData, int statusCode = 400}) {
@@ -107,6 +116,22 @@ void main() {
       await tester.tap(find.text('Usar minha localização atual'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Precisamos da sua localização'), findsOneWidget);
+    });
+
+    testWidgets('when obterPosicaoAtual throws, shows the service-disabled message and keeps the fields unchanged', (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [locationServiceProvider.overrideWithValue(_ThrowingPositionLocationService())],
+        child: const MaterialApp(home: AdminProfessionalFormScreen()),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Usar minha localização atual'));
+      await tester.tap(find.text('Usar minha localização atual'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(mensagemPermissao(LocationPermissionResult.serviceDisabled)), findsOneWidget);
+      expect(find.text('-23.5505'), findsNothing);
+      expect(find.text('-46.6333'), findsNothing);
     });
   });
 }

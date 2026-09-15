@@ -7,7 +7,10 @@ import 'emergency_message.dart';
 import 'emergency_providers.dart';
 import 'emergency_send_queue.dart';
 
-Future<void> _defaultLaunch(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+Future<void> _defaultLaunch(Uri uri) async {
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok) throw Exception('launchUrl returned false');
+}
 
 Future<void> showEmergencySheet(
   BuildContext context, {
@@ -33,7 +36,8 @@ class _EmergencySheet extends ConsumerStatefulWidget {
 }
 
 class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
-  late final Set<String> _selected = widget.contacts.map((c) => c.id).toSet();
+  late final Set<String> _selected =
+      widget.contacts.take(kEmergencyMaxContacts).map((c) => c.id).toSet();
   late final TextEditingController _template = TextEditingController(text: kEmergencyDefaultTemplate);
   EmergencySendQueue? _queue;
   bool _preparing = false;
@@ -63,7 +67,7 @@ class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
       _queue = EmergencySendQueue(messages);
       await _openCurrent();
     } catch (_) {
-      setState(() => _error = 'Não foi possível preparar as mensagens. Tente novamente.');
+      if (mounted) setState(() => _error = 'Não foi possível preparar as mensagens. Tente novamente.');
     } finally {
       if (mounted) setState(() => _preparing = false);
     }
@@ -86,8 +90,9 @@ class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
     if (!mounted) return;
     if (queue.isDone) {
       final n = queue.total;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Avisos abertos para $n ${n == 1 ? 'pessoa' : 'pessoas'}.')),
       );
       return;
@@ -118,7 +123,7 @@ class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
             Text('Escolha quem avisar e ajuste a mensagem, se quiser. Nada é enviado sem você confirmar.',
                 style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
             const SizedBox(height: 12),
-            if (queue != null && !queue.isDone) ...[
+            if (queue != null && !queue.isDone && queue.last != null) ...[
               Text('Enviado para ${primeiroNome(queue.last!.contactName)}. Próximo: ${primeiroNome(queue.current!.contactName)}',
                   style: theme.textTheme.bodyLarge),
               if (_error != null) ...[
@@ -140,7 +145,19 @@ class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
                     for (final contact in widget.contacts)
                       CheckboxListTile(
                         value: _selected.contains(contact.id),
-                        onChanged: (v) => setState(() => v == true ? _selected.add(contact.id) : _selected.remove(contact.id)),
+                        onChanged: (v) {
+                          if (v == true) {
+                            if (_selected.length >= kEmergencyMaxContacts) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Você pode avisar até 10 pessoas por vez.')),
+                              );
+                              return;
+                            }
+                            setState(() => _selected.add(contact.id));
+                          } else {
+                            setState(() => _selected.remove(contact.id));
+                          }
+                        },
                         title: Text(contact.nome),
                         subtitle: Text(contact.relacao),
                         controlAffinity: ListTileControlAffinity.trailing,

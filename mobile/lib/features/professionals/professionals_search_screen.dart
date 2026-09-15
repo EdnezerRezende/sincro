@@ -41,6 +41,7 @@ class _ProfessionalsSearchScreenState
   bool _carregando = true;
   bool _buscandoLista = false;
   bool _erro = false;
+  int _requestId = 0;
 
   @override
   void initState() {
@@ -94,6 +95,7 @@ class _ProfessionalsSearchScreenState
 
   Future<void> _buscar() async {
     if (_lat == null || _lng == null) return;
+    final requestId = ++_requestId;
     setState(() {
       _buscandoLista = true;
       _erro = false;
@@ -107,14 +109,14 @@ class _ProfessionalsSearchScreenState
             tags: _tagsSelecionadas.toList(),
             q: _nome.text,
           );
-      if (mounted) {
+      if (mounted && requestId == _requestId) {
         setState(() {
           _resultados = resultados;
           _buscandoLista = false;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && requestId == _requestId) {
         setState(() {
           _erro = true;
           _buscandoLista = false;
@@ -210,6 +212,7 @@ class _ProfessionalsSearchScreenState
             onChanged: _onNomeChanged,
             suffixIcon: AppInputSuffixIcon.clear,
             onSuffixIconPressed: () {
+              _debounce?.cancel();
               _nome.clear();
               _buscar();
             },

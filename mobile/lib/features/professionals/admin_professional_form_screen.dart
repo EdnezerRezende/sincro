@@ -118,12 +118,20 @@ class _AdminProfessionalFormScreenState extends ConsumerState<AdminProfessionalF
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemPermissao(permissao))));
       return;
     }
-    final pos = await location.obterPosicaoAtual();
-    if (!mounted) return;
-    setState(() {
-      _latitudeController.text = pos.latitude.toStringAsFixed(4);
-      _longitudeController.text = pos.longitude.toStringAsFixed(4);
-    });
+    try {
+      final pos = await location.obterPosicaoAtual();
+      if (!mounted) return;
+      setState(() {
+        _latitudeController.text = pos.latitude.toStringAsFixed(4);
+        _longitudeController.text = pos.longitude.toStringAsFixed(4);
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagemPermissao(LocationPermissionResult.serviceDisabled))),
+        );
+      }
+    }
   }
 
   @override

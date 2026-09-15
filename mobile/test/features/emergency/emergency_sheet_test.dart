@@ -118,4 +118,109 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Oi {primeiro nome}, estou passando'), findsOneWidget);
   });
+
+  testWidgets('when launch throws on the first contact, shows the error without crashing and keeps the CTA', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [emergencyRepositoryProvider.overrideWithValue(_repo((_) {}))],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () => showEmergencySheet(
+                context,
+                contacts: _contacts,
+                launch: (_) async => throw Exception('x'),
+              ),
+              child: const Text('abrir'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abrir WhatsApp · 1 de 2: Marina'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Não foi possível abrir o WhatsApp.'), findsOneWidget);
+    expect(find.text('Abrir WhatsApp · 1 de 2: Marina'), findsOneWidget);
+    final button = tester.widget<ElevatedButton>(
+      find.widgetWithText(ElevatedButton, 'Abrir WhatsApp · 1 de 2: Marina'),
+    );
+    expect(button.onPressed, isNotNull);
+  });
+
+  testWidgets('with more than 10 contacts, only the first 10 are selected by default', (tester) async {
+    final manyContacts = List.generate(
+      11,
+      (i) => TrustedContact(
+        id: 'c$i',
+        nome: 'Contato$i',
+        relacao: 'AMIGO',
+        whatsapp: '+5511999${i.toString().padLeft(6, '0')}',
+        prioridade: 0,
+      ),
+    );
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      final body = options.data as Map<String, dynamic>;
+      final ids = (body['contactIds'] as List).cast<String>();
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 201,
+        data: ids
+            .map((id) => {
+                  'contactId': id,
+                  'contactName': manyContacts.firstWhere((c) => c.id == id).nome,
+                  'whatsapp': '+55',
+                  'message': 'Oi',
+                  'waUrl': 'https://wa.me/$id',
+                })
+            .toList(),
+      ));
+    }));
+    final repo = EmergencyRepository(dio);
+
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [emergencyRepositoryProvider.overrideWithValue(repo)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () => showEmergencySheet(context, contacts: manyContacts, launch: (_) async {}),
+              child: const Text('abrir'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abrir WhatsApp · 1 de 10: Contato0'), findsOneWidget);
+
+    final checkboxes = tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile)).toList();
+    expect(checkboxes.length, 11);
+    final checkedCount = checkboxes.where((c) => c.value == true).length;
+    expect(checkedCount, 10);
+    expect(checkboxes.last.value, isFalse);
+
+    await tester.ensureVisible(find.text('Contato10'));
+    await tester.tap(find.text('Contato10'));
+    await tester.pump();
+
+    expect(find.text('Você pode avisar até 10 pessoas por vez.'), findsOneWidget);
+    expect(find.text('Abrir WhatsApp · 1 de 10: Contato0'), findsOneWidget);
+  });
 }

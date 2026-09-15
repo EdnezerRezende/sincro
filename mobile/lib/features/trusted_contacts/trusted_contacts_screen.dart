@@ -131,6 +131,7 @@ class TrustedContactsScreen extends ConsumerWidget {
                 orElse: () => const SizedBox.shrink(),
               ),
               TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size.fromHeight(56)),
                 onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
                 child: const Text('Pular por enquanto'),
               ),

@@ -776,39 +776,7 @@ class _FinancasHeroCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _linhaDeApoio(pendentes),
-                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-                // Link inline (não um botão): o cartão inteiro já é o alvo de toque, e um botão
-                // aqui criaria um segundo nó de acessibilidade dentro do `Semantics` de cima.
-                Flexible(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 44),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Ver finanças',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_forward, size: 18, color: scheme.primary),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            _ApoioELink(texto: _linhaDeApoio(pendentes)),
           ],
         );
         return TonalPanel(
@@ -825,6 +793,50 @@ class _FinancasHeroCard extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+
+/// Linha de apoio + link "Ver finanças →" do cartão de destaque. Lado a lado em escala normal;
+/// a partir de ~1,5× de texto viram coluna — na `Row`, a coluna de apoio ficava com ~158 dp e
+/// "lançamentos" (≈ 165 dp em 28 px) quebrava no meio da palavra com o link invadindo o texto.
+///
+/// O link é inline (não um botão): o cartão inteiro já é o alvo de toque, e um botão aqui criaria
+/// um segundo nó de acessibilidade dentro do `Semantics` do cartão.
+class _ApoioELink extends StatelessWidget {
+  const _ApoioELink({required this.texto});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final empilhar = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final apoio = Text(texto, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant));
+    final link = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              'Ver finanças',
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: scheme.primary),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.arrow_forward, size: 18, color: scheme.primary),
+        ],
+      ),
+    );
+    if (empilhar) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [apoio, Align(alignment: Alignment.centerRight, child: link)],
+      );
+    }
+    return Row(children: [Expanded(child: apoio), Flexible(child: link)]);
   }
 }
 
@@ -847,8 +859,9 @@ String _linhaDeApoio(int? pendentesCount) {
 }
 
 /// Contagem de pendências para o cartão de Finanças da Home. Nice-to-have sobre o resumo
-/// principal: se a lista de pendentes ainda está carregando ou falhou, cai em `null` (sem linha
-/// de contagem) em vez de propagar um estado de erro/loading próprio.
+/// principal: se a lista de pendentes ainda está carregando ou falhou, cai em `null` — e a linha
+/// de apoio mostra a frase neutra de `_linhaDeApoio` — em vez de propagar um estado de
+/// erro/loading próprio.
 int? _pendentesCount(WidgetRef ref) {
   return ref
       .watch(lancamentosPendentesProvider)

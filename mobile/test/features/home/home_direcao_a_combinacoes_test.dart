@@ -215,11 +215,10 @@ void main() {
               final textWidget = label.first.evaluate().single.widget as Text;
               final paragraph = tester.renderObject<RenderParagraph>(label.first);
               final linhas = _linhasRenderizadas(paragraph);
-              final palavras = textWidget.data!.split(RegExp(r'\s+'));
               expect(linhas.length, lessThanOrEqualTo(2), reason: 'rótulo "${textWidget.data}" em ${linhas.length} linhas');
-              for (final linha in linhas) {
-                expect(palavras, contains(linha), reason: 'linha "$linha" não é uma palavra inteira de "${textWidget.data}"');
-              }
+              // As linhas renderizadas, em ordem, têm de recompor o rótulo palavra a palavra.
+              expect(linhas.join(' '), textWidget.data!.replaceAll('\n', ' '),
+                  reason: 'linhas $linhas não recompõem "${textWidget.data}"');
               final largura = tester.getSize(find.byWidget(botao.widget)).width;
               expect(largura, lessThanOrEqualTo(112 * scale + 0.5), reason: 'selo de $largura dp');
             }
@@ -228,6 +227,21 @@ void main() {
       }
     }
   }
+
+  testWidgets('em 2,0× a linha de apoio do destaque não quebra palavras e o link vai para baixo', (tester) async {
+    await _pump(tester, HomeLayoutMode.resumo, HomeDesignStyle.minimalista, sincroLightTheme, textScale: 2.0);
+    final apoio = find.textContaining('Tudo revisado');
+    expect(apoio, findsOneWidget);
+    final linhas = _linhasRenderizadas(tester.renderObject<RenderParagraph>(apoio));
+    final palavras = 'Tudo revisado por aqui'.split(' ');
+    for (final linha in linhas) {
+      for (final palavra in linha.split(' ')) {
+        expect(palavras, contains(palavra), reason: '"$palavra" não é palavra inteira');
+      }
+    }
+    // Link abaixo do apoio, não ao lado.
+    expect(tester.getRect(find.text('Ver finanças')).top, greaterThanOrEqualTo(tester.getRect(apoio).bottom - 1));
+  });
 }
 
 /// Texto de cada linha realmente renderizada de um parágrafo (mesma fonte, escala e largura).

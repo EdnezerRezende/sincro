@@ -277,9 +277,13 @@ class _BiofeedbackContent extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        // IntrinsicHeight: dentro de uma ListView a Row recebe altura infinita, e `stretch` sem
+        // um limite derrubava o layout inteiro (tela em branco). Com ela, os dois tiles ficam
+        // com a altura do mais alto, como na prancha.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             Expanded(
               child: StatTile(
                 label: fcLabel,
@@ -297,7 +301,8 @@ class _BiofeedbackContent extends StatelessWidget {
                 semanticsLabel: '$vfcLabel: ${atual.mediaVfcHoje != null ? '$vfc ms' : 'sem dados'}',
               ),
             ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         TonalPanel(

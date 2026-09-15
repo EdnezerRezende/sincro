@@ -12,7 +12,7 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderStateMixin {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _loading = false;
@@ -20,27 +20,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
   bool _rememberMe = false;
   String? _error;
 
-  late AnimationController _fadeController;
-  late AnimationController _slideController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-    _slideController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
-
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
-    );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-    );
-
-    _fadeController.forward();
-    _slideController.forward();
-
     _loadSavedEmail();
   }
 
@@ -59,8 +41,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
   void dispose() {
     _emailController.dispose();
     _senhaController.dispose();
-    _fadeController.dispose();
-    _slideController.dispose();
     super.dispose();
   }
 
@@ -71,7 +51,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
     });
     try {
       final authService = ref.read(authServiceProvider);
-      await authService.logIn(_emailController.text.trim(), _senhaController.text);
+      await authService.logIn(
+        _emailController.text.trim(),
+        _senhaController.text,
+      );
 
       if (_rememberMe) {
         final prefs = await SharedPreferences.getInstance();
@@ -81,7 +64,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
         await prefs.remove('saved_email');
       }
 
-      if (mounted) Navigator.of(context).pushReplacementNamed('/onboarding-router');
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/onboarding-router');
+      }
     } catch (e) {
       setState(() => _error = 'E-mail ou senha inválidos.');
     } finally {
@@ -94,9 +79,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
     try {
       final authService = ref.read(authServiceProvider);
       await authService.signInWithGoogle();
-      if (mounted) Navigator.of(context).pushReplacementNamed('/onboarding-router');
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/onboarding-router');
+      }
     } catch (e) {
-      setState(() => _error = 'Não foi possível fazer login com Google. Tente novamente.');
+      setState(
+        () => _error =
+            'Não foi possível fazer login com Google. Tente novamente.',
+      );
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
@@ -106,271 +96,216 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDark = colorScheme.brightness == Brightness.dark;
     final isLight = colorScheme.brightness == Brightness.light;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.surface,
-                  isDark ? colorScheme.surface : const Color(0xFFF5F2ED),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top + 16),
+                  // Header
+                  Column(
+                    children: [
+                      Image.asset(
+                        'assets/logos/symbol_transparent_512x512.png',
+                        width: 96,
+                        height: 96,
+                        semanticLabel: 'Sincro',
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Sincro',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontSize: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Bem-vindo de volta',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
-          ),
-          SingleChildScrollView(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            // Form (sem padding horizontal)
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(height: MediaQuery.of(context).padding.top + 32),
-                      // Header com animação
-                      FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    colorScheme.primary,
-                                    colorScheme.primary.withAlpha(200),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: colorScheme.primary.withAlpha(100),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 12),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  '💚',
-                                  style: TextStyle(fontSize: 40),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            Text(
-                              'Sincro',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Bem-vindo de volta',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Email
+                      AppInput(
+                        label: 'E-mail',
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
                       ),
-                      const SizedBox(height: 48),
-                    ],
-                  ),
-                ),
-                // Form com animação (sem padding horizontal)
-                SlideTransition(
-                  position: _slideAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 440),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                      const SizedBox(height: 16),
+                      // Senha
+                      AppInput(
+                        label: 'Senha',
+                        controller: _senhaController,
+                        obscureText: true,
+                        textInputAction: TextInputAction.done,
+                      ),
+                      const SizedBox(height: 24),
+                      // Erro
+                      if (_error != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: colorScheme.error.withAlpha(180),
+                            ),
+                          ),
+                          child: Row(
                             children: [
-                              // Email
-                              AppInput(
-                                label: 'E-mail',
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
+                              Icon(
+                                Icons.warning_rounded,
+                                color: colorScheme.error,
+                                size: 18,
                               ),
-                              const SizedBox(height: 16),
-                              // Senha
-                              AppInput(
-                                label: 'Senha',
-                                controller: _senhaController,
-                                obscureText: true,
-                                textInputAction: TextInputAction.done,
-                              ),
-                              const SizedBox(height: 24),
-                              // Erro
-                              if (_error != null) ...[
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: colorScheme.error.withAlpha(180),
-                                    ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: TextStyle(
+                                    color: colorScheme.error,
+                                    fontSize: 13,
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.warning_rounded,
-                                        color: colorScheme.error,
-                                        size: 18,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          _error!,
-                                          style: TextStyle(
-                                            color: colorScheme.error,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                              ],
-                              // Remember Me
-                              CheckboxListTile(
-                                value: _rememberMe,
-                                onChanged: (value) => setState(
-                                  () => _rememberMe = value ?? false,
-                                ),
-                                title: Text(
-                                  'Lembrar-me neste dispositivo',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                contentPadding: EdgeInsets.zero,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                dense: true,
-                              ),
-                              const SizedBox(height: 24),
-                              // Botão Entrar
-                              AppButton(
-                                label: 'Entrar',
-                                size: AppButtonSize.large,
-                                onPressed: (_loading || _googleLoading)
-                                    ? null
-                                    : _submit,
-                                isLoading: _loading,
-                              ),
-                              const SizedBox(height: 16),
-                              // Divider
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Divider(
-                                      color: isLight
-                                          ? const Color(0xFF9C9690)
-                                          : const Color(0xFF66605A),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    child: Text(
-                                      'OU',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Divider(
-                                      color: isLight
-                                          ? const Color(0xFF9C9690)
-                                          : const Color(0xFF66605A),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              // Botão Google
-                              AppButton(
-                                label: 'Entrar com Google',
-                                variant: AppButtonVariant.outline,
-                                size: AppButtonSize.large,
-                                onPressed: (_loading || _googleLoading)
-                                    ? null
-                                    : _submitGoogle,
-                                isLoading: _googleLoading,
-                              ),
-                              const SizedBox(height: 32),
-                              // Link para signup
-                              Center(
-                                child: Wrap(
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Não tem conta? ',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => Navigator.of(
-                                        context,
-                                      ).pushNamed('/signup'),
-                                      style: TextButton.styleFrom(
-                                        minimumSize: const Size(48, 48),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.padded,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Criar uma conta',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: colorScheme.primary,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(height: 24),
+                      ],
+                      // Remember Me
+                      CheckboxListTile(
+                        value: _rememberMe,
+                        onChanged: (value) =>
+                            setState(() => _rememberMe = value ?? false),
+                        title: Text(
+                          'Lembrar-me neste dispositivo',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        dense: true,
                       ),
-                    ),
+                      const SizedBox(height: 24),
+                      // Botão Entrar
+                      AppButton(
+                        label: 'Entrar',
+                        size: AppButtonSize.large,
+                        onPressed: (_loading || _googleLoading)
+                            ? null
+                            : _submit,
+                        isLoading: _loading,
+                      ),
+                      const SizedBox(height: 16),
+                      // Divider
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: isLight
+                                  ? const Color(0xFF9C9690)
+                                  : const Color(0xFF66605A),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'OU',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: isLight
+                                  ? const Color(0xFF9C9690)
+                                  : const Color(0xFF66605A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Botão Google
+                      AppButton(
+                        label: 'Entrar com Google',
+                        variant: AppButtonVariant.outline,
+                        size: AppButtonSize.large,
+                        onPressed: (_loading || _googleLoading)
+                            ? null
+                            : _submitGoogle,
+                        isLoading: _googleLoading,
+                      ),
+                      const SizedBox(height: 32),
+                      // Link para signup
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Não tem conta? ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(context).pushNamed('/signup'),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.padded,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                              child: Text(
+                                'Criar uma conta',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.primary,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,33 +1,45 @@
-import { ArrayNotEmpty, IsArray, IsLatitude, IsLongitude, IsString, Length, Matches } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsLatitude, IsLongitude, IsOptional, IsString, Length, Matches } from 'class-validator';
 
+/** PATCH parcial: todo campo é opcional; os presentes são validados como no create. */
 export class UpdateProfessionalDto {
+  @IsOptional()
   @IsString()
   @Length(1, 100)
-  nome: string;
+  nome?: string;
 
+  @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
-  tags: string[];
+  tags?: string[];
 
+  @IsOptional()
   @IsString()
   @Length(1, 100)
-  cidade: string;
+  cidade?: string;
 
+  @IsOptional()
   @IsLatitude()
-  latitude: number;
+  latitude?: number;
 
+  @IsOptional()
   @IsLongitude()
-  longitude: number;
+  longitude?: number;
 
+  @IsOptional()
   @IsString()
   @Length(8, 20)
   @Matches(/^\+\d{10,15}$/, {
     message: 'telefone must start with + followed by the country code and 10-15 digits, e.g. +5511999999999',
   })
-  telefone: string;
+  telefone?: string;
 
+  @IsOptional()
   @IsString()
   @Length(1, 500)
-  bio: string;
+  bio?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  ativo?: boolean;
 }

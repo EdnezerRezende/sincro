@@ -2,6 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/widgets/section_card.dart';
 import '../trusted_contacts/trusted_contacts_providers.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
@@ -158,35 +159,325 @@ class _HomeMinimalistaResumoView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final gmailStatusAsync = ref.watch(gmailConnectionStatusProvider);
     final calendarEventsAsync = ref.watch(upcomingEventsProvider);
     final biofeedbackAtivoAsync = ref.watch(biofeedbackAtivoProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Tudo em ordem por hoje.',
-            style: Theme.of(context).textTheme.titleMedium,
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Você está em dia', style: theme.textTheme.headlineMedium?.copyWith(fontSize: 24)),
+                Text('Tudo sob controle', style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                const _FinancasHeroCard(),
+                const SizedBox(height: 12),
+                SectionCard(children: [
+                  _GmailRow(statusAsync: gmailStatusAsync),
+                  _CalendarRow(eventsAsync: calendarEventsAsync),
+                  _BiofeedbackRow(ativoAsync: biofeedbackAtivoAsync),
+                ]),
+                const SizedBox(height: 12),
+                const SectionCard(title: 'Apoio', children: [_ProfessionalsRow(), _GroundingCardsRow()]),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          const _FinancasCard(),
-          const SizedBox(height: 16),
-          _GmailCard(statusAsync: gmailStatusAsync),
-          const SizedBox(height: 16),
-          _CalendarCard(eventsAsync: calendarEventsAsync),
-          const SizedBox(height: 16),
-          _BiofeedbackCard(ativoAsync: biofeedbackAtivoAsync),
-          const SizedBox(height: 16),
-          const _ProfessionalsCard(),
-          const SizedBox(height: 16),
-          const _GroundingCardsCard(),
-          const SizedBox(height: 16),
-          const _EmergencySection(),
-        ],
+        ),
+        const SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: _EmergencySection(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RowIcon extends StatelessWidget {
+  const _RowIcon(this.icon);
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(color: scheme.primary.withAlpha(26), borderRadius: BorderRadius.circular(12)),
+      child: Icon(icon, color: scheme.primary, size: 20),
+    );
+  }
+}
+
+class _GmailRow extends ConsumerWidget {
+  const _GmailRow({required this.statusAsync});
+  final AsyncValue<GmailConnectionStatus> statusAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return statusAsync.when(
+      data: (status) {
+        if (!status.connected) {
+          return ListTile(
+            leading: const _RowIcon(Icons.mail_outline),
+            title: const Text('Caixa de Entrada'),
+            subtitle: const Text(
+              'Conecte seu Gmail para ver um resumo calmo dos seus e-mails.',
+            ),
+            trailing: ElevatedButton(
+              onPressed: () => _conectarGmail(context, ref),
+              child: const Text('Conectar Gmail'),
+            ),
+          );
+        }
+        return ListTile(
+          leading: const _RowIcon(Icons.mail_outline),
+          title: const Text('Caixa de Entrada'),
+          subtitle: Text('Conectado como ${status.gmailEmail}'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).pushNamed('/inbox'),
+        );
+      },
+      loading: () => const ListTile(
+        leading: _RowIcon(Icons.mail_outline),
+        title: Text('Caixa de Entrada'),
+        subtitle: Text('Carregando...'),
       ),
+      error: (_, __) => const SizedBox.shrink(), // mesmo comportamento de _GmailCard hoje
+    );
+  }
+}
+
+class _CalendarRow extends ConsumerWidget {
+  const _CalendarRow({required this.eventsAsync});
+  final AsyncValue<List<CalendarEvent>> eventsAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return eventsAsync.when(
+      data: (events) {
+        final upcomingThree = events.take(3).toList();
+        return ListTile(
+          leading: const _RowIcon(Icons.calendar_today_outlined),
+          title: const Text('Próximos eventos'),
+          subtitle: Text(
+            upcomingThree.isEmpty
+                ? 'Nenhum evento nos próximos dias'
+                : '${upcomingThree.length} evento(s) agendado(s)',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).pushNamed('/calendar'),
+        );
+      },
+      loading: () => const ListTile(
+        leading: _RowIcon(Icons.calendar_today_outlined),
+        title: Text('Próximos eventos'),
+        subtitle: Text('Carregando...'),
+      ),
+      error: (_, __) => ListTile(
+        leading: const _RowIcon(Icons.calendar_today_outlined),
+        title: const Text('Próximos eventos'),
+        subtitle: const Text('Conecte o Google Calendar para sincronizar'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/calendar'),
+      ),
+    );
+  }
+}
+
+class _BiofeedbackRow extends ConsumerWidget {
+  const _BiofeedbackRow({required this.ativoAsync});
+  final AsyncValue<bool> ativoAsync;
+
+  Widget _rowInativo(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      leading: const _RowIcon(Icons.favorite_border),
+      title: const Text('Biofeedback'),
+      subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
+      trailing: OutlinedButton(
+        onPressed: () => _ativarBiofeedback(context, ref),
+        child: const Text('Ativar Biofeedback'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ativoAsync.when(
+      data: (ativo) {
+        if (!ativo) return _rowInativo(context, ref);
+        return ListTile(
+          leading: const _RowIcon(Icons.favorite_border),
+          title: const Text('Biofeedback'),
+          subtitle: const _UltimaFcSubtitle(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).pushNamed('/biofeedback'),
+        );
+      },
+      loading: () => const ListTile(
+        leading: _RowIcon(Icons.favorite_border),
+        title: Text('Biofeedback'),
+        subtitle: Text('Carregando...'),
+      ),
+      // O card do Biofeedback nunca some da Home (restrição global do pilar): se não deu para
+      // ler o estado de ativação, mostramos a linha inativa, que continua sendo um ponto de
+      // entrada válido — ativar de novo é idempotente.
+      error: (_, __) => _rowInativo(context, ref),
+    );
+  }
+}
+
+class _ProfessionalsRow extends StatelessWidget {
+  const _ProfessionalsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const _RowIcon(Icons.medical_services_outlined),
+      title: const Text('Encontrar profissional'),
+      subtitle: const Text(
+        'Busque profissionais neuroafirmativos perto de você.',
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).pushNamed('/professionals'),
+    );
+  }
+}
+
+class _GroundingCardsRow extends StatelessWidget {
+  const _GroundingCardsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const _RowIcon(Icons.self_improvement_outlined),
+      title: const Text('Alívio sensorial'),
+      subtitle: const Text(
+        'Técnicas de aterramento e alívio para o dia a dia.',
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).pushNamed('/grounding-cards'),
+    );
+  }
+}
+
+/// Card calmo de Finanças na Home, versão "hero" do layout Resumo Simples minimalista: mesmo
+/// resumo de saldo livre e pendências de `_FinancasCard`, num destaque visual maior (sem
+/// `Card`/`ListTile`, com borda e fundo tonal) por ser o primeiro conteúdo da tela.
+class _FinancasHeroCard extends ConsumerWidget {
+  const _FinancasHeroCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final summaryAsync = ref.watch(financeSummaryProvider);
+    final pendentes = _pendentesCount(ref);
+    void abrir() => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FinancasScreen()),
+        );
+
+    final decoration = BoxDecoration(
+      color: scheme.primary.withAlpha(15),
+      border: Border.all(color: scheme.primary.withAlpha(64)),
+      borderRadius: BorderRadius.circular(16),
+    );
+
+    return summaryAsync.when(
+      loading: () => Container(
+        decoration: decoration,
+        padding: const EdgeInsets.all(16),
+        child: const SizedBox(
+          height: 96,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (_, __) => Container(
+        decoration: decoration,
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: abrir,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ),
+        ),
+      ),
+      data: (summary) {
+        final saldo = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(summary.saldoLivre);
+        final conteudo = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.account_balance_outlined, size: 20, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              saldo,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontSize: 34,
+                color: scheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(children: [
+              Expanded(
+                child: pendentes != null && pendentes > 0
+                    ? Text(
+                        '$pendentes ${pendentes == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              TextButton.icon(
+                onPressed: abrir,
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                iconAlignment: IconAlignment.end,
+                label: const Text('Ver finanças'),
+              ),
+            ]),
+          ],
+        );
+        return Container(
+          decoration: decoration,
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: abrir,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                // Igual a `_FinancasCard` com `showTitle: false`: sem um título "Finanças"
+                // visível neste cartão hero, a leitura por voz precisa dizer "Finanças"
+                // explicitamente — sem isso começaria em "Saldo Livre" e só mencionaria
+                // "Finanças" incidentalmente no "Ver finanças" do final.
+                child: Semantics(
+                  button: true,
+                  label: _financasSemanticsLabel(saldo, pendentes),
+                  excludeSemantics: true,
+                  child: conteudo,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -252,29 +543,32 @@ class _HomeMinimalistaAbasView extends ConsumerWidget {
   }
 }
 
+/// Extraído de `_GmailCard` (antes um método de instância `_connect`) para ser reutilizado por
+/// `_GmailRow`, que reproduz o mesmo card no layout Resumo Simples minimalista sem o `Card`
+/// envolvente.
+Future<void> _conectarGmail(BuildContext context, WidgetRef ref) async {
+  try {
+    await ref.read(gmailConnectionRepositoryProvider).connect();
+    ref.invalidate(gmailConnectionStatusProvider);
+  } catch (e, st) {
+    debugPrint('❌ Gmail connection failed: $e');
+    debugPrintStack(stackTrace: st);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível conectar o Gmail. Tente novamente.',
+          ),
+        ),
+      );
+    }
+  }
+}
+
 class _GmailCard extends ConsumerWidget {
   const _GmailCard({required this.statusAsync});
 
   final AsyncValue<GmailConnectionStatus> statusAsync;
-
-  Future<void> _connect(BuildContext context, WidgetRef ref) async {
-    try {
-      await ref.read(gmailConnectionRepositoryProvider).connect();
-      ref.invalidate(gmailConnectionStatusProvider);
-    } catch (e, st) {
-      debugPrint('❌ Gmail connection failed: $e');
-      debugPrintStack(stackTrace: st);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Não foi possível conectar o Gmail. Tente novamente.',
-            ),
-          ),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -289,7 +583,7 @@ class _GmailCard extends ConsumerWidget {
                 'Conecte seu Gmail para ver um resumo calmo dos seus e-mails.',
               ),
               trailing: ElevatedButton(
-                onPressed: () => _connect(context, ref),
+                onPressed: () => _conectarGmail(context, ref),
                 child: const Text('Conectar Gmail'),
               ),
             ),
@@ -453,68 +747,71 @@ int? _pendentesCount(WidgetRef ref) {
       .maybeWhen(data: (lista) => lista.length, orElse: () => null);
 }
 
-class _BiofeedbackCard extends ConsumerWidget {
-  const _BiofeedbackCard({required this.ativoAsync});
-
-  final AsyncValue<bool> ativoAsync;
-
-  Future<void> _ativar(BuildContext context, WidgetRef ref) async {
-    try {
-      final autorizado = await ref
-          .read(biofeedbackHealthServiceProvider)
-          .solicitarPermissao();
-      if (!autorizado) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Permissão não concedida. Você pode tentar novamente quando quiser.',
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      // Persistimos a ativação e agendamos o background ANTES da primeira sincronização: se a
-      // primeira leitura falhar (Health Connect ainda inicializando, nenhuma fonte de dados
-      // pareada, chamada instável), a permissão já foi concedida e não faz sentido obrigar o
-      // usuário a refazer tudo. O agendamento em background cuida das próximas tentativas.
-      await ref.read(biofeedbackCacheProvider).setAtivo(true);
-      // A ativação já pediu TODAS as permissões da versão atual (`_tipos` inclui passos e
-      // treinos), então registramos a versão aqui para que a checagem de upgrade dentro de
-      // `sincronizar()` seja um no-op para quem está ativando agora — em vez de pedir de novo,
-      // sem motivo, logo na primeira sincronização.
-      await ref
-          .read(biofeedbackCacheProvider)
-          .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
-      final frequenciaMinutos = await ref
-          .read(biofeedbackCacheProvider)
-          .getFrequenciaMinutos();
-      await ref
-          .read(biofeedbackBackgroundTaskProvider)
-          .registrar(Duration(minutes: frequenciaMinutos));
-      try {
-        await ref.read(biofeedbackSyncServiceProvider).sincronizar();
-      } catch (_) {
-        // Primeira sincronização é best-effort — mesma postura do callback do background.
-      }
-      ref.invalidate(biofeedbackAtivoProvider);
-      ref.invalidate(biofeedbackResumoProvider);
-      // A sincronização acima também grava o histórico de repouso, que alimenta o contador
-      // "(N de 7 dias)" da tela de detalhe.
-      ref.invalidate(biofeedbackDiasNoHistoricoProvider);
-    } catch (e) {
+/// Extraído de `_BiofeedbackCard` (antes um método de instância `_ativar`) para ser reutilizado
+/// por `_BiofeedbackRow`, que reproduz o mesmo card no layout Resumo Simples minimalista sem o
+/// `Card` envolvente.
+Future<void> _ativarBiofeedback(BuildContext context, WidgetRef ref) async {
+  try {
+    final autorizado = await ref
+        .read(biofeedbackHealthServiceProvider)
+        .solicitarPermissao();
+    if (!autorizado) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Não foi possível ativar o Biofeedback. Tente novamente.',
+              'Permissão não concedida. Você pode tentar novamente quando quiser.',
             ),
           ),
         );
       }
+      return;
+    }
+    // Persistimos a ativação e agendamos o background ANTES da primeira sincronização: se a
+    // primeira leitura falhar (Health Connect ainda inicializando, nenhuma fonte de dados
+    // pareada, chamada instável), a permissão já foi concedida e não faz sentido obrigar o
+    // usuário a refazer tudo. O agendamento em background cuida das próximas tentativas.
+    await ref.read(biofeedbackCacheProvider).setAtivo(true);
+    // A ativação já pediu TODAS as permissões da versão atual (`_tipos` inclui passos e
+    // treinos), então registramos a versão aqui para que a checagem de upgrade dentro de
+    // `sincronizar()` seja um no-op para quem está ativando agora — em vez de pedir de novo,
+    // sem motivo, logo na primeira sincronização.
+    await ref
+        .read(biofeedbackCacheProvider)
+        .setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual);
+    final frequenciaMinutos = await ref
+        .read(biofeedbackCacheProvider)
+        .getFrequenciaMinutos();
+    await ref
+        .read(biofeedbackBackgroundTaskProvider)
+        .registrar(Duration(minutes: frequenciaMinutos));
+    try {
+      await ref.read(biofeedbackSyncServiceProvider).sincronizar();
+    } catch (_) {
+      // Primeira sincronização é best-effort — mesma postura do callback do background.
+    }
+    ref.invalidate(biofeedbackAtivoProvider);
+    ref.invalidate(biofeedbackResumoProvider);
+    // A sincronização acima também grava o histórico de repouso, que alimenta o contador
+    // "(N de 7 dias)" da tela de detalhe.
+    ref.invalidate(biofeedbackDiasNoHistoricoProvider);
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível ativar o Biofeedback. Tente novamente.',
+          ),
+        ),
+      );
     }
   }
+}
+
+class _BiofeedbackCard extends ConsumerWidget {
+  const _BiofeedbackCard({required this.ativoAsync});
+
+  final AsyncValue<bool> ativoAsync;
 
   Widget _cardInativo(BuildContext context, WidgetRef ref) {
     return Card(
@@ -523,7 +820,7 @@ class _BiofeedbackCard extends ConsumerWidget {
         title: const Text('Biofeedback'),
         subtitle: const Text('Acompanhe seu bem-estar com seu smartwatch.'),
         trailing: ElevatedButton(
-          onPressed: () => _ativar(context, ref),
+          onPressed: () => _ativarBiofeedback(context, ref),
           child: const Text('Ativar Biofeedback'),
         ),
       ),

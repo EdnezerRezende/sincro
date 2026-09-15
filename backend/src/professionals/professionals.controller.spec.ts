@@ -50,7 +50,7 @@ describe('ProfessionalsController', () => {
 
     await controller.search('-23.5', '-46.6', ' TEA ,TDAH ,');
 
-    expect(service.search).toHaveBeenCalledWith(-23.5, -46.6, ['TEA', 'TDAH']);
+    expect(service.search).toHaveBeenCalledWith(-23.5, -46.6, ['TEA', 'TDAH'], undefined);
   });
 
   it('omits tags when the query param is absent', async () => {
@@ -59,6 +59,15 @@ describe('ProfessionalsController', () => {
 
     await controller.search('-23.5', '-46.6', undefined);
 
-    expect(service.search).toHaveBeenCalledWith(-23.5, -46.6, undefined);
+    expect(service.search).toHaveBeenCalledWith(-23.5, -46.6, undefined, undefined);
+  });
+
+  it('forwards q trimmed to the service', async () => {
+    const service = { search: jest.fn().mockResolvedValue([]), listActiveTags: jest.fn() };
+    const controller = new ProfessionalsController(service as any);
+
+    await controller.search('1', '2', undefined, '  Hel ');
+
+    expect(service.search).toHaveBeenCalledWith(1, 2, undefined, 'Hel');
   });
 });

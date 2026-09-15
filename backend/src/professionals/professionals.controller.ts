@@ -8,7 +8,7 @@ export class ProfessionalsController {
   constructor(private readonly service: ProfessionalsService) {}
 
   @Get('search')
-  async search(@Query('lat') latRaw: string, @Query('lng') lngRaw: string, @Query('tags') tagsRaw?: string) {
+  async search(@Query('lat') latRaw: string, @Query('lng') lngRaw: string, @Query('tags') tagsRaw?: string, @Query('q') qRaw?: string) {
     if (!latRaw?.trim() || !lngRaw?.trim()) {
       throw new BadRequestException('lat e lng são obrigatórios e devem ser números');
     }
@@ -23,7 +23,7 @@ export class ProfessionalsController {
           .map((tag) => tag.trim())
           .filter((tag) => tag.length > 0)
       : undefined;
-    return this.service.search(lat, lng, tags);
+    return this.service.search(lat, lng, tags, qRaw?.trim() || undefined);
   }
 
   @Get('tags')

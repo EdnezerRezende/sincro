@@ -9,6 +9,8 @@ import 'package:sincro_mobile/features/biofeedback/biofeedback_cache.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_health_service.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_providers.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_screen.dart';
+import 'package:sincro_mobile/features/biofeedback/biofeedback_summary.dart';
+import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_stress_detector.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_summary_calculator.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_sync_service.dart';
@@ -33,15 +35,15 @@ class _ThrowingSyncService extends BiofeedbackSyncService {
   }
 }
 
-Widget _app({required bool? permissao}) {
+Widget _app({required bool? permissao, BiofeedbackSummary? resumo, ThemeData? theme}) {
   return ProviderScope(
     overrides: [
-      biofeedbackResumoProvider.overrideWith((ref) async => null),
+      biofeedbackResumoProvider.overrideWith((ref) async => resumo),
       biofeedbackDiasNoHistoricoProvider.overrideWith((ref) async => 0),
       biofeedbackPermissaoProvider.overrideWith((ref) async => permissao),
       biofeedbackSyncServiceProvider.overrideWithValue(_ThrowingSyncService()),
     ],
-    child: MaterialApp(theme: sincroLightTheme, home: const BiofeedbackScreen()),
+    child: MaterialApp(theme: theme ?? sincroLightTheme, home: const BiofeedbackScreen()),
   );
 }
 
@@ -75,4 +77,45 @@ void main() {
 
     expect(find.textContaining('Não foi possível sincronizar agora'), findsOneWidget);
   });
+
+  // Prancha "Biofeedback" da direção A com dados reais: dois tiles + painel de estado. Antes, a
+  // Row com `stretch` dentro da ListView recebia altura infinita e a tela abria em branco — e
+  // nenhum teste montava a tela com resumo não nulo.
+  for (final theme in [sincroLightTheme, sincroDarkTheme]) {
+    testWidgets('renders the stat tiles and state panel with a real summary (${theme.brightness.name})', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_app(
+        permissao: true,
+        theme: theme,
+        resumo: BiofeedbackSummary(
+          ultimaFc: 70,
+          mediaFcHoje: 68,
+          mediaVfcHoje: 54,
+          estadoEstresse: EstadoEstresse.calmo,
+          atualizadoEm: DateTime.now(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('68 bpm'), findsOneWidget);
+      expect(find.text('54 ms'), findsOneWidget);
+      expect(find.textContaining('Frequência cardíaca em repouso'), findsOneWidget);
+      expect(find.textContaining('Variabilidade em repouso'), findsOneWidget);
+      expect(find.text('Estado atual: Calmo'), findsOneWidget);
+      expect(find.textContaining('Atualizado'), findsOneWidget);
+      // Os dois tiles lado a lado, com a mesma altura e dentro da tela.
+      final tiles = find.byType(Card);
+      expect(tiles, findsNWidgets(2));
+      final a = tester.getRect(tiles.at(0));
+      final b = tester.getRect(tiles.at(1));
+      expect(a.height, b.height);
+      expect(a.height, greaterThan(0));
+      expect(b.right, lessThanOrEqualTo(390));
+    });
+  }
 }

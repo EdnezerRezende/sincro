@@ -81,6 +81,12 @@ class VooSerenoScreenState extends State<VooSerenoScreen>
     setState(() => _showSummary = true);
   }
 
+  void _resumeSession() {
+    setState(() => _showSummary = false);
+    _lastTick = Duration.zero;
+    if (!_ticker.isActive) _ticker.start();
+  }
+
   void _setTargetFromLocalY(double localY, double height) {
     if (height <= 0) return;
     _model.setTarget(localY / height);
@@ -103,9 +109,10 @@ class VooSerenoScreenState extends State<VooSerenoScreen>
       backgroundColor: scheme.surface,
       body: _showSummary
           ? CalmingSessionSummary(
-              elapsed: Duration(seconds: _model.elapsed.round()),
+              elapsed: Duration(milliseconds: (_model.elapsed * 1000).round()),
               gameName: 'Voo Sereno',
-              onClose: () => Navigator.of(context).maybePop(),
+              onContinue: _resumeSession,
+              onExit: () => Navigator.of(context).maybePop(),
             )
           : SafeArea(
               child: Stack(

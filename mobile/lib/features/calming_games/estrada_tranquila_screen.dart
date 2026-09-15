@@ -36,6 +36,7 @@ class EstradaTranquilaScreenState extends State<EstradaTranquilaScreen>
   bool _breathingHintVisible = true;
   bool _hapticsEnabled = true;
   bool _showIntroHint = true;
+  bool _showSummary = false;
 
   /// Exposto apenas para testes de widget (não faz parte da API pública do
   /// jogo): permite inspecionar o estado do modelo puro sem acoplar o teste
@@ -69,11 +70,19 @@ class EstradaTranquilaScreenState extends State<EstradaTranquilaScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      if (_ticker.isActive) _ticker.stop();
-    } else if (state == AppLifecycleState.resumed) {
-      _lastTick = Duration.zero;
-      if (!_ticker.isActive) _ticker.start();
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        if (_ticker.isActive) _ticker.stop();
+        break;
+      case AppLifecycleState.resumed:
+        if (!_showSummary && !_ticker.isActive) {
+          _lastTick = Duration.zero;
+          _ticker.start();
+        }
+        break;
     }
   }
 
@@ -101,25 +110,15 @@ class EstradaTranquilaScreenState extends State<EstradaTranquilaScreen>
     _model.releaseTouch();
   }
 
-  Future<void> _onEncerrar() async {
-    _ticker.stop();
-    final Duration elapsed = Duration(milliseconds: (_model.elapsed * 1000).round());
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      isScrollControlled: true,
-      builder: (context) => CalmingSessionSummary(
-        elapsed: elapsed,
-        gameName: 'Estrada Tranquila',
-        onClose: () => Navigator.of(context).pop(),
-      ),
-    );
-    if (mounted) {
-      _lastTick = Duration.zero;
-      if (!_ticker.isActive) _ticker.start();
-    }
+  void _onEncerrar() {
+    if (_ticker.isActive) _ticker.stop();
+    setState(() => _showSummary = true);
+  }
+
+  void _resumeSession() {
+    setState(() => _showSummary = false);
+    _lastTick = Duration.zero;
+    if (!_ticker.isActive) _ticker.start();
   }
 
   @override
@@ -127,6 +126,18 @@ class EstradaTranquilaScreenState extends State<EstradaTranquilaScreen>
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final bool reduceMotion = MediaQuery.disableAnimationsOf(context);
     final int minutos = (_model.elapsed / 60).floor();
+
+    if (_showSummary) {
+      return Scaffold(
+        backgroundColor: scheme.surface,
+        body: CalmingSessionSummary(
+          elapsed: Duration(milliseconds: (_model.elapsed * 1000).round()),
+          gameName: 'Estrada Tranquila',
+          onContinue: _resumeSession,
+          onExit: () => Navigator.of(context).maybePop(),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(

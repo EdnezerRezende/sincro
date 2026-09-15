@@ -14,15 +14,19 @@ class CalmingSessionSummary extends StatelessWidget {
   const CalmingSessionSummary({
     super.key,
     required this.elapsed,
-    required this.onClose,
+    required this.onContinue,
+    required this.onExit,
     this.gameName,
   });
 
   /// Tempo total que a pessoa passou na sessão.
   final Duration elapsed;
 
-  /// Chamado ao tocar em "Voltar".
-  final VoidCallback onClose;
+  /// Chamado ao tocar em "Continuar": volta ao jogo de onde parou.
+  final VoidCallback onContinue;
+
+  /// Chamado ao tocar em "Sair": encerra de fato e deixa a tela do jogo.
+  final VoidCallback onExit;
 
   /// Nome do jogo (ex.: "Voo Sereno"), mostrado como um rótulo discreto
   /// acima da mensagem principal. Opcional.
@@ -44,7 +48,8 @@ class CalmingSessionSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CalmingSessionSummaryBody(
       elapsed: elapsed,
-      onClose: onClose,
+      onContinue: onContinue,
+      onExit: onExit,
       gameName: gameName,
     );
   }
@@ -55,12 +60,14 @@ enum _HowFeeling { calmer, same, restless }
 class _CalmingSessionSummaryBody extends StatefulWidget {
   const _CalmingSessionSummaryBody({
     required this.elapsed,
-    required this.onClose,
+    required this.onContinue,
+    required this.onExit,
     required this.gameName,
   });
 
   final Duration elapsed;
-  final VoidCallback onClose;
+  final VoidCallback onContinue;
+  final VoidCallback onExit;
   final String? gameName;
 
   @override
@@ -151,8 +158,16 @@ class _CalmingSessionSummaryBodyState extends State<_CalmingSessionSummaryBody> 
               SizedBox(
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: widget.onClose,
-                  child: const Text('Voltar'),
+                  onPressed: widget.onContinue,
+                  child: const Text('Continuar'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: widget.onExit,
+                  child: const Text('Sair'),
                 ),
               ),
               const SizedBox(height: 8),

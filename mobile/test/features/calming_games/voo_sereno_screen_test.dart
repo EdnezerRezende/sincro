@@ -20,6 +20,16 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> pumpFrames(WidgetTester tester, Duration total) async {
+    const Duration step = Duration(milliseconds: 16);
+    Duration remaining = total;
+    while (remaining > Duration.zero) {
+      final Duration thisStep = remaining < step ? remaining : step;
+      await tester.pump(thisStep);
+      remaining -= thisStep;
+    }
+  }
+
   testWidgets('renders and advances the model over 3 seconds', (tester) async {
     await pumpScreen(tester);
 
@@ -71,6 +81,83 @@ void main() {
     expect(find.text('Mais calmo(a)'), findsOneWidget);
     expect(find.text('Igual'), findsOneWidget);
     expect(find.text('Ainda agitado(a)'), findsOneWidget);
+    expect(find.text('Continuar'), findsOneWidget);
+    expect(find.text('Sair'), findsOneWidget);
+    expect(find.text('Voltar'), findsNothing);
+  });
+
+  testWidgets('Continuar resumes the game where it stopped', (tester) async {
+    await pumpScreen(tester);
+    await pumpFrames(tester, const Duration(seconds: 2));
+    final VooSerenoScreenState state = tester.state(find.byType(VooSerenoScreen));
+    final double before = state.debugModel.elapsed;
+
+    await tester.tap(find.byTooltip('Encerrar'));
+    await tester.pumpAndSettle();
+    await pumpFrames(tester, const Duration(seconds: 1));
+    expect(state.debugModel.elapsed, closeTo(before, 0.05), reason: 'jogo pausado no resumo');
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pump();
+    expect(find.byType(CalmingSessionSummary), findsNothing);
+    await pumpFrames(tester, const Duration(seconds: 1));
+    expect(state.debugModel.elapsed, greaterThan(before + 0.5), reason: 'jogo retomado');
+  });
+
+  testWidgets('backgrounding and returning does not resume behind the summary', (tester) async {
+    await pumpScreen(tester);
+    await pumpFrames(tester, const Duration(seconds: 1));
+    final VooSerenoScreenState state = tester.state(find.byType(VooSerenoScreen));
+
+    await tester.tap(find.byTooltip('Encerrar'));
+    await tester.pumpAndSettle();
+    final double paused = state.debugModel.elapsed;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpFrames(tester, const Duration(seconds: 1));
+
+    expect(find.byType(CalmingSessionSummary), findsOneWidget);
+    expect(state.debugModel.elapsed, closeTo(paused, 0.05), reason: 'não retoma por trás do resumo');
+
+    await tester.tap(find.text('Continuar'));
+    await pumpFrames(tester, const Duration(seconds: 1));
+    expect(state.debugModel.elapsed, greaterThan(paused + 0.5));
+  });
+
+  testWidgets('Sair leaves the game screen', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: sincroLightTheme,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const VooSerenoScreen(seed: 1)),
+                ),
+                child: const Text('abrir'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('abrir'));
+    await pumpFrames(tester, const Duration(milliseconds: 600));
+    expect(find.byType(VooSerenoScreen), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Encerrar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sair'));
+    await pumpFrames(tester, const Duration(milliseconds: 600));
+
+    expect(find.byType(VooSerenoScreen), findsNothing);
+    expect(find.text('abrir'), findsOneWidget);
   });
 
   group('CalmingSessionSummary time label', () {
@@ -80,7 +167,8 @@ void main() {
           theme: sincroLightTheme,
           home: CalmingSessionSummary(
             elapsed: const Duration(seconds: 30),
-            onClose: () {},
+            onContinue: () {},
+            onExit: () {},
           ),
         ),
       );
@@ -91,7 +179,8 @@ void main() {
           theme: sincroLightTheme,
           home: CalmingSessionSummary(
             elapsed: const Duration(minutes: 1),
-            onClose: () {},
+            onContinue: () {},
+            onExit: () {},
           ),
         ),
       );
@@ -102,7 +191,8 @@ void main() {
           theme: sincroLightTheme,
           home: CalmingSessionSummary(
             elapsed: const Duration(minutes: 3),
-            onClose: () {},
+            onContinue: () {},
+            onExit: () {},
           ),
         ),
       );
@@ -115,7 +205,8 @@ void main() {
           theme: sincroLightTheme,
           home: CalmingSessionSummary(
             elapsed: const Duration(minutes: 2),
-            onClose: () {},
+            onContinue: () {},
+            onExit: () {},
           ),
         ),
       );

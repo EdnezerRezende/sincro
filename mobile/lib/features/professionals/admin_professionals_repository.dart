@@ -57,4 +57,8 @@ class AdminProfessionalsRepository {
   Future<void> deactivate(String id) async {
     await _dio.delete('/admin/professionals/$id');
   }
+
+  Future<void> reactivate(String id) async {
+    await _dio.patch('/admin/professionals/$id', data: {'ativo': true});
+  }
 }

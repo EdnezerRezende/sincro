@@ -10,11 +10,14 @@ class ProfessionalsRepository {
     required double lat,
     required double lng,
     List<String> tags = const [],
+    String? q,
   }) async {
+    final termo = q?.trim() ?? '';
     final response = await _dio.get('/professionals/search', queryParameters: {
       'lat': lat,
       'lng': lng,
       if (tags.isNotEmpty) 'tags': tags.join(','),
+      if (termo.isNotEmpty) 'q': termo,
     });
     return (response.data as List)
         .map((json) => Professional.fromJson(json as Map<String, dynamic>))

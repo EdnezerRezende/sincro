@@ -50,6 +50,22 @@ void main() {
     expect(capturedQuery!.containsKey('tags'), false);
   });
 
+  test('search sends q only when non-empty', () async {
+    Map<String, dynamic>? params;
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (o, h) {
+      params = o.queryParameters;
+      h.resolve(Response(requestOptions: o, statusCode: 200, data: []));
+    }));
+    final repo = ProfessionalsRepository(dio);
+
+    await repo.search(lat: 1, lng: 2, q: 'hel');
+    expect(params!['q'], 'hel');
+
+    await repo.search(lat: 1, lng: 2, q: '   ');
+    expect(params!.containsKey('q'), isFalse);
+  });
+
   test('listTags parses a list of strings', () async {
     final dio = Dio(BaseOptions(baseUrl: 'http://test'));
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {

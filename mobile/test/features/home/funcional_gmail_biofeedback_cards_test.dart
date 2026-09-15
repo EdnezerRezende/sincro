@@ -151,6 +151,10 @@ void main() {
         expect(find.text('Ativo', findRichText: false), findsNothing);
         expect(find.text('72 bpm · Calmo'), findsOneWidget);
 
+        // O rodapé de emergência é fixo na direção A, então em janelas baixas a linha do
+        // Biofeedback pode ficar abaixo da dobra — rolamos até ela antes de tocar.
+        await tester.ensureVisible(find.text('72 bpm · Calmo'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('72 bpm · Calmo'));
         await tester.pumpAndSettle();
 

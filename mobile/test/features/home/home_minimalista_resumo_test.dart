@@ -11,6 +11,7 @@ import 'package:sincro_mobile/features/email_triage/email_triage_providers.dart'
 import 'package:sincro_mobile/features/email_triage/gmail_connection_repository.dart';
 import 'package:sincro_mobile/features/financas/finance_providers.dart';
 import 'package:sincro_mobile/features/financas/finance_summary.dart';
+import 'package:sincro_mobile/features/financas/financas_screen.dart';
 import 'package:sincro_mobile/features/financas/lancamento_financeiro.dart';
 import 'package:sincro_mobile/features/home/home_design_style.dart';
 import 'package:sincro_mobile/features/home/home_layout_mode.dart';
@@ -63,5 +64,23 @@ void main() {
     expect(find.text('Avisar Rede de Apoio'), findsOneWidget);
     final buttonRect = tester.getRect(find.text('Avisar Rede de Apoio'));
     expect(buttonRect.bottom, lessThanOrEqualTo(tester.view.physicalSize.height / tester.view.devicePixelRatio));
+  });
+
+  testWidgets('finance hero card has a "Finanças" semantics label and is fully tappable into FinancasScreen', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    await pumpHomeMinimalistaResumo(tester);
+    await tester.pumpAndSettle();
+
+    // O cartão hero não mostra um título "Finanças" visível — a leitura por voz precisa dizer
+    // "Finanças" explicitamente (mesmo padrão de `_FinancasCard` com `showTitle: false`).
+    expect(find.bySemanticsLabel(RegExp('Finanças')), findsOneWidget);
+
+    // O cartão inteiro é tocável, não só o botão "Ver finanças".
+    await tester.tap(find.text('Saldo Livre'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FinancasScreen), findsOneWidget);
+
+    handle.dispose();
   });
 }

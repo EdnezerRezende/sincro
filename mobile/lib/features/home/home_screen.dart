@@ -384,65 +384,100 @@ class _FinancasHeroCard extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const FinancasScreen()),
         );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.primary.withAlpha(15),
-        border: Border.all(color: scheme.primary.withAlpha(64)),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: summaryAsync.when(
-        loading: () => const SizedBox(
+    final decoration = BoxDecoration(
+      color: scheme.primary.withAlpha(15),
+      border: Border.all(color: scheme.primary.withAlpha(64)),
+      borderRadius: BorderRadius.circular(16),
+    );
+
+    return summaryAsync.when(
+      loading: () => Container(
+        decoration: decoration,
+        padding: const EdgeInsets.all(16),
+        child: const SizedBox(
           height: 96,
           child: Center(child: CircularProgressIndicator()),
         ),
-        error: (_, __) => InkWell(
-          onTap: abrir,
-          child: Text(
-            'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
-            style: theme.textTheme.bodySmall,
+      ),
+      error: (_, __) => Container(
+        decoration: decoration,
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: abrir,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Não foi possível carregar seu resumo agora. Toque para ver Finanças.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
           ),
         ),
-        data: (summary) {
-          final saldo = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(summary.saldoLivre);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Icon(Icons.account_balance_outlined, size: 20, color: scheme.primary),
-                const SizedBox(width: 8),
-                Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 4),
-              Text(
-                saldo,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontSize: 34,
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w700,
+      ),
+      data: (summary) {
+        final saldo = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(summary.saldoLivre);
+        final conteudo = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.account_balance_outlined, size: 20, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              saldo,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontSize: 34,
+                color: scheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(children: [
+              Expanded(
+                child: pendentes != null && pendentes > 0
+                    ? Text(
+                        '$pendentes ${pendentes == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              TextButton.icon(
+                onPressed: abrir,
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                iconAlignment: IconAlignment.end,
+                label: const Text('Ver finanças'),
+              ),
+            ]),
+          ],
+        );
+        return Container(
+          decoration: decoration,
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: abrir,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                // Igual a `_FinancasCard` com `showTitle: false`: sem um título "Finanças"
+                // visível neste cartão hero, a leitura por voz precisa dizer "Finanças"
+                // explicitamente — sem isso começaria em "Saldo Livre" e só mencionaria
+                // "Finanças" incidentalmente no "Ver finanças" do final.
+                child: Semantics(
+                  button: true,
+                  label: _financasSemanticsLabel(saldo, pendentes),
+                  excludeSemantics: true,
+                  child: conteudo,
                 ),
               ),
-              const SizedBox(height: 4),
-              Row(children: [
-                Expanded(
-                  child: pendentes != null && pendentes > 0
-                      ? Text(
-                          '$pendentes ${pendentes == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                TextButton.icon(
-                  onPressed: abrir,
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                  iconAlignment: IconAlignment.end,
-                  label: const Text('Ver finanças'),
-                ),
-              ]),
-            ],
-          );
-        },
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

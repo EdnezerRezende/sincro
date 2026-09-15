@@ -1,3 +1,8 @@
+const kEmergencyNamePlaceholder = '{primeiro nome}';
+const kEmergencyDefaultTemplate =
+    'Oi $kEmergencyNamePlaceholder, estou passando por um momento difícil agora e queria avisar. Não precisa ligar se não for possível.';
+const kEmergencyTemplateMaxLength = 300;
+
 class EmergencyMessage {
   const EmergencyMessage({
     required this.contactId,

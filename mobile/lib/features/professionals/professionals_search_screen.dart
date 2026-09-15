@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/app_input.dart';
 import 'location_service.dart';
 import 'professional.dart';
 import 'professional_detail_screen.dart';
@@ -22,16 +25,21 @@ class ProfessionalsSearchScreen extends ConsumerStatefulWidget {
   const ProfessionalsSearchScreen({super.key});
 
   @override
-  ConsumerState<ProfessionalsSearchScreen> createState() => _ProfessionalsSearchScreenState();
+  ConsumerState<ProfessionalsSearchScreen> createState() =>
+      _ProfessionalsSearchScreenState();
 }
 
-class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchScreen> {
+class _ProfessionalsSearchScreenState
+    extends ConsumerState<ProfessionalsSearchScreen> {
   double? _lat;
   double? _lng;
   LocationPermissionResult? _permissao;
   List<Professional>? _resultados;
   final Set<String> _tagsSelecionadas = {};
+  final TextEditingController _nome = TextEditingController();
+  Timer? _debounce;
   bool _carregando = true;
+  bool _buscandoLista = false;
   bool _erro = false;
 
   @override
@@ -40,23 +48,40 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
     _iniciarBusca();
   }
 
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _nome.dispose();
+    super.dispose();
+  }
+
+  void _onNomeChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _buscar);
+  }
+
   Future<void> _iniciarBusca() async {
     setState(() {
       _carregando = true;
       _erro = false;
     });
     try {
-      final permissao = await ref.read(locationServiceProvider).solicitarPermissao();
+      final permissao = await ref
+          .read(locationServiceProvider)
+          .solicitarPermissao();
       if (!mounted) return;
       setState(() => _permissao = permissao);
       if (permissao != LocationPermissionResult.granted) {
         setState(() => _carregando = false);
         return;
       }
-      final posicao = await ref.read(locationServiceProvider).obterPosicaoAtual();
+      final posicao = await ref
+          .read(locationServiceProvider)
+          .obterPosicaoAtual();
       _lat = posicao.latitude;
       _lng = posicao.longitude;
       await _buscar();
+      if (mounted) setState(() => _carregando = false);
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -70,26 +95,29 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
   Future<void> _buscar() async {
     if (_lat == null || _lng == null) return;
     setState(() {
-      _carregando = true;
+      _buscandoLista = true;
       _erro = false;
     });
     try {
-      final resultados = await ref.read(professionalsRepositoryProvider).search(
+      final resultados = await ref
+          .read(professionalsRepositoryProvider)
+          .search(
             lat: _lat!,
             lng: _lng!,
             tags: _tagsSelecionadas.toList(),
+            q: _nome.text,
           );
       if (mounted) {
         setState(() {
           _resultados = resultados;
-          _carregando = false;
+          _buscandoLista = false;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
           _erro = true;
-          _carregando = false;
+          _buscandoLista = false;
         });
       }
     }
@@ -121,7 +149,8 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
       return const Center(child: CircularProgressIndicator());
     }
     if (_permissao != null && _permissao != LocationPermissionResult.granted) {
-      final ehNegadaPermanentemente = _permissao == LocationPermissionResult.deniedForever;
+      final ehNegadaPermanentemente =
+          _permissao == LocationPermissionResult.deniedForever;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -130,11 +159,16 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
             children: [
               Text(mensagemPermissao(_permissao!), textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _iniciarBusca, child: const Text('Tentar novamente')),
+              ElevatedButton(
+                onPressed: _iniciarBusca,
+                child: const Text('Tentar novamente'),
+              ),
               if (ehNegadaPermanentemente) ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
-                  onPressed: () => ref.read(locationServiceProvider).abrirConfiguracoesDoApp(),
+                  onPressed: () => ref
+                      .read(locationServiceProvider)
+                      .abrirConfiguracoesDoApp(),
                   child: const Text('Abrir configurações'),
                 ),
               ],
@@ -150,9 +184,15 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Não foi possível buscar agora.', textAlign: TextAlign.center),
+              const Text(
+                'Não foi possível buscar agora.',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _iniciarBusca, child: const Text('Tentar novamente')),
+              ElevatedButton(
+                onPressed: _iniciarBusca,
+                child: const Text('Tentar novamente'),
+              ),
             ],
           ),
         ),
@@ -161,6 +201,20 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: AppInput(
+            label: 'Buscar pelo nome',
+            placeholder: 'Digite um nome',
+            controller: _nome,
+            onChanged: _onNomeChanged,
+            suffixIcon: AppInputSuffixIcon.clear,
+            onSuffixIconPressed: () {
+              _nome.clear();
+              _buscar();
+            },
+          ),
+        ),
         tagsAsync.when(
           data: (tags) => tags.isEmpty
               ? const SizedBox.shrink()
@@ -181,11 +235,16 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
           error: (_, __) => const SizedBox.shrink(),
         ),
         Expanded(
-          child: (_resultados == null || _resultados!.isEmpty)
+          child: _buscandoLista
+              ? const Center(child: CircularProgressIndicator())
+              : (_resultados == null || _resultados!.isEmpty)
               ? const Center(
                   child: Padding(
                     padding: EdgeInsets.all(24),
-                    child: Text('Nenhum profissional encontrado por aqui ainda.', textAlign: TextAlign.center),
+                    child: Text(
+                      'Nenhum profissional encontrado por aqui ainda.',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -194,10 +253,18 @@ class _ProfessionalsSearchScreenState extends ConsumerState<ProfessionalsSearchS
                     final profissional = _resultados![index];
                     return ListTile(
                       title: Text(profissional.nome),
-                      subtitle: Text('${profissional.tags.join(', ')} · ${profissional.cidade}'),
-                      trailing: Text('${profissional.distanciaKm?.toStringAsFixed(1)} km'),
+                      subtitle: Text(
+                        '${profissional.tags.join(', ')} · ${profissional.cidade}',
+                      ),
+                      trailing: Text(
+                        '${profissional.distanciaKm?.toStringAsFixed(1)} km',
+                      ),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => ProfessionalDetailScreen(profissional: profissional)),
+                        MaterialPageRoute(
+                          builder: (_) => ProfessionalDetailScreen(
+                            profissional: profissional,
+                          ),
+                        ),
                       ),
                     );
                   },

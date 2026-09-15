@@ -3,12 +3,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/stat_tile.dart';
+import '../../core/widgets/tonal_panel.dart';
 import 'biofeedback_providers.dart';
 import 'biofeedback_summary.dart';
 import 'estado_estresse.dart';
 
-const Color _kBorderLight = Color(0xFF9C9690); // 2.76:1 vs #FAF8F5
-const Color _kBorderDark = Color(0xFF66605A); // 2.68:1 vs #1A1F23
 
 class BiofeedbackScreen extends ConsumerWidget {
   const BiofeedbackScreen({super.key});
@@ -250,129 +250,85 @@ class _BiofeedbackContent extends StatelessWidget {
     }
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final borderColor = theme.brightness == Brightness.light
-        ? _kBorderLight
-        : _kBorderDark;
     final rotulos = _rotulos(atual.atualizadoEm, DateTime.now());
     final stressColor = switch (atual.estadoEstresse) {
       EstadoEstresse.calmo => context.sincroColors.success,
       EstadoEstresse.elevado => context.sincroColors.caution,
       EstadoEstresse.coletandoDados => colorScheme.onSurfaceVariant,
     };
+    final rotuloEstado = diasNoHistoricoAsync.when(
+      data: (dias) => _rotuloEstadoEstresse(atual.estadoEstresse, dias),
+      // Só "Coletando dados" usa a contagem de dias; para calmo/elevado o rótulo já está pronto
+      // e esperar pelo histórico só faria a linha piscar "Carregando..." à toa.
+      loading: () => atual.estadoEstresse == EstadoEstresse.coletandoDados
+          ? 'Carregando...'
+          : _rotuloEstadoEstresse(atual.estadoEstresse, 0),
+      error: (_, __) => _rotuloEstadoEstresse(atual.estadoEstresse, 0),
+    );
+    final atualizado = 'Atualizado ${rotulos.prefixoAtualizacao}às '
+        '${TimeOfDay.fromDateTime(atual.atualizadoEm).format(context)}';
+    final fcLabel = 'Frequência cardíaca em repouso ${rotulos.sufixoMedia}';
+    final vfcLabel = 'Variabilidade em repouso ${rotulos.sufixoMedia}';
+    final fc = atual.mediaFcHoje != null ? '${atual.mediaFcHoje!.round()}' : '—';
+    final vfc = atual.mediaVfcHoje != null ? '${atual.mediaVfcHoje!.round()}' : '—';
+
+    // Prancha "Biofeedback" da direção A: dois tiles de estatística lado a lado e, abaixo, o
+    // painel tonal com o estado atual e o horário da última atualização.
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       children: [
-        Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: borderColor, width: 1.5),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Frequência cardíaca em repouso ${rotulos.sufixoMedia}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        atual.mediaFcHoje != null
-                            ? '${atual.mediaFcHoje!.round()} bpm'
-                            : '—',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: borderColor, width: 1.5),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Variabilidade em repouso ${rotulos.sufixoMedia}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        atual.mediaVfcHoje != null
-                            ? '${atual.mediaVfcHoje!.round()} ms'
-                            : '—',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(
-              switch (atual.estadoEstresse) {
-                EstadoEstresse.calmo => Icons.check_circle_outline,
-                EstadoEstresse.elevado => Icons.warning_amber_outlined,
-                EstadoEstresse.coletandoDados => Icons.hourglass_empty_outlined,
-              },
-              size: 18,
-              color: stressColor,
+            Expanded(
+              child: StatTile(
+                label: fcLabel,
+                value: fc,
+                unit: atual.mediaFcHoje != null ? 'bpm' : null,
+                semanticsLabel: '$fcLabel: ${atual.mediaFcHoje != null ? '$fc bpm' : 'sem dados'}',
+              ),
             ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                diasNoHistoricoAsync.when(
-                  data: (dias) =>
-                      _rotuloEstadoEstresse(atual.estadoEstresse, dias),
-                  // Só "Coletando dados" usa a contagem de dias; para calmo/elevado o rótulo já
-                  // está pronto e esperar pelo histórico só faria a linha piscar "Carregando..."
-                  // à toa.
-                  loading: () =>
-                      atual.estadoEstresse == EstadoEstresse.coletandoDados
-                      ? 'Carregando...'
-                      : _rotuloEstadoEstresse(atual.estadoEstresse, 0),
-                  error: (_, __) =>
-                      _rotuloEstadoEstresse(atual.estadoEstresse, 0),
-                ),
-                style: theme.textTheme.bodyMedium?.copyWith(color: stressColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: StatTile(
+                label: vfcLabel,
+                value: vfc,
+                unit: atual.mediaVfcHoje != null ? 'ms' : null,
+                semanticsLabel: '$vfcLabel: ${atual.mediaVfcHoje != null ? '$vfc ms' : 'sem dados'}',
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Text(
-          'Atualizado ${rotulos.prefixoAtualizacao}às '
-          '${TimeOfDay.fromDateTime(atual.atualizadoEm).format(context)}',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
+        const SizedBox(height: 12),
+        TonalPanel(
+          child: Row(
+            children: [
+              Icon(
+                switch (atual.estadoEstresse) {
+                  EstadoEstresse.calmo => Icons.check_circle_outline,
+                  EstadoEstresse.elevado => Icons.warning_amber_outlined,
+                  EstadoEstresse.coletandoDados => Icons.hourglass_empty_outlined,
+                },
+                size: 24,
+                color: stressColor,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rotuloEstado,
+                      style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      atualizado,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ],

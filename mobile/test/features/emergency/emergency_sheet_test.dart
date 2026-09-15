@@ -36,6 +36,11 @@ EmergencyRepository _repo(void Function(Map<String, dynamic>) onBody) {
 }
 
 Future<void> _pumpSheet(WidgetTester tester, EmergencyRepository repo, List<Uri> launched) async {
+  tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+  tester.view.devicePixelRatio = 3.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
   await tester.pumpWidget(ProviderScope(
     overrides: [emergencyRepositoryProvider.overrideWithValue(repo)],
     child: MaterialApp(

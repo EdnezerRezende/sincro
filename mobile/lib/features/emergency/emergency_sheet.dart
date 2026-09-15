@@ -105,89 +105,90 @@ class _EmergencySheetState extends ConsumerState<_EmergencySheet> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: scheme.outline, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 8),
-              Text('Avisar Rede de Apoio', style: theme.textTheme.titleLarge),
-              const SizedBox(height: 8),
-              if (queue != null && !queue.isDone) ...[
-                Text('Enviado para ${primeiroNome(queue.last!.contactName)}. Próximo: ${primeiroNome(queue.current!.contactName)}',
-                    style: theme.textTheme.bodyLarge),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: TextStyle(color: scheme.error)),
-                ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: scheme.outline, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 12),
+            Text('Avisar Rede de Apoio', style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            Text('Escolha quem avisar e ajuste a mensagem, se quiser. Nada é enviado sem você confirmar.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            if (queue != null && !queue.isDone) ...[
+              Text('Enviado para ${primeiroNome(queue.last!.contactName)}. Próximo: ${primeiroNome(queue.current!.contactName)}',
+                  style: theme.textTheme.bodyLarge),
+              if (_error != null) ...[
                 const SizedBox(height: 8),
-                AppButton(
-                  label: 'Continuar com ${primeiroNome(queue.current!.contactName)}',
-                  size: AppButtonSize.medium,
-                  onPressed: _openCurrent,
-                ),
-              ] else ...[
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      for (final contact in widget.contacts)
-                        CheckboxListTile(
-                          dense: true,
-                          value: _selected.contains(contact.id),
-                          onChanged: (v) => setState(() => v == true ? _selected.add(contact.id) : _selected.remove(contact.id)),
-                          title: Text(contact.nome),
-                          subtitle: Text(contact.relacao),
-                          controlAffinity: ListTileControlAffinity.trailing,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _template,
-                  maxLines: 3,
-                  maxLength: kEmergencyTemplateMaxLength,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(border: OutlineInputBorder(), counterText: ''),
-                ),
-                Row(
+                Text(_error!, style: TextStyle(color: scheme.error)),
+              ],
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Continuar com ${primeiroNome(queue.current!.contactName)}',
+                size: AppButtonSize.large,
+                onPressed: _openCurrent,
+              ),
+            ] else ...[
+              Text('Quem avisar', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Card(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: Text('$kEmergencyNamePlaceholder vira o nome de cada pessoa',
-                          style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() => _template.text = kEmergencyDefaultTemplate),
-                      child: const Text('Restaurar padrão'),
-                    ),
+                    for (final contact in widget.contacts)
+                      CheckboxListTile(
+                        value: _selected.contains(contact.id),
+                        onChanged: (v) => setState(() => v == true ? _selected.add(contact.id) : _selected.remove(contact.id)),
+                        title: Text(contact.nome),
+                        subtitle: Text(contact.relacao),
+                        controlAffinity: ListTileControlAffinity.trailing,
+                      ),
                   ],
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 4),
-                  Text(_error!, style: TextStyle(color: scheme.error)),
+              ),
+              const SizedBox(height: 12),
+              Text('Mensagem', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _template,
+                maxLines: 4,
+                maxLength: kEmergencyTemplateMaxLength,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('$kEmergencyNamePlaceholder vira o nome de cada pessoa',
+                        style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _template.text = kEmergencyDefaultTemplate),
+                    child: const Text('Restaurar padrão'),
+                  ),
                 ],
+              ),
+              if (_error != null) ...[
                 const SizedBox(height: 8),
-                AppButton(
-                  label: emergencyCtaLabel(_selected.length, selectedNames),
-                  size: AppButtonSize.medium,
-                  icon: Icons.chat_outlined,
-                  isLoading: _preparing,
-                  onPressed: canSend ? _start : null,
-                ),
-                AppButton(
-                  label: 'Agora não',
-                  variant: AppButtonVariant.text,
-                  size: AppButtonSize.small,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
+                Text(_error!, style: TextStyle(color: scheme.error)),
               ],
+              const SizedBox(height: 12),
+              AppButton(
+                label: emergencyCtaLabel(_selected.length, selectedNames),
+                size: AppButtonSize.large,
+                icon: Icons.chat_outlined,
+                isLoading: _preparing,
+                onPressed: canSend ? _start : null,
+              ),
+              AppButton(
+                label: 'Agora não',
+                variant: AppButtonVariant.text,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

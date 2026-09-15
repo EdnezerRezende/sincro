@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/dio_error_message.dart';
 import 'admin_professional_form_validation.dart';
+import 'location_service.dart';
 import 'professional.dart';
 import 'professionals_providers.dart';
+import 'professionals_search_screen.dart';
 
 class AdminProfessionalFormScreen extends ConsumerStatefulWidget {
   const AdminProfessionalFormScreen({super.key, this.profissional});
@@ -108,6 +110,22 @@ class _AdminProfessionalFormScreenState extends ConsumerState<AdminProfessionalF
     }
   }
 
+  Future<void> _usarLocalizacaoAtual() async {
+    final location = ref.read(locationServiceProvider);
+    final permissao = await location.solicitarPermissao();
+    if (!mounted) return;
+    if (permissao != LocationPermissionResult.granted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemPermissao(permissao))));
+      return;
+    }
+    final pos = await location.obterPosicaoAtual();
+    if (!mounted) return;
+    setState(() {
+      _latitudeController.text = pos.latitude.toStringAsFixed(4);
+      _longitudeController.text = pos.longitude.toStringAsFixed(4);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,6 +153,11 @@ class _AdminProfessionalFormScreenState extends ConsumerState<AdminProfessionalF
             controller: _longitudeController,
             decoration: const InputDecoration(labelText: 'Longitude'),
             keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          ),
+          TextButton.icon(
+            onPressed: _usarLocalizacaoAtual,
+            icon: const Icon(Icons.my_location_outlined),
+            label: const Text('Usar minha localização atual'),
           ),
           if (_erro != null) ...[
             const SizedBox(height: 12),

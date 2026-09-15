@@ -64,3 +64,19 @@ Substitui o `AlertDialog` atual de `EmergencyButton`.
 
 ## Fora de escopo neste ciclo
 - Direção B em outras telas; estados de carregamento/vazio/erro redesenhados (mantêm-se os atuais); redesign de Finanças, Caixa de Entrada, Calendário, Biofeedback, Configurações, Alívio sensorial e Rede de apoio (as pranchas confirmam a estrutura atual, sem mudança funcional).
+
+## Emenda 2026-09-15 — Direção A em toda a aplicação
+
+Decisão do produto após ver a release 1.0.11 (2): o redesign restrito a `(resumo, minimalista)` ficou invisível para quem usa outro layout/estilo e as demais telas continuaram no visual antigo. A direção A passa a valer para **toda a aplicação**:
+
+1. **Componentes compartilhados** em `mobile/lib/core/widgets/`: `RowIcon` (tile 40 dp, raio 12, `primary` a 10 %), `SectionRow` (linha 56 dp — 48 dp em `dense` —, título 16 bold, subtítulo 14, chevron quando tocável, `destructive` em `error`), `SectionCard` (ganha `borderColor`), `TonalPanel` (fundo `primary` 6 %, borda 25 %, raio 16, `gradient` opcional) e `StatTile` (rótulo 14 + valor 34 `primary` + unidade 16). Só cores do `ColorScheme` — nada hard-coded —, para os temas claro e escuro.
+2. **Home nas seis combinações** (`HomeLayoutMode` × `HomeDesignStyle`): a estrutura é sempre a da prancha "Home · A" — saudação 24/14, cartão de destaque de Finanças, cartão agrupado (Caixa de Entrada, Próximos eventos, Biofeedback), "Apoio" (Encontrar profissional, Alívio sensorial) e rodapé fixo com `EmergencyButton`. O que muda por estilo:
+   - *Minimalista Refinado*: a prancha ao pé da letra (tonal chapado, respiro generoso).
+   - *Moderno Suave*: mesma malha com degradê sutil `primary → secondary` nos tiles e no cartão de destaque; acentos por linha vindos do esquema (`secondary`, `tertiary`), nunca de `Colors.*`.
+   - *Funcional Direto*: linhas densas (48 dp, ícone simples), borda forte (`#9C9690` claro / `#66605A` escuro, ≥ 2,5:1), títulos em todos os grupos ("Hoje", "Apoio"), linha "Status do dia", subtítulos só com o dado (ex.: o e-mail, sem "Conectado como") e check verde nos itens conectados/ativos. O cartão de destaque é mais compacto (valor em 28 sp).
+   - *Abas*: saudação + cartão de destaque fixos acima de "Hoje" / "Apoio"; as abas mostram os mesmos cartões agrupados; emergência fixa fora do `TabBarView`.
+   - "Ver finanças" é um link inline dentro do cartão tocável (não um botão), para não criar um segundo nó de acessibilidade dentro do `Semantics` do cartão.
+3. **Configurações** (prancha "Configurações"): grupos em `SectionCard` com título 16 bold — Perfil & Preferências, Conexões, Biofeedback (se ativo), Administração (admin), Ajuda, Conta — e o **valor atual como subtítulo** de cada linha (layout, estilo, tema, "N contatos", "Conectado como …", "Dia N de cada mês", "A cada 30 minutos"). Ações destrutivas em `error`. Novo `biofeedbackFrequenciaProvider`.
+4. **Demais telas**: Biofeedback (dois `StatTile` lado a lado + `TonalPanel` com estado atual e horário), Rede de apoio (contatos em `SectionCard`, atalho "Buscar profissional cadastrado · Pelo nome ou perto de você" → `/professionals`, "Adicionar contato" como botão de 56 dp no rodapé em vez de FAB), Alívio sensorial (Favoritos e "Todos os cartões" em `SectionCard`, ícone por categoria), Finanças ("Saldo Livre" em `TonalPanel`, mesmo chrome da Home), Caixa de Entrada (título de grupo 16 bold e margem 20 dp; os tiles com faixa âmbar de atenção são mantidos por acessibilidade).
+5. **Fora desta rodada**: Calendário (estrutura já confere com a prancha; 1 300 linhas, fica para rodada própria), Criar conta (já bate com a prancha), Direção B.
+6. **Testes**: `home_direcao_a_combinacoes_test.dart` (6 combinações × claro/escuro, emergência visível sem rolar em 390×844), `settings_screen_test.dart` (grupos, subtítulos, tema escuro, diálogo). As 8 falhas em `app_chip*_test.dart` são pré-existentes.

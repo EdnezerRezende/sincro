@@ -28,7 +28,10 @@ class EmergencyButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Barra de largura cheia e 56 dp (prancha Home·A): o CTA de emergência precisa ser o alvo
+    // mais fácil da tela, não um botão centralizado com metade da largura.
     return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
       onPressed: () => _handlePress(context, ref),
       icon: const Icon(Icons.favorite),
       label: const Text('Avisar Rede de Apoio'),

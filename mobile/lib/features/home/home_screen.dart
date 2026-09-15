@@ -125,8 +125,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .maybeWhen(data: (d) => d, orElse: () => HomeDesignStyle.minimalista);
 
     return Scaffold(
+      // Cabeçalho da prancha Home·A: logo 24 dp + wordmark "Sincro" 14 bold em onSurfaceVariant.
       appBar: AppBar(
-        title: const Text('Sincro'),
+        toolbarHeight: 48,
+        titleSpacing: 20,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/logos/symbol_transparent_512x512.png',
+              width: 24,
+              height: 24,
+              excludeFromSemantics: true,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Sincro',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -193,40 +214,56 @@ class _HomeAbasView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = style.pagePadding;
+    final theme = Theme.of(context);
     return DefaultTabController(
       length: 2,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(p, 4, p, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _HomeGreeting(),
-                SizedBox(height: style.gap),
-                _FinancasHeroCard(style: style),
-              ],
-            ),
-          ),
-          const TabBar(
-            tabs: [
-              Tab(text: 'Hoje'),
-              Tab(text: 'Apoio'),
-            ],
-          ),
           Expanded(
-            child: TabBarView(
-              children: [
-                ListView(
-                  padding: EdgeInsets.all(p),
-                  children: [_HojeSectionCard(style: style, showTitle: false)],
+            // Saudação e cartão de destaque rolam junto com o conteúdo das abas (a TabBar fica
+            // fixa no topo ao rolar). Com o cabeçalho fixo acima de um Expanded, em texto grande
+            // (textScaler 2.0) o TabBarView ficava com altura zero e as abas apareciam vazias.
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(p, 4, p, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const _HomeGreeting(),
+                        SizedBox(height: style.gap),
+                        _FinancasHeroCard(style: style),
+                      ],
+                    ),
+                  ),
                 ),
-                ListView(
-                  padding: EdgeInsets.all(p),
-                  children: [_ApoioSectionCard(style: style, showTitle: false)],
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _PinnedTabBarDelegate(
+                    backgroundColor: theme.scaffoldBackgroundColor,
+                    tabBar: const TabBar(
+                      tabs: [
+                        Tab(text: 'Hoje'),
+                        Tab(text: 'Apoio'),
+                      ],
+                    ),
+                  ),
                 ),
               ],
+              body: TabBarView(
+                children: [
+                  ListView(
+                    padding: EdgeInsets.all(p),
+                    children: [_HojeSectionCard(style: style, showTitle: false)],
+                  ),
+                  ListView(
+                    padding: EdgeInsets.all(p),
+                    children: [_ApoioSectionCard(style: style, showTitle: false)],
+                  ),
+                ],
+              ),
             ),
           ),
           _EmergencyFooter(style: style),
@@ -234,6 +271,29 @@ class _HomeAbasView extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Mantém a `TabBar` fixa no topo enquanto o cabeçalho (saudação + cartão de destaque) rola.
+class _PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedTabBarDelegate({required this.tabBar, required this.backgroundColor});
+
+  final TabBar tabBar;
+  final Color backgroundColor;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Material(color: backgroundColor, child: tabBar);
+  }
+
+  @override
+  bool shouldRebuild(_PinnedTabBarDelegate oldDelegate) =>
+      oldDelegate.tabBar != tabBar || oldDelegate.backgroundColor != backgroundColor;
 }
 
 /// Saudação da direção A: título 24 bold + subtítulo 14 em `onSurfaceVariant`.
@@ -363,6 +423,28 @@ Color? _accent(BuildContext context, HomeDesignStyle style, Color Function(Color
   return pick(Theme.of(context).colorScheme);
 }
 
+
+/// Ação secundária compacta no `trailing` de uma linha (selo de duas linhas da prancha, ~96 dp):
+/// um botão de uma linha ("Ativar Biofeedback", 165 dp) esmagava a coluna de texto e quebrava o
+/// título no meio da palavra em 390 dp. `dense` (Funcional) usa o rótulo curto de uma linha.
+Widget _compactAction(BuildContext context, {required String label, required VoidCallback onPressed, bool filled = false}) {
+  final style = ButtonStyle(
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
+    minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    textStyle: WidgetStatePropertyAll(
+      Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+    ),
+  );
+  final text = Text(label, textAlign: TextAlign.center, softWrap: true);
+  return ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 96),
+    child: filled
+        ? ElevatedButton(style: style, onPressed: onPressed, child: text)
+        : OutlinedButton(style: style, onPressed: onPressed, child: text),
+  );
+}
+
 /// Indicador de estado do Funcional Direto ("tudo visível"): check verde quando o item está
 /// conectado/ativo, antes do chevron.
 Widget _denseTrailing(BuildContext context, {required bool ok}) {
@@ -431,9 +513,11 @@ class _GmailRow extends ConsumerWidget {
             subtitle: style.dense
                 ? 'Conectar Gmail'
                 : 'Conecte seu Gmail para ver um resumo calmo dos seus e-mails.',
-            trailing: ElevatedButton(
+            trailing: _compactAction(
+              context,
+              label: style.dense ? 'Conectar' : 'Conectar\nGmail',
+              filled: true,
               onPressed: () => _conectarGmail(context, ref),
-              child: Text(style.dense ? 'Conectar' : 'Conectar Gmail'),
             ),
           );
         }
@@ -526,9 +610,10 @@ class _BiofeedbackRow extends ConsumerWidget {
       gradient: style.gradient,
       title: 'Biofeedback',
       subtitle: style.dense ? 'Ativar monitoramento' : 'Acompanhe seu bem-estar com seu smartwatch.',
-      trailing: OutlinedButton(
+      trailing: _compactAction(
+        context,
+        label: style.dense ? 'Ativar' : 'Ativar\nBiofeedback',
         onPressed: () => _ativarBiofeedback(context, ref),
-        child: Text(style.dense ? 'Ativar' : 'Ativar Biofeedback'),
       ),
     );
   }
@@ -660,7 +745,10 @@ class _FinancasHeroCard extends ConsumerWidget {
             Row(children: [
               Icon(Icons.account_balance_outlined, size: 20, color: scheme.primary),
               const SizedBox(width: 8),
-              Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              // Flexible: em texto grande (2,0×) o rótulo precisa quebrar, não estourar a linha.
+              Flexible(
+                child: Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              ),
             ]),
             const SizedBox(height: 4),
             Text(
@@ -685,21 +773,25 @@ class _FinancasHeroCard extends ConsumerWidget {
                 ),
                 // Link inline (não um botão): o cartão inteiro já é o alvo de toque, e um botão
                 // aqui criaria um segundo nó de acessibilidade dentro do `Semantics` de cima.
-                SizedBox(
-                  height: 44,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Ver finanças',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.primary,
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Ver finanças',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.primary,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.arrow_forward, size: 18, color: scheme.primary),
-                    ],
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_forward, size: 18, color: scheme.primary),
+                      ],
+                    ),
                   ),
                 ),
               ],

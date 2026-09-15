@@ -3,7 +3,7 @@ import 'row_icon.dart';
 
 /// Linha padrão de um `SectionCard` na direção A: ícone tonal (`RowIcon`) à esquerda, título
 /// 16 bold, subtítulo 14 em `onSurfaceVariant` e, à direita, o `trailing` informado ou um
-/// chevron quando a linha é tocável. Altura mínima de 56 dp (48 dp em `dense`).
+/// chevron quando a linha é tocável. Altura = padding + conteúdo, mínimo 56 dp (48 dp em `dense`).
 ///
 /// Variações de estilo da tela inicial passam por aqui sem mudar a estrutura:
 /// - `dense` (Funcional Direto): ícone simples de 20 dp em vez do tile, linha de 48 dp.
@@ -70,24 +70,50 @@ class SectionRow extends StatelessWidget {
     final Widget? trailingWidget = trailing ??
         (onTap != null ? Icon(Icons.chevron_right, color: scheme.onSurfaceVariant) : null);
 
-    return ListTile(
-      enabled: enabled,
-      onTap: enabled ? onTap : null,
-      minTileHeight: dense ? 48 : 56,
-      minVerticalPadding: dense ? 4 : 8,
-      leading: leadingWidget,
-      title: Text(
-        title,
-        style: theme.textTheme.bodyLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: destructive ? scheme.error : scheme.onSurface,
+    final titleStyle = theme.textTheme.bodyLarge?.copyWith(
+      fontWeight: FontWeight.w700,
+      color: destructive ? scheme.error : scheme.onSurface,
+    );
+    final subtitleStyle = theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant);
+
+    // Layout próprio em vez de `ListTile`: o tile do Material 3 posiciona título e subtítulo por
+    // linhas de base e soma ~16 dp a toda linha de duas linhas (uma linha simples saía com 69 dp
+    // em vez dos 56 da prancha). Aqui a altura é exatamente padding + conteúdo, com mínimo de 56
+    // (48 em dense): subtítulo de uma linha → 61 dp; de duas → 82; de três → 103, como na prancha.
+    Widget content = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: dense ? 48 : 56),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: dense ? 4 : 8),
+        child: Row(
+          children: [
+            if (leadingWidget != null) ...[leadingWidget, const SizedBox(width: 12)],
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: titleStyle),
+                  if (subtitleWidget != null)
+                    DefaultTextStyle.merge(style: subtitleStyle, child: subtitleWidget!)
+                  else if (subtitle != null)
+                    Text(subtitle!, style: subtitleStyle),
+                ],
+              ),
+            ),
+            if (trailingWidget != null) ...[const SizedBox(width: 12), trailingWidget],
+          ],
         ),
       ),
-      subtitle: subtitleWidget ??
-          (subtitle == null
-              ? null
-              : Text(subtitle!, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))),
-      trailing: trailingWidget,
+    );
+    if (!enabled) {
+      content = Opacity(opacity: 0.6, child: content);
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: content,
+      ),
     );
   }
 }

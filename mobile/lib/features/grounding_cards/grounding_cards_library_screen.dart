@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../calming_games/calming_games_section.dart';
 import 'grounding_card.dart';
 import 'grounding_card_detail_screen.dart';
 import 'grounding_cards_providers.dart';
@@ -42,6 +43,8 @@ class _GroundingCardsLibraryScreenState extends ConsumerState<GroundingCardsLibr
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
+              const CalmingGamesSection(),
+              const Divider(),
               favoritosAsync.maybeWhen(
                 data: (favoritos) => favoritos.isEmpty
                     ? const SizedBox.shrink()
@@ -99,21 +102,26 @@ class _GroundingCardsLibraryScreenState extends ConsumerState<GroundingCardsLibr
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Não foi possível carregar agora.', textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(groundingCardsProvider(_categoriaSelecionada)),
-                  child: const Text('Tentar novamente'),
-                ),
-              ],
+        error: (_, __) => ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            const CalmingGamesSection(),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Não foi possível carregar agora.', textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(groundingCardsProvider(_categoriaSelecionada)),
+                    child: const Text('Tentar novamente'),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

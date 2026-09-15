@@ -29,6 +29,8 @@ import 'features/financas/financas_screen.dart';
 import 'features/grounding_cards/grounding_cards_library_screen.dart';
 import 'features/grounding_cards/grounding_card_sugerido_screen.dart';
 import 'features/grounding_cards/admin_grounding_cards_list_screen.dart';
+import 'features/calming_games/voo_sereno_screen.dart';
+import 'features/calming_games/estrada_tranquila_screen.dart';
 import 'features/home/home_providers.dart';
 import 'core/theme/theme_mode_preference.dart';
 
@@ -183,6 +185,10 @@ class SincroApp extends ConsumerWidget {
         '/professionals': (_) => const ProfessionalsSearchScreen(),
         '/grounding-cards': (_) => const GroundingCardsLibraryScreen(),
         '/grounding-cards/sugerido': (_) => const GroundingCardSugeridoScreen(),
+        '/grounding-cards/jogos/voo-sereno': (_) =>
+            VooSerenoScreen(seed: DateTime.now().millisecondsSinceEpoch & 0x7fffffff),
+        '/grounding-cards/jogos/estrada-tranquila': (_) =>
+            EstradaTranquilaScreen(seed: DateTime.now().millisecondsSinceEpoch & 0x7fffffff),
         '/admin/professionals': (_) => const AdminProfessionalsListScreen(),
         '/admin/grounding-cards': (_) => const AdminGroundingCardsListScreen(),
       },

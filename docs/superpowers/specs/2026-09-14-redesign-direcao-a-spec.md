@@ -84,3 +84,11 @@ Decisão do produto após ver a release 1.0.11 (2): o redesign restrito a `(resu
    **Cartão de destaque de Finanças**: a linha de apoio abaixo do valor está sempre presente — "N lançamentos para revisar, sem pressa", "Tudo revisado por aqui" (zero) ou "Seus lançamentos do mês, sem pressa" (contagem indisponível) — e o valor encolhe (`FittedBox`) em vez de quebrar o número em texto grande; o mesmo vale para o valor do `StatTile`.
    **Biofeedback**: os dois `StatTile` ficam lado a lado (mesma altura) até 1,5× de texto e empilham a partir daí, para o rótulo não quebrar no meio da palavra; o horário da última atualização é sempre 24 h (`HH:mm`, "08:40"), independente do relógio do aparelho. **Rede de apoio**: os três botões do rodapé ("Adicionar contato", "Continuar", "Pular por enquanto") têm 56 dp.
 8. **Testes**: `home_direcao_a_combinacoes_test.dart` (6 combinações × claro/escuro, emergência visível sem rolar em 390×844), `settings_screen_test.dart` (grupos, subtítulos, tema escuro, diálogo). As 8 falhas em `app_chip*_test.dart` são pré-existentes.
+
+### Itens abertos registrados pela crítica final (2026-09-15, rodada 6 — APPROVED)
+Nenhum é regra da Emenda nem está nos arquivos alterados; ficam para decisão:
+1. Título das AppBars: pranchas usam 22/700; o tema aplica `titleLarge` 22/400 (`appBarTheme.titleTextStyle` nulo) — mudança global de uma linha em `core/theme.dart`.
+2. "Adicionar contato" na Rede de apoio é `OutlinedButton` de largura cheia; a prancha mostra botão preenchido mais estreito à direita (a largura cheia foi exigida pela crítica; o preenchimento é hierarquia).
+3. Copy do Biofeedback: prancha diz "Atualizado hoje às 08:40"; o app omite "hoje" no mesmo dia (mantém "ontem"/"em dd/mm").
+4. Faixa de tendência de 7 dias no Biofeedback (fora da prancha; ver item 5).
+5. O "—" de VFC ausente em 34 sp `primary` lê como barra sólida no escuro; `onSurfaceVariant` seria mais neutro.

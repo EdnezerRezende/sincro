@@ -759,25 +759,30 @@ class _FinancasHeroCard extends ConsumerWidget {
               ),
             ]),
             const SizedBox(height: 4),
-            Text(
-              saldo,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontSize: style.dense ? 28 : 34,
-                height: 1.1,
-                color: scheme.primary,
-                fontWeight: FontWeight.w700,
+            // FittedBox: em texto grande (2,0×) o valor encolhe em vez de quebrar no meio do
+            // número ("R\$ 1.240," / "00").
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                saldo,
+                maxLines: 1,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontSize: style.dense ? 28 : 34,
+                  height: 1.1,
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
-                  child: pendentes != null && pendentes > 0
-                      ? Text(
-                          '$pendentes ${pendentes == 1 ? "lançamento" : "lançamentos"} para revisar, sem pressa',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                        )
-                      : const SizedBox.shrink(),
+                  child: Text(
+                    _linhaDeApoio(pendentes),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
                 ),
                 // Link inline (não um botão): o cartão inteiro já é o alvo de toque, e um botão
                 // aqui criaria um segundo nó de acessibilidade dentro do `Semantics` de cima.
@@ -828,10 +833,17 @@ class _FinancasHeroCard extends ConsumerWidget {
 /// lançamentos para revisar, sem pressa", que continua visível na tela mas desapareceria da
 /// leitura por voz se não fosse incluída aqui explicitamente.
 String _financasSemanticsLabel(String saldoFormatado, int? pendentesCount) {
-  final base = 'Finanças — saldo livre $saldoFormatado';
-  if (pendentesCount == null || pendentesCount <= 0) return base;
+  return 'Finanças — saldo livre $saldoFormatado, ${_linhaDeApoio(pendentesCount)}';
+}
+
+/// Linha de apoio abaixo do valor, sempre presente (a prancha nunca mostra o cartão sem ela):
+/// a contagem calma de pendências quando há; "tudo revisado" quando não há; e uma frase neutra
+/// enquanto a contagem ainda carrega ou falhou — sem inventar um zero.
+String _linhaDeApoio(int? pendentesCount) {
+  if (pendentesCount == null) return 'Seus lançamentos do mês, sem pressa';
+  if (pendentesCount <= 0) return 'Tudo revisado por aqui';
   final sufixo = pendentesCount == 1 ? 'lançamento' : 'lançamentos';
-  return '$base, $pendentesCount $sufixo para revisar, sem pressa';
+  return '$pendentesCount $sufixo para revisar, sem pressa';
 }
 
 /// Contagem de pendências para o cartão de Finanças da Home. Nice-to-have sobre o resumo

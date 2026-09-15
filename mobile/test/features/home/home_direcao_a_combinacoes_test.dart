@@ -198,24 +198,55 @@ void main() {
   });
 
   // O selo compacto do trailing ("Ativar / Biofeedback", "Conectar / Gmail") não pode quebrar a
-  // própria palavra: no máximo duas linhas de rótulo e largura ≤ 112 dp × escala de texto.
+  // própria palavra: cada linha renderizada tem de ser uma palavra inteira do rótulo, no máximo
+  // duas linhas, largura ≤ 112 dp × escala — nos dois layouts, nos dois temas, em 1,0× e 1,3×.
   for (final scale in [1.0, 1.3]) {
-    for (final design in HomeDesignStyle.values) {
-      testWidgets('selo compacto cabe em duas linhas inteiras (${design.name}, ${scale}x)', (tester) async {
-        await _pump(tester, HomeLayoutMode.resumo, design, sincroLightTheme, textScale: scale, gmailConectado: false);
-        final botoes = find.byWidgetPredicate((w) => w is OutlinedButton || (w is ElevatedButton && w.child is Text));
-        expect(botoes, findsAtLeastNWidgets(2));
-        for (final botao in botoes.evaluate()) {
-          final label = find.descendant(of: find.byWidget(botao.widget), matching: find.byType(Text));
-          if (label.evaluate().isEmpty) continue; // CTA de emergência tem ícone + texto próprio
-          final texto = tester.renderObject<RenderParagraph>(label.first);
-          // bodyMedium 14 × altura 1,5 = 21 dp por linha (× escala).
-          final linhas = (texto.size.height / (21 * scale)).round();
-          final largura = tester.getSize(find.byWidget(botao.widget)).width;
-          expect(linhas, lessThanOrEqualTo(2), reason: 'rótulo "${(label.first.evaluate().single.widget as Text).data}" em $linhas linhas');
-          expect(largura, lessThanOrEqualTo(112 * scale + 0.5), reason: 'selo de $largura dp');
+    for (final modo in HomeLayoutMode.values) {
+      for (final design in HomeDesignStyle.values) {
+        for (final theme in [sincroLightTheme, sincroDarkTheme]) {
+          final tema = theme.brightness == Brightness.light ? 'claro' : 'escuro';
+          testWidgets('selo compacto em palavras inteiras (${modo.name}/${design.name}/$tema, ${scale}x)', (tester) async {
+            await _pump(tester, modo, design, theme, textScale: scale, gmailConectado: false);
+            final botoes = find.byWidgetPredicate((w) => w is OutlinedButton || (w is ElevatedButton && w.child is Text));
+            expect(botoes, findsAtLeastNWidgets(2));
+            for (final botao in botoes.evaluate()) {
+              final label = find.descendant(of: find.byWidget(botao.widget), matching: find.byType(Text));
+              if (label.evaluate().isEmpty) continue;
+              final textWidget = label.first.evaluate().single.widget as Text;
+              final paragraph = tester.renderObject<RenderParagraph>(label.first);
+              final linhas = _linhasRenderizadas(paragraph);
+              final palavras = textWidget.data!.split(RegExp(r'\s+'));
+              expect(linhas.length, lessThanOrEqualTo(2), reason: 'rótulo "${textWidget.data}" em ${linhas.length} linhas');
+              for (final linha in linhas) {
+                expect(palavras, contains(linha), reason: 'linha "$linha" não é uma palavra inteira de "${textWidget.data}"');
+              }
+              final largura = tester.getSize(find.byWidget(botao.widget)).width;
+              expect(largura, lessThanOrEqualTo(112 * scale + 0.5), reason: 'selo de $largura dp');
+            }
+          });
         }
-      });
+      }
     }
   }
+}
+
+/// Texto de cada linha realmente renderizada de um parágrafo (mesma fonte, escala e largura).
+List<String> _linhasRenderizadas(RenderParagraph paragraph) {
+  final painter = TextPainter(
+    text: paragraph.text,
+    textAlign: paragraph.textAlign,
+    textDirection: paragraph.textDirection,
+    textScaler: paragraph.textScaler,
+  )..layout(maxWidth: paragraph.size.width);
+  final texto = paragraph.text.toPlainText();
+  final linhas = <String>[];
+  var offset = 0;
+  for (final _ in painter.computeLineMetrics()) {
+    final range = painter.getLineBoundary(TextPosition(offset: offset));
+    linhas.add(texto.substring(range.start, range.end).trim());
+    offset = range.end + 1;
+    if (offset > texto.length) break;
+  }
+  painter.dispose();
+  return linhas;
 }

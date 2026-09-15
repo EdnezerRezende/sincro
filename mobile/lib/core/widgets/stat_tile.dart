@@ -38,8 +38,13 @@ class StatTile extends StatelessWidget {
             children: [
               Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 4),
-              Text.rich(
-                TextSpan(
+              // FittedBox: em texto grande o valor encolhe em vez de quebrar o número.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text.rich(
+                  maxLines: 1,
+                  TextSpan(
                   text: value,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontSize: 34,
@@ -57,6 +62,7 @@ class StatTile extends StatelessWidget {
                         ),
                       ),
                   ],
+                  ),
                 ),
               ),
             ],

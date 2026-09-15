@@ -35,7 +35,7 @@ class _ThrowingSyncService extends BiofeedbackSyncService {
   }
 }
 
-Widget _app({required bool? permissao, BiofeedbackSummary? resumo, ThemeData? theme}) {
+Widget _app({required bool? permissao, BiofeedbackSummary? resumo, ThemeData? theme, double textScale = 1.0}) {
   return ProviderScope(
     overrides: [
       biofeedbackResumoProvider.overrideWith((ref) async => resumo),
@@ -43,7 +43,14 @@ Widget _app({required bool? permissao, BiofeedbackSummary? resumo, ThemeData? th
       biofeedbackPermissaoProvider.overrideWith((ref) async => permissao),
       biofeedbackSyncServiceProvider.overrideWithValue(_ThrowingSyncService()),
     ],
-    child: MaterialApp(theme: theme ?? sincroLightTheme, home: const BiofeedbackScreen()),
+    child: MaterialApp(
+      theme: theme ?? sincroLightTheme,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: const BiofeedbackScreen(),
+    ),
   );
 }
 
@@ -118,4 +125,46 @@ void main() {
       expect(b.right, lessThanOrEqualTo(390));
     });
   }
+
+  testWidgets('shows the update time in 24h format regardless of device clock setting', (tester) async {
+    await tester.pumpWidget(_app(
+      permissao: true,
+      resumo: BiofeedbackSummary(
+        ultimaFc: 70,
+        mediaFcHoje: 68,
+        mediaVfcHoje: 54,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime.now().copyWith(hour: 8, minute: 40),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Atualizado às 08:40'), findsOneWidget);
+  });
+
+  testWidgets('at 2.0x text scale the stat tiles stack vertically and keep whole values', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_app(
+      permissao: true,
+      textScale: 2.0,
+      resumo: BiofeedbackSummary(
+        ultimaFc: 70,
+        mediaFcHoje: 68,
+        mediaVfcHoje: 54,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime.now(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final tiles = find.byType(Card);
+    expect(tiles, findsNWidgets(2));
+    final a = tester.getRect(tiles.at(0));
+    final b = tester.getRect(tiles.at(1));
+    // Empilhados: o segundo começa abaixo do primeiro e ambos ocupam a largura toda.
+    expect(b.top, greaterThanOrEqualTo(a.bottom));
+    expect(a.width, closeTo(350, 1));
+    expect(b.width, closeTo(350, 1));
+  });
 }

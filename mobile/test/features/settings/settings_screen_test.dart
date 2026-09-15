@@ -129,6 +129,6 @@ void main() {
     await tester.tap(find.text('Layout da tela inicial'));
     await tester.pumpAndSettle();
     expect(find.byType(SimpleDialog), findsOneWidget);
-    expect(find.text('Abas (Hoje / Finanças / Apoio)'), findsOneWidget);
+    expect(find.text('Abas (Hoje / Apoio)'), findsOneWidget);
   });
 }

@@ -6,9 +6,10 @@ enum HomeLayoutMode {
   /// menor volume de informação simultânea na tela.
   resumo('Resumo simples'),
 
-  /// Abas Hoje / Finanças / Apoio — mais informação organizada por contexto, para quem prefere
+  /// Abas Hoje / Apoio (Finanças fica fixo acima das abas) — mais informação organizada por
+  /// contexto, para quem prefere
   /// navegar entre seções em vez de rolar uma lista longa.
-  abas('Abas (Hoje / Finanças / Apoio)');
+  abas('Abas (Hoje / Apoio)');
 
   const HomeLayoutMode(this.label);
 

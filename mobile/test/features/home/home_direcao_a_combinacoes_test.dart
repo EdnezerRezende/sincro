@@ -162,7 +162,9 @@ void main() {
       // 56 dp de base (48 em dense): subtítulo de uma linha → 61, de duas → 82, de três → 103
       // (o pior caso da própria prancha, Biofeedback inativo com ação); nunca às 164–185 dp
       // medidas quando o botão de uma linha esmagava a coluna de texto.
+      final piso = design == HomeDesignStyle.funcional ? 48 : 56;
       for (final h in alturas) {
+        expect(h, greaterThanOrEqualTo(piso), reason: 'linha de $h dp abaixo do piso em ${design.name}');
         expect(h, lessThanOrEqualTo(104), reason: 'linha de $h dp em ${design.name}');
       }
       // O título não pode quebrar: cada título ocupa uma linha só.
@@ -194,4 +196,26 @@ void main() {
     expect(cta.width, greaterThanOrEqualTo(390 - 2 * 20 - 1));
     expect(cta.height, greaterThanOrEqualTo(56));
   });
+
+  // O selo compacto do trailing ("Ativar / Biofeedback", "Conectar / Gmail") não pode quebrar a
+  // própria palavra: no máximo duas linhas de rótulo e largura ≤ 112 dp × escala de texto.
+  for (final scale in [1.0, 1.3]) {
+    for (final design in HomeDesignStyle.values) {
+      testWidgets('selo compacto cabe em duas linhas inteiras (${design.name}, ${scale}x)', (tester) async {
+        await _pump(tester, HomeLayoutMode.resumo, design, sincroLightTheme, textScale: scale, gmailConectado: false);
+        final botoes = find.byWidgetPredicate((w) => w is OutlinedButton || (w is ElevatedButton && w.child is Text));
+        expect(botoes, findsAtLeastNWidgets(2));
+        for (final botao in botoes.evaluate()) {
+          final label = find.descendant(of: find.byWidget(botao.widget), matching: find.byType(Text));
+          if (label.evaluate().isEmpty) continue; // CTA de emergência tem ícone + texto próprio
+          final texto = tester.renderObject<RenderParagraph>(label.first);
+          // bodyMedium 14 × altura 1,5 = 21 dp por linha (× escala).
+          final linhas = (texto.size.height / (21 * scale)).round();
+          final largura = tester.getSize(find.byWidget(botao.widget)).width;
+          expect(linhas, lessThanOrEqualTo(2), reason: 'rótulo "${(label.first.evaluate().single.widget as Text).data}" em $linhas linhas');
+          expect(largura, lessThanOrEqualTo(112 * scale + 0.5), reason: 'selo de $largura dp');
+        }
+      });
+    }
+  }
 }

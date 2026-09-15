@@ -424,13 +424,18 @@ Color? _accent(BuildContext context, HomeDesignStyle style, Color Function(Color
 }
 
 
-/// Ação secundária compacta no `trailing` de uma linha (selo de duas linhas da prancha, ~96 dp):
-/// um botão de uma linha ("Ativar Biofeedback", 165 dp) esmagava a coluna de texto e quebrava o
-/// título no meio da palavra em 390 dp. `dense` (Funcional) usa o rótulo curto de uma linha.
+/// Ação secundária compacta no `trailing` de uma linha (selo de duas linhas da prancha, "Ativar /
+/// Biofeedback"): um botão de uma linha ("Ativar Biofeedback", 165 dp) esmagava a coluna de texto
+/// e quebrava o título no meio da palavra em 390 dp. `dense` (Funcional) usa o rótulo curto.
+///
+/// A largura é dimensionada pela palavra mais longa dos rótulos ("Biofeedback" ≈ 87 dp em 14/700
+/// Atkinson) mais padding e borda, e escala com o `textScaler` — senão a própria palavra do selo
+/// é que quebra ("Biofeedba / ck", "Conecta / r" em 1,3×).
 Widget _compactAction(BuildContext context, {required String label, required VoidCallback onPressed, bool filled = false}) {
+  final textScaler = MediaQuery.textScalerOf(context);
   final style = ButtonStyle(
-    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
-    minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+    minimumSize: WidgetStatePropertyAll(Size(64, textScaler.scale(44))),
     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     textStyle: WidgetStatePropertyAll(
       Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -438,12 +443,15 @@ Widget _compactAction(BuildContext context, {required String label, required Voi
   );
   final text = Text(label, textAlign: TextAlign.center, softWrap: true);
   return ConstrainedBox(
-    constraints: const BoxConstraints(maxWidth: 96),
+    constraints: BoxConstraints(maxWidth: textScaler.scale(_kCompactActionMaxWidth)),
     child: filled
         ? ElevatedButton(style: style, onPressed: onPressed, child: text)
         : OutlinedButton(style: style, onPressed: onPressed, child: text),
   );
 }
+
+/// Largura máxima do selo compacto em 1,0×: "Biofeedback" (≈ 87 dp) + 2×8 de padding + borda.
+const double _kCompactActionMaxWidth = 112;
 
 /// Indicador de estado do Funcional Direto ("tudo visível"): check verde quando o item está
 /// conectado/ativo, antes do chevron.

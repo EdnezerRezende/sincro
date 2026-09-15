@@ -21,11 +21,11 @@
 
 Somente a combinação `(HomeLayoutMode.resumo, HomeDesignStyle.minimalista)` muda. As outras cinco combinações permanecem.
 
-Ordem vertical, sem rolagem em 390×844:
+Ordem vertical, sem rolagem em 390×844 quando há contatos cadastrados; com o aviso de contatos a lista rola, o rodapé de emergência permanece fixo:
 1. AppBar existente ("Sincro" + engrenagem).
 2. Saudação: "Você está em dia" (`headlineMedium.copyWith(fontSize: 24)`) + "Tudo sob controle" (`bodyMedium`, `onSurfaceVariant`).
 3. **Cartão de destaque Finanças**: fundo `primary` a 6 %, borda `primary` a 25 %, linha "Saldo Livre" (ícone + label bold 14), valor em 34 sp bold `primary`, linha "N lançamentos para revisar, sem pressa" + link "Ver finanças →" (44 dp).
-4. **Cartão agrupado** (branco, borda `outline`, divisores internos) com três linhas de 56 dp: Caixa de Entrada, Próximos eventos, Biofeedback (trailing `OutlinedButton` "Ativar Biofeedback" quando inativo).
+4. **Cartão agrupado** (branco, borda `outline`, divisores internos) com três linhas de ~72 dp (título + subtítulo dos cards): Caixa de Entrada, Próximos eventos, Biofeedback (trailing `OutlinedButton` "Ativar Biofeedback" quando inativo).
 5. Título "Apoio" (16 bold) + cartão agrupado com duas linhas: Encontrar profissional, Alívio sensorial (subtítulos reais).
 6. Rodapé fixo (fora da rolagem): `EmergencyButton` 56 dp + `_NoContactsHint` quando não há contatos.
 

@@ -8,10 +8,12 @@ import { UpdateProfessionalDto } from './dto/update-professional.dto';
 export class ProfessionalsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async search(lat: number, lng: number, tags?: string[]) {
-    const professionals = await this.prisma.professional.findMany({
-      where: tags && tags.length > 0 ? { ativo: true, tags: { hasSome: tags } } : { ativo: true },
-    });
+  async search(lat: number, lng: number, tags?: string[], q?: string) {
+    const where: Record<string, unknown> = { ativo: true };
+    if (tags && tags.length > 0) where.tags = { hasSome: tags };
+    if (q && q.trim()) where.nome = { contains: q.trim(), mode: 'insensitive' };
+
+    const professionals = await this.prisma.professional.findMany({ where });
 
     return professionals
       .map((professional) => ({

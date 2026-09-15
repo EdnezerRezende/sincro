@@ -53,6 +53,31 @@ describe('ProfessionalsService', () => {
         where: { ativo: true, tags: { hasSome: ['TEA', 'TDAH'] } },
       });
     });
+
+    it('filters by name (case-insensitive contains) when q is given, keeping distance sort', async () => {
+      const prisma = buildPrismaMock();
+      prisma.professional.findMany.mockResolvedValue([buildProfessional({ id: 'p1', nome: 'Helena Prado' })]);
+      const service = new ProfessionalsService(prisma as any);
+
+      const result = await service.search(0, 0, undefined, 'hel');
+
+      expect(prisma.professional.findMany).toHaveBeenCalledWith({
+        where: { ativo: true, nome: { contains: 'hel', mode: 'insensitive' } },
+      });
+      expect(result[0].distanciaKm).toBeDefined();
+    });
+
+    it('combines q with tags', async () => {
+      const prisma = buildPrismaMock();
+      prisma.professional.findMany.mockResolvedValue([]);
+      const service = new ProfessionalsService(prisma as any);
+
+      await service.search(0, 0, ['Psicólogo'], 'ana');
+
+      expect(prisma.professional.findMany).toHaveBeenCalledWith({
+        where: { ativo: true, tags: { hasSome: ['Psicólogo'] }, nome: { contains: 'ana', mode: 'insensitive' } },
+      });
+    });
   });
 
   describe('listActiveTags', () => {

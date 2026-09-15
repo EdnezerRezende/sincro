@@ -14,7 +14,11 @@ import '../onboarding/anamnese/anamnese_wizard_screen.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../trusted_contacts/trusted_contacts_screen.dart';
 import '../../core/theme/theme_mode_preference.dart';
+import '../../core/widgets/section_card.dart';
+import '../../core/widgets/section_row.dart';
+import '../email_triage/email_triage_providers.dart';
 import '../home/home_design_style.dart';
+import '../trusted_contacts/trusted_contacts_providers.dart';
 
 /// Resultado do diálogo de dia de recebimento. Existe para separar "cancelou" (o `showDialog`
 /// devolve `null`) de "pediu para limpar" (devolve uma instância com `dia == null`).
@@ -295,6 +299,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _busy = true);
     try {
       await ref.read(biofeedbackCacheProvider).setFrequenciaMinutos(escolhida);
+      ref.invalidate(biofeedbackFrequenciaProvider);
       final ativo = await ref.read(biofeedbackCacheProvider).isAtivo();
       if (ativo) {
         await ref.read(biofeedbackBackgroundTaskProvider).registrar(Duration(minutes: escolhida));
@@ -396,130 +401,196 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           data: (ativos) => ativos,
           orElse: () => true,
         );
-    final isAdmin = ref.watch(onboardingStatusProvider).maybeWhen(
-          data: (status) => status.isAdmin,
-          orElse: () => false,
+    final onboarding = ref.watch(onboardingStatusProvider);
+    final isAdmin = onboarding.maybeWhen(data: (status) => status.isAdmin, orElse: () => false);
+
+    // Subtítulos com o valor atual de cada preferência (prancha "Configurações" da direção A):
+    // a pessoa vê o que está escolhido sem precisar abrir cada diálogo. Enquanto carregam,
+    // ficam em branco em vez de piscar "Carregando...".
+    final layoutAtual = ref.watch(homeLayoutModeProvider).maybeWhen(data: (m) => m.label, orElse: () => null);
+    final designAtual = ref.watch(homeDesignStyleProvider).maybeWhen(data: (d) => d.label, orElse: () => null);
+    final temaAtual = ref.watch(themeModeProvider).maybeWhen(data: (t) => t.label, orElse: () => null);
+    final contatos = ref.watch(trustedContactsListProvider).maybeWhen(
+          data: (lista) => switch (lista.length) {
+            0 => 'Nenhum contato ainda',
+            1 => '1 contato',
+            final n => '$n contatos',
+          },
+          orElse: () => null,
         );
-    final destructiveColor = Theme.of(context).colorScheme.error;
+    final gmail = ref.watch(gmailConnectionStatusProvider).maybeWhen(
+          data: (status) => status.connected
+              ? 'Conectado como ${status.gmailEmail ?? 'sua conta Google'}'
+              : 'Nenhuma conta conectada',
+          orElse: () => null,
+        );
+    final diaRecebimento = onboarding.maybeWhen(
+          data: (status) =>
+              status.diaRecebimento == null ? 'Não definido' : 'Dia ${status.diaRecebimento} de cada mês',
+          orElse: () => null,
+        );
+    final frequencia = ref.watch(biofeedbackFrequenciaProvider).maybeWhen(
+          data: (minutos) {
+            final opcao = BiofeedbackFrequencia.values
+                .where((f) => f.duracao.inMinutes == minutos)
+                .firstOrNull;
+            return 'A cada ${opcao?.label ?? '$minutos minutos'}';
+          },
+          orElse: () => null,
+        );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Configurações')),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [
-          const _SectionHeader('Perfil & Preferências'),
-          ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: const Text('Editar perfil sensorial'),
-            onTap: _busy ? null : _editSensoryProfile,
+          SectionCard(
+            title: 'Perfil & Preferências',
+            children: [
+              SectionRow(
+                icon: Icons.person_outline,
+                title: 'Editar perfil sensorial',
+                enabled: !_busy,
+                onTap: _editSensoryProfile,
+              ),
+              SectionRow(
+                icon: Icons.dashboard_customize_outlined,
+                title: 'Layout da tela inicial',
+                subtitle: layoutAtual,
+                enabled: !_busy,
+                onTap: _editHomeLayout,
+              ),
+              SectionRow(
+                icon: Icons.palette_outlined,
+                title: 'Estilo de design',
+                subtitle: designAtual,
+                enabled: !_busy,
+                onTap: _editDesignStyle,
+              ),
+              SectionRow(
+                icon: Icons.brightness_4_outlined,
+                title: 'Tema',
+                subtitle: temaAtual,
+                enabled: !_busy,
+                onTap: _editThemeMode,
+              ),
+              SectionRow(
+                icon: Icons.people_outline,
+                title: 'Gerenciar contatos de confiança',
+                subtitle: contatos,
+                enabled: !_busy,
+                onTap: _manageContacts,
+              ),
+              SectionRow(
+                icon: Icons.delete_outline,
+                title: 'Apagar perfil sensorial',
+                destructive: true,
+                enabled: !_busy,
+                onTap: _deleteSensoryProfile,
+              ),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.dashboard_customize_outlined),
-            title: const Text('Layout da tela inicial'),
-            onTap: _busy ? null : _editHomeLayout,
-          ),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Estilo de design'),
-            onTap: _busy ? null : _editDesignStyle,
-          ),
-          ListTile(
-            leading: const Icon(Icons.brightness_4_outlined),
-            title: const Text('Tema'),
-            onTap: _busy ? null : _editThemeMode,
-          ),
-          ListTile(
-            leading: const Icon(Icons.people_outline),
-            title: const Text('Gerenciar contatos de confiança'),
-            onTap: _busy ? null : _manageContacts,
-          ),
-          ListTile(
-            leading: Icon(Icons.delete_outline, color: destructiveColor),
-            title: const Text('Apagar perfil sensorial'),
-            onTap: _busy ? null : _deleteSensoryProfile,
-          ),
-          const _SectionHeader('Conexões'),
-          ListTile(
-            leading: const Icon(Icons.mail_outline),
-            title: const Text('Desconectar Gmail'),
-            onTap: _busy ? null : _disconnectGmail,
-          ),
-          ListTile(
-            leading: const Icon(Icons.calendar_today_outlined),
-            title: const Text('Definir dia de recebimento'),
-            onTap: _busy ? null : _editDiaRecebimento,
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Conexões',
+            children: [
+              SectionRow(
+                icon: Icons.mail_outline,
+                title: 'Desconectar Gmail',
+                subtitle: gmail,
+                enabled: !_busy,
+                onTap: _disconnectGmail,
+              ),
+              SectionRow(
+                icon: Icons.calendar_today_outlined,
+                title: 'Definir dia de recebimento',
+                subtitle: diaRecebimento,
+                enabled: !_busy,
+                onTap: _editDiaRecebimento,
+              ),
+            ],
           ),
           // Ambos os itens só fazem sentido com o Biofeedback ativo: a frequência só governa o
           // agendamento em background, que nem existe enquanto o pilar está desativado.
           if (biofeedbackAtivo) ...[
-            const _SectionHeader('Biofeedback'),
-            ListTile(
-              leading: const Icon(Icons.favorite_border),
-              title: const Text('Frequência do Biofeedback'),
-              onTap: _busy ? null : _editBiofeedbackFrequencia,
-            ),
-            SwitchListTile(
-              secondary: const Icon(Icons.notifications_outlined),
-              title: const Text('Alertas de estresse'),
-              value: biofeedbackAlertasAtivos,
-              onChanged: _busy ? null : _alternarAlertasBiofeedback,
-            ),
-            ListTile(
-              leading: Icon(Icons.favorite_border, color: destructiveColor),
-              title: const Text('Desativar Biofeedback'),
-              onTap: _busy ? null : _desativarBiofeedback,
+            const SizedBox(height: 16),
+            SectionCard(
+              title: 'Biofeedback',
+              children: [
+                SectionRow(
+                  icon: Icons.favorite_border,
+                  title: 'Frequência do Biofeedback',
+                  subtitle: frequencia,
+                  enabled: !_busy,
+                  onTap: _editBiofeedbackFrequencia,
+                ),
+                SectionRow(
+                  icon: Icons.notifications_outlined,
+                  title: 'Alertas de estresse',
+                  subtitle: biofeedbackAlertasAtivos ? 'Ativados' : 'Desativados',
+                  enabled: !_busy,
+                  onTap: () => _alternarAlertasBiofeedback(!biofeedbackAlertasAtivos),
+                  trailing: Switch(
+                    value: biofeedbackAlertasAtivos,
+                    onChanged: _busy ? null : _alternarAlertasBiofeedback,
+                  ),
+                ),
+                SectionRow(
+                  icon: Icons.favorite_border,
+                  title: 'Desativar Biofeedback',
+                  destructive: true,
+                  enabled: !_busy,
+                  onTap: _desativarBiofeedback,
+                ),
+              ],
             ),
           ],
           if (isAdmin) ...[
-            const _SectionHeader('Administração'),
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings_outlined),
-              title: const Text('Gerenciar profissionais (admin)'),
-              onTap: _busy
-                  ? null
-                  : () => Navigator.of(context).pushNamed('/admin/professionals'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings_outlined),
-              title: const Text('Gerenciar cartões de aterramento (admin)'),
-              onTap: _busy
-                  ? null
-                  : () => Navigator.of(context).pushNamed('/admin/grounding-cards'),
+            const SizedBox(height: 16),
+            SectionCard(
+              title: 'Administração',
+              children: [
+                SectionRow(
+                  icon: Icons.admin_panel_settings_outlined,
+                  title: 'Gerenciar profissionais (admin)',
+                  enabled: !_busy,
+                  onTap: () => Navigator.of(context).pushNamed('/admin/professionals'),
+                ),
+                SectionRow(
+                  icon: Icons.style_outlined,
+                  title: 'Gerenciar cartões de aterramento (admin)',
+                  enabled: !_busy,
+                  onTap: () => Navigator.of(context).pushNamed('/admin/grounding-cards'),
+                ),
+              ],
             ),
           ],
-          const _SectionHeader('Ajuda'),
-          ListTile(
-            leading: const Icon(Icons.help_outline),
-            title: const Text('Ver guia do app'),
-            onTap: _busy ? null : _abrirGuia,
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Ajuda',
+            children: [
+              SectionRow(
+                icon: Icons.help_outline,
+                title: 'Ver guia do app',
+                enabled: !_busy,
+                onTap: _abrirGuia,
+              ),
+            ],
           ),
-          const _SectionHeader('Conta'),
-          ListTile(
-            leading: Icon(Icons.logout, color: destructiveColor),
-            title: const Text('Sair'),
-            onTap: _busy ? null : _signOut,
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Conta',
+            children: [
+              SectionRow(
+                icon: Icons.logout,
+                title: 'Sair',
+                destructive: true,
+                enabled: !_busy,
+                onTap: _signOut,
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
       ),
     );
   }

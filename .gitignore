@@ -1,3 +1,6 @@
 infra/backups/
 mobile/android/key.properties
 mobile/android/app/release-key.jks
+
+# Espaço de trabalho de planos (superpowers SDD)
+.superpowers/

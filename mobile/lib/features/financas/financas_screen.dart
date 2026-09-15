@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/tonal_panel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
@@ -195,7 +196,7 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [
           summaryAsync.when(
             loading: () => const Padding(
@@ -399,6 +400,9 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// Cartão de destaque de Finanças (prancha "Finanças" da direção A): painel tonal com "Saldo
+/// Livre" e o valor em 34 sp `primary` — o mesmo chrome do cartão da Home, para a pessoa
+/// reconhecer o número ao chegar aqui.
 class _SaldoLivreCard extends StatelessWidget {
   const _SaldoLivreCard({required this.summary});
 
@@ -406,28 +410,25 @@ class _SaldoLivreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(
-          left: BorderSide(
-            color: Theme.of(context).colorScheme.primary,
-            width: 4,
-          ),
-        ),
-      ),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return TonalPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Saldo Livre', style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 8),
+          Row(children: [
+            Icon(Icons.account_balance_outlined, size: 20, color: scheme.primary),
+            const SizedBox(width: 8),
+            Text('Saldo Livre', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 4),
           Text(
             _currency.format(summary.saldoLivre),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w800,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontSize: 34,
+              height: 1.1,
+              color: scheme.primary,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

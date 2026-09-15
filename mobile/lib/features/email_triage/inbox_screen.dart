@@ -342,15 +342,17 @@ class _SectionHeader extends StatelessWidget {
       child: Padding(
         // 16/24/16/12: on the 8dp grid (theme.dart _spacing4/_spacing6/_spacing3) — the
         // previous top inset of 20 was off-grid.
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        // Título de grupo da direção A (16 bold), com a mesma margem lateral de 20 dp das
+        // demais telas; 24 em cima separa os grupos, 8 embaixo cola o título no primeiro item.
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: colors.onSurface,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),

@@ -53,6 +53,11 @@ final biofeedbackDiasNoHistoricoProvider = FutureProvider.autoDispose<int>((ref)
   return historico.where((d) => !(d.data.year == hoje.year && d.data.month == hoje.month && d.data.day == hoje.day)).length;
 });
 
+/// Frequência de sincronização em minutos, para o subtítulo "A cada N" em Configurações.
+final biofeedbackFrequenciaProvider = FutureProvider.autoDispose<int>((ref) {
+  return ref.watch(biofeedbackCacheProvider).getFrequenciaMinutos();
+});
+
 final biofeedbackAlertasAtivosProvider = FutureProvider.autoDispose<bool>((ref) {
   return ref.watch(biofeedbackCacheProvider).getAlertasAtivos();
 });

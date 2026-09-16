@@ -5,9 +5,13 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { FIREBASE_ADMIN } from '../src/auth/firebase-admin.provider';
-import { EmailFinanceRegexParserService } from '../src/financas/parser/email-finance-regex-parser.service';
+import { GmailApiClient } from '../src/gmail/gmail-api-client.service';
+import { FinanceEmailProcessor } from '../src/financas/parser/finance-email-processor.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { buildFakeFirebaseAdmin } from './support/fake-firebase-admin';
+import { buildFakeGmailApiClient } from './support/fake-gmail-api-client';
+
+const FAKE_REFRESH_TOKEN = 'fake-refresh-token';
 
 interface ResumoResponseBody {
   saldoLivre: number;
@@ -17,7 +21,7 @@ interface ResumoResponseBody {
 describe('Finanças — isolamento multi-tenant (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  let parser: EmailFinanceRegexParserService;
+  let processor: FinanceEmailProcessor;
   let userAId: string;
   let userBId: string;
 
@@ -32,12 +36,18 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
     })
       .overrideProvider(FIREBASE_ADMIN)
       .useValue(buildFakeFirebaseAdmin())
+      .overrideProvider(GmailApiClient)
+      .useValue(
+        buildFakeGmailApiClient({
+          corpo: 'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
+        }),
+      )
       .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
     prisma = moduleRef.get(PrismaService);
-    parser = moduleRef.get(EmailFinanceRegexParserService);
+    processor = moduleRef.get(FinanceEmailProcessor);
 
     const userA = await prisma.user.upsert({
       where: { firebaseUid: firebaseUidA },
@@ -92,16 +102,12 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
       recebidoEm: new Date(),
     };
 
-    await parser.processEmail(
-      userAId,
-      emailComum,
-      'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
-    );
-    await parser.processEmail(
-      userBId,
-      emailComum,
-      'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
-    );
+    await processor.processar(userAId, FAKE_REFRESH_TOKEN, emailComum, {
+      marcado: false,
+    });
+    await processor.processar(userBId, FAKE_REFRESH_TOKEN, emailComum, {
+      marcado: false,
+    });
 
     const countA = await prisma.lancamentoFinanceiro.count({
       where: { userId: userAId, emailMessageId: 'msg-encaminhado-1' },
@@ -115,10 +121,20 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
 
   it('calculates saldoLivre independently per user', async () => {
     await prisma.contaFinanceira.create({
-      data: { userId: userAId, nome: 'Conta A', tipo: 'CORRENTE', saldoAtual: 500 },
+      data: {
+        userId: userAId,
+        nome: 'Conta A',
+        tipo: 'CORRENTE',
+        saldoAtual: 500,
+      },
     });
     await prisma.contaFinanceira.create({
-      data: { userId: userBId, nome: 'Conta B', tipo: 'CORRENTE', saldoAtual: 9999 },
+      data: {
+        userId: userBId,
+        nome: 'Conta B',
+        tipo: 'CORRENTE',
+        saldoAtual: 9999,
+      },
     });
 
     const resumoA = await request(app.getHttpServer())

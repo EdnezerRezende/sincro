@@ -1,7 +1,29 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { decode as decodeHtmlEntities } from 'html-entities';
+import {
+  FormatError,
+  InvalidPDFException,
+  PasswordException,
+  PDFParse,
+} from 'pdf-parse';
+import type { AnexoMeta } from '../financas/parser/finance-evidence';
+import { TimeoutError, withTimeout } from '../common/with-timeout';
 import { GmailOAuthService } from './gmail-oauth.service';
+
+/** Limite de tamanho do PDF baixado (evita segurar um anexo gigante em memória), quantidade de
+ *  páginas lidas (fatura raramente tem valor/vencimento além da 3ª página) e prazo máximo de
+ *  parsing (`pdf-parse`/`pdfjs-dist` pode travar em PDF malformado) — usados por
+ *  `GmailApiClient.escolherPdf`/`fetchPdfAttachmentText`, Task 10. */
+export const PDF_MAX_BYTES = 5 * 1024 * 1024;
+export const PDF_PAGINAS = 3;
+export const PDF_TIMEOUT_MS = 10_000;
+
+/** Nome do marcador (label) Gmail que o usuário aplica manualmente a e-mails financeiros que a
+ *  triagem automática perdeu — usado por `GmailApiClient.listarIdsComMarcador`, Task 11. */
+export const MARCADOR_NOME = 'Sincro/Finanças';
+const MARCADOR_JANELA = 'newer_than:90d';
+const MARCADOR_MAX = 100;
 
 export interface FetchedEmail {
   gmailMessageId: string;
@@ -9,6 +31,15 @@ export interface FetchedEmail {
   assunto: string;
   corpo: string;
   recebidoEm: Date;
+  labelIds: string[];
+}
+
+/** Corpo completo mais os anexos DA MENSAGEM (sem baixar o conteúdo — só o metadado necessário
+ *  para decidir se vale a pena buscar um PDF depois, ver `fetchPdfAttachmentText` na Task 10). */
+export interface CorpoComAnexos {
+  texto: string;
+  ehPreview: boolean;
+  anexos: AnexoMeta[];
 }
 
 /** Categorias/labels do Gmail que não são a caixa "Principal". `fetchInitialUnread` já exclui a
@@ -32,8 +63,34 @@ const NOISE_LABELS = new Set([
   'SPAM',
 ]);
 
+/** Usado por `GmailApiClient.pareceHtml` para detectar HTML entregue como `text/plain` — ver o
+ *  doc daquele método.
+ *
+ *  Uma tag de verdade precisa ser seguida por `>`, `/>`, ou espaço+atributo — não basta `<` + nome
+ *  de tag. A versão anterior (`\b` logo após o nome) dava falso positivo em prosa genuína: "O preço
+ *  <p 10 reais", "De: Paulo <p@empresa.com>", "<br@empresa.com.br>" todas continham `<p\b` ou
+ *  `<br\b` sem ser HTML nenhum.
+ *
+ *  Três alternativas, nessa ordem:
+ *  1. `<!doctype\s` — doctype legado (`<!DOCTYPE HTML PUBLIC "-//W3C//DTD ...">`, comum em e-mail
+ *     gerado por Word/Outlook) tratado à parte: seu conteúdo ("HTML PUBLIC ...") não é um atributo
+ *     `nome=valor` e não vale a pena tentar casar com a regra 3.
+ *  2. `<!--` — comentário, incluindo condicionais do Outlook (`<!--[if mso]>`) e preheaders
+ *     (`<!--Preheader-->`); sem exigir espaço depois dos hífens, ao contrário da versão anterior.
+ *  3. Tag conhecida seguida de fechamento imediato (`<br>`, `<br/>`) OU de uma lista de um ou mais
+ *     atributos (nomes com letra/dígito/`_`/`:`/`.`/`-` — `:` e `.` cobrem `xmlns:v=`,
+ *     `xmlns:o=`) terminando em `=` (`<table border cellpadding=0>`: "border" é atributo booleano
+ *     sem valor, só "cellpadding=" precisa fechar em `=`). De propósito, a lista de atributos SÓ
+ *     aceita terminar em `=`, nunca direto em `>` — isso é o que mantém "Se x<p então y > z" como
+ *     falso positivo evitado (senão "y > z", com espaço antes do `>`, colaria como se fosse o
+ *     fechamento de uma tag `<p ...>`). */
+const HTML_TAG_RE =
+  /<!doctype\s|<!--|<(html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w:.-]+(?:\s+[\w:.-]+)*\s*=)/i;
+
 @Injectable()
 export class GmailApiClient {
+  private readonly logger = new Logger(GmailApiClient.name);
+
   constructor(private readonly oauthService: GmailOAuthService) {}
 
   private gmailFor(refreshToken: string): gmail_v1.Gmail {
@@ -60,9 +117,13 @@ export class GmailApiClient {
    *  fully apply when the user has the tabbed inbox turned off — the Gmail search-operator
    *  documentation doesn't explicitly guarantee that behavior, so the label check stays as a
    *  safety net instead of being trusted alone. */
-  async fetchInitialUnread(refreshToken: string): Promise<{ emails: FetchedEmail[]; historyId: string | null }> {
+  async fetchInitialUnread(
+    refreshToken: string,
+  ): Promise<{ emails: FetchedEmail[]; historyId: string | null }> {
     const gmail = this.gmailFor(refreshToken);
-    const sevenDaysAgoUnixSeconds = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+    const sevenDaysAgoUnixSeconds = Math.floor(
+      (Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000,
+    );
     const list = await gmail.users.messages.list({
       userId: 'me',
       q: `is:unread after:${sevenDaysAgoUnixSeconds} in:inbox -category:promotions -category:social -category:updates -category:forums`,
@@ -84,7 +145,11 @@ export class GmailApiClient {
   async fetchIncremental(
     refreshToken: string,
     sinceHistoryId: string,
-  ): Promise<{ emails: FetchedEmail[]; historyId: string | null; historyExpired: boolean }> {
+  ): Promise<{
+    emails: FetchedEmail[];
+    historyId: string | null;
+    historyExpired: boolean;
+  }> {
     const gmail = this.gmailFor(refreshToken);
     try {
       const history = await gmail.users.history.list({
@@ -99,7 +164,11 @@ export class GmailApiClient {
         }
       }
       const emails = await this.fetchMessages(gmail, Array.from(messageIds));
-      return { emails, historyId: history.data.historyId ?? sinceHistoryId, historyExpired: false };
+      return {
+        emails,
+        historyId: history.data.historyId ?? sinceHistoryId,
+        historyExpired: false,
+      };
     } catch (error: unknown) {
       // Gmail returns 404 when the stored historyId is too old (beyond Gmail's retention window).
       const status = (error as { code?: number })?.code;
@@ -110,7 +179,10 @@ export class GmailApiClient {
     }
   }
 
-  private async fetchMessages(gmail: gmail_v1.Gmail, ids: string[]): Promise<FetchedEmail[]> {
+  private async fetchMessages(
+    gmail: gmail_v1.Gmail,
+    ids: string[],
+  ): Promise<FetchedEmail[]> {
     const emails: FetchedEmail[] = [];
     for (const id of ids) {
       const message = await gmail.users.messages.get({
@@ -124,13 +196,15 @@ export class GmailApiClient {
       const labelIds = message.data.labelIds ?? [];
       if (labelIds.some((label) => NOISE_LABELS.has(label))) continue;
       const headers = message.data.payload?.headers ?? [];
-      const getHeader = (name: string) => headers.find((h) => h.name === name)?.value ?? '';
+      const getHeader = (name: string) =>
+        headers.find((h) => h.name === name)?.value ?? '';
       emails.push({
         gmailMessageId: id,
         remetente: getHeader('From'),
         assunto: getHeader('Subject'),
         corpo: message.data.snippet ?? '',
         recebidoEm: new Date(Number(message.data.internalDate ?? Date.now())),
+        labelIds,
       });
     }
     return emails;
@@ -163,35 +237,197 @@ export class GmailApiClient {
    *  receipts, most personal mail sent from a webmail client) has NO `text/plain` part at all —
    *  only `text/html` — so falling back straight to `snippet` for those, as this used to do, meant
    *  the majority of e-mails were silently truncated to ~200 characters with no indication anything
-   *  was missing. When only HTML is available, it's converted to plain text (see
-   *  `htmlParaTextoLegivel`) instead of being dumped raw on screen or discarded. Only when NEITHER
-   *  part exists does this fall back to Gmail's own `snippet` — `ehPreview: true` tells callers
-   *  that what they got is a short preview, not the full message, so the UI can say so instead of
-   *  presenting it as complete. */
-  async fetchFullBody(
+   *  was missing.
+   *
+   *  A `text/plain` part that actually LOOKS like HTML (`pareceHtml`, e.g. Pefisa/Leroy sending the
+   *  wrong MIME type with the right content) is converted through `htmlParaTextoLegivel` before
+   *  being returned, instead of being dumped raw with visible tags. When there's no usable
+   *  `text/plain` at all, this falls back to the `text/html` part, also converted through
+   *  `htmlParaTextoLegivel` — but ONLY if that conversion yields non-empty text; an HTML part that
+   *  converts to an empty string (e.g. only images/tracking pixels, no readable text) is treated as
+   *  if it didn't exist, and the code falls through to the `snippet` below rather than returning an
+   *  empty `texto`. Only when NEITHER a usable `text/plain` NOR a non-empty converted `text/html`
+   *  exists does this fall back to Gmail's own `snippet` — `ehPreview: true` tells callers that what
+   *  they got is a short preview, not the full message, so the UI can say so instead of presenting
+   *  it as complete.
+   *
+   *  `anexos` is collected by `listarAnexos`, which walks the whole MIME tree (at any depth,
+   *  including nested `multipart/mixed` > `multipart/related` > ...) gathering metadata (filename,
+   *  mimeType, size, attachmentId) for every part that carries BOTH a `filename` and a
+   *  `body.attachmentId` — inline parts used only for HTML rendering (e.g. an embedded image
+   *  referenced by `Content-ID` with `filename: ''`) don't have a `filename` and are correctly left
+   *  out. Nothing is downloaded here; `body.size` is trusted as reported by Gmail, defaulting to `0`
+   *  when Gmail omits it. */
+  async fetchFullBodyComAnexos(
     refreshToken: string,
     gmailMessageId: string,
-  ): Promise<{ texto: string; ehPreview: boolean }> {
+  ): Promise<CorpoComAnexos> {
     const gmail = this.gmailFor(refreshToken);
-    const message = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+    const message = await gmail.users.messages.get({
+      userId: 'me',
+      id: gmailMessageId,
+      format: 'full',
+    });
+    const anexos = this.listarAnexos(message.data.payload);
 
     const textoPlano = this.extractPlainTextBody(message.data.payload);
     if (textoPlano !== null && textoPlano.trim() !== '') {
-      return { texto: textoPlano, ehPreview: false };
+      const texto = GmailApiClient.pareceHtml(textoPlano)
+        ? GmailApiClient.htmlParaTextoLegivel(textoPlano)
+        : textoPlano;
+      if (texto.trim() !== '') return { texto, ehPreview: false, anexos };
     }
 
     const html = this.extractHtmlBody(message.data.payload);
     if (html !== null) {
       const textoConvertido = GmailApiClient.htmlParaTextoLegivel(html);
       if (textoConvertido !== '') {
-        return { texto: textoConvertido, ehPreview: false };
+        return { texto: textoConvertido, ehPreview: false, anexos };
       }
     }
 
-    return { texto: message.data.snippet ?? '', ehPreview: true };
+    return { texto: message.data.snippet ?? '', ehPreview: true, anexos };
   }
 
-  private extractPlainTextBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+  /** Contrato antigo, mantido para o leitor de e-mail (`email-summary.controller.ts`) e o rascunho
+   *  de resposta (`email-reply.controller.ts`) — nenhum dos dois precisa de anexos, então recebem
+   *  só `{ texto, ehPreview }`. Únicos dois chamadores: o caminho de sincronização financeira usa
+   *  `fetchFullBodyComAnexos` diretamente, via `FinanceEmailProcessor`. */
+  async fetchFullBody(
+    refreshToken: string,
+    gmailMessageId: string,
+  ): Promise<{ texto: string; ehPreview: boolean }> {
+    const { texto, ehPreview } = await this.fetchFullBodyComAnexos(
+      refreshToken,
+      gmailMessageId,
+    );
+    return { texto, ehPreview };
+  }
+
+  /** Primeiro anexo elegível para leitura como PDF: `mimeType === 'application/pdf'` OU nome
+   *  terminado em `.pdf`/`.PDF` (Santander manda `application/octet-stream` com extensão certa),
+   *  dentro do limite de tamanho `PDF_MAX_BYTES`. Estática porque não depende de estado da
+   *  instância — só decide, a partir dos metadados já coletados por `listarAnexos`, se vale a
+   *  pena chamar `fetchPdfAttachmentText`. */
+  static escolherPdf(anexos: AnexoMeta[]): AnexoMeta | null {
+    return (
+      anexos.find(
+        (a) =>
+          (a.mimeType === 'application/pdf' || /\.pdf$/i.test(a.filename)) &&
+          a.size <= PDF_MAX_BYTES,
+      ) ?? null
+    );
+  }
+
+  /** Texto das `PDF_PAGINAS` primeiras páginas do PDF anexo escolhido por `escolherPdf`. Erros do
+   *  `attachments.get` (rede, permissão, mensagem apagada) PROPAGAM para o chamador classificar
+   *  via `classificarErroGmail` — não são "PDF ilegível". Só o que acontece DEPOIS do download
+   *  (senha, corrompido, timeout, ou qualquer outra exceção não reconhecida que não tenha a forma
+   *  de um erro gaxios) vira `null`: a extração de valor/vencimento simplesmente fica sem esse
+   *  dado, sem derrubar o processamento do e-mail.
+   *
+   *  `pdf-parse` 2.x usa a API de classe (`PDFParse`); `rag/document-processor.service.ts` usa a
+   *  API 1.x (função solta) e está incompatível com a versão instalada — dívida separada, não
+   *  copiada aqui.
+   *
+   *  `timeoutMs` tem `PDF_TIMEOUT_MS` como padrão e só existe como parâmetro para os testes
+   *  conseguirem apertar o prazo (evita um teste de timeout real de 10s). Qualquer erro
+   *  desconhecido tratado como "PDF ilegível" (`null`) é registrado em `warn` com nome+mensagem
+   *  antes de virar `null` — um erro de infraestrutura genuíno (ex.: `pdfjs-dist` falhando ao
+   *  montar seu worker) não pode ficar indistinguível de um PDF corrompido de verdade nos logs. */
+  async fetchPdfAttachmentText(
+    refreshToken: string,
+    gmailMessageId: string,
+    anexo: AnexoMeta,
+    timeoutMs: number = PDF_TIMEOUT_MS,
+  ): Promise<string | null> {
+    const gmail = this.gmailFor(refreshToken);
+    const att = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId: gmailMessageId,
+      id: anexo.attachmentId,
+    });
+    if (!att.data.data) return null;
+    const buffer = Buffer.from(att.data.data, 'base64url');
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const { text } = await withTimeout(
+        parser.getText({ first: PDF_PAGINAS }),
+        timeoutMs,
+      );
+      return text;
+    } catch (e) {
+      if (
+        e instanceof PasswordException ||
+        e instanceof InvalidPDFException ||
+        e instanceof FormatError ||
+        e instanceof TimeoutError
+      ) {
+        return null;
+      }
+      // Erro gaxios de verdade (tem `.config` ou `.response`, como todo GaxiosError) propaga para
+      // o chamador classificar. Qualquer outra coisa (lixo binário que o pdf-parse não reconheceu
+      // com uma exceção específica sequer) é tratada como "PDF ilegível" — mas primeiro é
+      // registrada em `warn`, com nome e mensagem do erro: sem isso, um erro de infraestrutura de
+      // verdade (ex.: "Setting up fake worker failed" do pdfjs-dist, um ambiente mal configurado)
+      // fica indistinguível de um PDF genuinamente corrompido/ilegível nos logs.
+      if (
+        !(e as { config?: unknown }).config &&
+        !(e as { response?: unknown }).response
+      ) {
+        const erro = e as { name?: string; message?: string };
+        this.logger.warn(
+          `PDF ilegível (anexo "${anexo.filename}"): ${erro.name ?? 'Error'}: ${erro.message ?? String(e)}`,
+        );
+        return null;
+      }
+      throw e;
+    } finally {
+      await parser.destroy().catch(() => undefined);
+    }
+  }
+
+  /** Remetentes reais (Pefisa/Leroy) mandam HTML dentro da parte `text/plain` (MIME type errado,
+   *  conteúdo certo). Olha os 340 primeiros caracteres, depois de remover espaços do início — a
+   *  busca não é ancorada no início, então um preheader de texto puro antes de `<html>` não engana
+   *  a detecção. A janela é 340, não 300: uma tag que começa perto do limite de 300 (ex.: preheader
+   *  longo antes do doctype/`<html>`) ainda precisa de espaço, depois do `<`, para o nome da tag,
+   *  o(s) atributo(s) e o `>` de fechamento — cortar exatamente em 300 partiria a tag ao meio e
+   *  perderia a detecção. `trimStart()` já remove um BOM (U+FEFF) inicial sozinho — a especificação
+   *  ECMA-262 lista `<ZWNBSP>` (U+FEFF) como `WhiteSpace`, então não é preciso um `.replace()`
+   *  separado para isso; um `.replace(/^\uFEFF/, '')` explícito seria redundante aqui. */
+  static pareceHtml(texto: string): boolean {
+    return HTML_TAG_RE.test(texto.trimStart().slice(0, 340));
+  }
+
+  /** Percorre a árvore MIME coletando metadado de todo anexo (qualquer parte com `filename` e
+   *  `body.attachmentId`) — sem baixar o conteúdo. Usado pela Task 10 (`fetchPdfAttachmentText`)
+   *  para decidir se vale a pena buscar um PDF, e pela evidência de cobrança (`finance-evidence.ts`)
+   *  para checar nome/tipo do anexo. */
+  private listarAnexos(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): AnexoMeta[] {
+    if (!payload) return [];
+    const proprio: AnexoMeta[] =
+      payload.filename && payload.body?.attachmentId
+        ? [
+            {
+              filename: payload.filename,
+              mimeType: payload.mimeType ?? '',
+              size: payload.body.size ?? 0,
+              attachmentId: payload.body.attachmentId,
+            },
+          ]
+        : [];
+    return [
+      ...proprio,
+      ...(payload.parts ?? []).flatMap((p) => this.listarAnexos(p)),
+    ];
+  }
+
+  private extractPlainTextBody(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): string | null {
     if (!payload) return null;
     if (payload.mimeType === 'text/plain' && payload.body?.data) {
       return Buffer.from(payload.body.data, 'base64url').toString('utf8');
@@ -205,7 +441,9 @@ export class GmailApiClient {
 
   /** Same traversal as `extractPlainTextBody`, looking for `text/html` instead — this is the part
    *  that exists on most real-world e-mail when `text/plain` doesn't. */
-  private extractHtmlBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+  private extractHtmlBody(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): string | null {
     if (!payload) return null;
     if (payload.mimeType === 'text/html' && payload.body?.data) {
       return Buffer.from(payload.body.data, 'base64url').toString('utf8');
@@ -287,7 +525,9 @@ export class GmailApiClient {
       let fim = Math.min(inicio + MAX_BYTES_POR_PALAVRA, bytes.length);
       // Nunca cortar no meio de uma sequência UTF-8 multibyte.
       while (fim < bytes.length && (bytes[fim] & 0xc0) === 0x80) fim--;
-      palavras.push(`=?UTF-8?B?${bytes.subarray(inicio, fim).toString('base64')}?=`);
+      palavras.push(
+        `=?UTF-8?B?${bytes.subarray(inicio, fim).toString('base64')}?=`,
+      );
       inicio = fim;
     }
     return palavras.join('\r\n ');
@@ -311,7 +551,12 @@ export class GmailApiClient {
    *  RFC 5322, no parsing needed. */
   async sendReply(
     refreshToken: string,
-    params: { gmailMessageId: string; para: string; assunto: string; texto: string },
+    params: {
+      gmailMessageId: string;
+      para: string;
+      assunto: string;
+      texto: string;
+    },
   ): Promise<void> {
     const gmail = this.gmailFor(refreshToken);
     const original = await gmail.users.messages.get({
@@ -322,11 +567,19 @@ export class GmailApiClient {
     });
     const headers = original.data.payload?.headers ?? [];
     const sanitizar = GmailApiClient.sanitizarValorDeCabecalho;
-    const messageIdHeader = sanitizar(headers.find((h) => h.name === 'Message-Id')?.value ?? '');
-    const referencesHeader = sanitizar(headers.find((h) => h.name === 'References')?.value ?? '');
-    const references = [referencesHeader, messageIdHeader].filter(Boolean).join(' ');
+    const messageIdHeader = sanitizar(
+      headers.find((h) => h.name === 'Message-Id')?.value ?? '',
+    );
+    const referencesHeader = sanitizar(
+      headers.find((h) => h.name === 'References')?.value ?? '',
+    );
+    const references = [referencesHeader, messageIdHeader]
+      .filter(Boolean)
+      .join(' ');
     const para = GmailApiClient.codificarEnderecoPara(sanitizar(params.para));
-    const assunto = GmailApiClient.codificarCabecalhoRfc2047(`Re: ${sanitizar(params.assunto)}`);
+    const assunto = GmailApiClient.codificarCabecalhoRfc2047(
+      `Re: ${sanitizar(params.assunto)}`,
+    );
 
     // Só os CABEÇALHOS são higienizados/codificados; `params.texto` — exatamente o que o usuário
     // leu e editou na tela — vai para o corpo byte a byte, sem nenhum pós-processamento.
@@ -344,7 +597,44 @@ export class GmailApiClient {
 
     await gmail.users.messages.send({
       userId: 'me',
-      requestBody: { raw: encoded, threadId: original.data.threadId ?? undefined },
+      requestBody: {
+        raw: encoded,
+        threadId: original.data.threadId ?? undefined,
+      },
     });
+  }
+
+  /** IDs de mensagens marcadas manualmente pelo usuário com o label `MARCADOR_NOME` — sinal de que
+   *  a triagem automática perdeu um e-mail financeiro real. O nome do label é comparado com
+   *  `normalize('NFC')` + `toLowerCase()` (o usuário pode ter criado o label com acentuação
+   *  digitada de outra forma, ou capitalização diferente). Se o label não existir na conta ainda
+   *  (usuário nunca marcou nada), devolve `{ labelId: null, ids: new Set() }` sem nenhuma chamada a
+   *  `messages.list` — não há por que gastar uma chamada de API procurando mensagens de um label
+   *  que não existe. Janela de `newer_than:90d` (marcações antigas já passaram pelo reprocessamento
+   *  normal ou não interessam mais) e `maxResults: 100` (teto razoável por ciclo; o usuário não
+   *  costuma marcar dezenas de e-mails de uma vez). */
+  async listarIdsComMarcador(
+    refreshToken: string,
+  ): Promise<{ labelId: string | null; ids: Set<string> }> {
+    const gmail = this.gmailFor(refreshToken);
+    const labels = await gmail.users.labels.list({ userId: 'me' });
+    const alvo = MARCADOR_NOME.normalize('NFC').toLowerCase();
+    const label = (labels.data.labels ?? []).find(
+      (l) => (l.name ?? '').normalize('NFC').toLowerCase() === alvo,
+    );
+    if (!label?.id) return { labelId: null, ids: new Set() };
+
+    const lista = await gmail.users.messages.list({
+      userId: 'me',
+      labelIds: [label.id],
+      q: MARCADOR_JANELA,
+      maxResults: MARCADOR_MAX,
+    });
+    const ids = new Set(
+      (lista.data.messages ?? [])
+        .map((m) => m.id)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    return { labelId: label.id, ids };
   }
 }

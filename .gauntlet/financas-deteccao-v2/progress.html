@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><title>Gauntlet — Finanças detecção v2</title>
+<style>body{font-family:system-ui;margin:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;vertical-align:top;font-size:13px}th{background:#f3f3f3}.ok{color:#0a7}.rej{color:#c33}</style>
+<h1>Gauntlet — Finanças: detecção de e-mails v2</h1>
+<p>Spec: docs/superpowers/specs/2026-09-15-financas-deteccao-email-v2-design.md · Plano: docs/superpowers/plans/2026-09-16-financas-deteccao-email-v2.md · Branch: feat/financas-deteccao-email-v2</p>
+<table><thead><tr><th>PIECE</th><th>ROUND</th><th>REFERENCE</th><th>CURRENT RESULT</th><th>VERDICT</th><th>WHAT THE CRITIC FLAGGED</th></tr></thead><tbody id="rows">
+<tr><td>T1 schema+migration</td><td>1</td><td>saída do prisma migrate diff</td><td>e9533b7</td><td class=rej>REJECTED</td><td>nome do índice 75 chars (Postgres trunca em 63; Prisma espera _parser_financa_idx); ordem das colunas</td></tr>
+<tr><td>T1 schema+migration</td><td>2</td><td>idem</td><td>58c1cb1</td><td>pendente</td><td>—</td></tr>
+<tr><td>T2 text/address utils</td><td>1</td><td>regexes da spec executadas</td><td>4dc14b8 + c6dcf48</td><td class=rej>REJECTED</td><td>wb() por paridade quebra \bcontestad|…|\bdisputa\b e (\d{1,2})\b; extrairEndereco falha em "&lt;&lt;Promo&gt;&gt;" &lt;a@b&gt;</td></tr>
+<tr><td>T2 text/address utils</td><td>2</td><td>idem</td><td>98aa329</td><td>pendente</td><td>—</td></tr>
+<tr><td>T8 classificarErroGmail</td><td>1</td><td>gaxios 7.1.3 real + googleapis real</td><td>2168541</td><td class=rej>REJECTED</td><td>invalid_grant (400 token) → permanente carimba lote; 'response' in err confunde HttpException do Nest</td></tr>
+<tr><td>T8 classificarErroGmail</td><td>2</td><td>idem</td><td>d214a1d</td><td>pendente</td><td>—</td></tr>
+<tr><td>T1</td><td>2</td><td>prisma migrate diff</td><td>58c1cb1</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T2</td><td>2</td><td>regexes da spec</td><td>98aa329</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T8</td><td>2</td><td>gaxios/googleapis reais</td><td>d214a1d</td><td class=ok>APPROVED</td><td>(1ª instância travou; nova instância aprovou)</td></tr>
+<tr><td>T3 institution-map</td><td>1</td><td>método privado antigo</td><td>10e41b4</td><td class=rej>REJECTED</td><td>caixa alta não normalizada; assunto null lança</td></tr>
+<tr><td>T3</td><td>2</td><td>idem</td><td>5f2099b</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T5 extractors</td><td>1</td><td>60+45 sondas</td><td>9882151</td><td class=rej>REJECTED</td><td>"vence em 3 dias" → data; conector duplo; rótulo ":"+quebra; janela após; datas ./-</td></tr>
+<tr><td>T5</td><td>2</td><td>idem</td><td>1ef479b</td><td class=rej>REJECTED</td><td>regressões: ISO → 2010-10-26; janela após ignora moeda; 10/out</td></tr>
+<tr><td>T5</td><td>3</td><td>idem</td><td>86668aa</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T4 triagem</td><td>1</td><td>spec + 100 adversariais</td><td>(build)</td><td class=rej>REJECTED</td><td>teste NFD normalizado; "vencedor" → S8 forte; "Sua conta Vivo chegou" → nao; desconto/adesão duros; recibo inglês; promo substring</td></tr>
+<tr><td>T4</td><td>2</td><td>idem</td><td>306a4e4</td><td>pendente</td><td>—</td></tr>
+<tr><td>T6 evidência</td><td>1</td><td>23 corpos</td><td>fdba24e</td><td class=rej>REJECTED</td><td>settled no assunto não checado; E6 sem cedilha</td></tr>
+<tr><td>T6</td><td>2</td><td>idem</td><td>167ce93</td><td>pendente</td><td>—</td></tr>
+<tr><td>T4</td><td>2</td><td>spec + adversariais</td><td>306a4e4</td><td class=rej>REJECTED</td><td>promo sem @/plural; "venceu" em S8; desconto/adesão; flexão venc; comentário NFD</td></tr>
+<tr><td>T4</td><td>3</td><td>idem</td><td>60708de</td><td class=rej>REJECTED</td><td>veto "prêmio" mata seguro; lookbehind "disponível" é gambiarra; promo derivado</td></tr>
+<tr><td>T4</td><td>4</td><td>idem</td><td>327e416</td><td class=ok>APPROVED</td><td>polimento: apólice/prêmio em S6; IPTU com desconto</td></tr>
+<tr><td>T6</td><td>2</td><td>23 corpos</td><td>167ce93</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T7 parse()</td><td>1</td><td>corpos reais</td><td>e0ad5f1</td><td class=rej>REJECTED</td><td>lifecycle sem "chegou"; fallback próxima linha após parcela; fixtures órfãs</td></tr>
+<tr><td>T7</td><td>2</td><td>idem</td><td>ffbfff7</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T9 gmail body</td><td>1</td><td>payload Pefisa real-shape</td><td>c0a344b</td><td class=rej>REJECTED</td><td>docblock; BOM literal; pareceHtml FP em prosa</td></tr>
+<tr><td>T9</td><td>2</td><td>idem</td><td>c47c079</td><td class=rej>REJECTED</td><td>regressão Outlook header; &lt;!--\s; BOM ainda cru</td></tr>
+<tr><td>T9</td><td>3</td><td>idem</td><td>5627b6f</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T10 PDF</td><td>1</td><td>pdf-parse real, PDFs gerados</td><td>96a0298+0f36bd9</td><td class=rej>REJECTED</td><td>erro desconhecido silencioso; sem teste de timeout; senha mockada</td></tr>
+<tr><td>T10</td><td>2</td><td>idem</td><td>d97a941</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T11 marcador</td><td>1</td><td>typings googleapis + mutação</td><td>c02560f</td><td class=rej>REJECTED</td><td>fixture NFC (mutante sem normalize passa)</td></tr>
+<tr><td>T11</td><td>2</td><td>idem</td><td>e7d7a4a</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T12 processor</td><td>1</td><td>pipeline real + Prisma em memória</td><td>ea6c51c</td><td class=rej>REJECTED</td><td>deleteMany no catch lança; PDF antes de findUnique</td></tr>
+<tr><td>T12</td><td>2</td><td>idem</td><td>7131e91</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T13 sync</td><td>1</td><td>Postgres real ($executeRaw) + DI Nest</td><td>1d890d3</td><td class=ok>APPROVED</td><td>risco: marcador perdido se passo 0 falha → corrigido em c686c78</td></tr>
+<tr><td>T14 + síntese</td><td>1</td><td>e2e com DI real, 12/12, 0/12, Postgres descartável</td><td>6779d02</td><td class=rej>REJECTED</td><td>0 bloqueantes; 5 polimentos (fake e2e, helper, limitação marcador, exports, docblock)</td></tr>
+<tr><td>Síntese</td><td>2</td><td>idem (70/70 checks, e2e 29/30)</td><td>3e3cbcd</td><td class=rej>REJECTED</td><td>0 bloqueantes; 2 polimentos: atalho de tipo alarga para consórcio/empréstimo; ramo lifecycle inalcançável</td></tr>
+<tr><td>Síntese</td><td>3</td><td>—</td><td>d25b18b</td><td>não recriticado (plateau: 2 rodadas só polimento; fix auto-avaliado, 736 verdes)</td><td>—</td></tr>
+<!-- rows -->
+</tbody></table>
+<h2>Discarded approaches</h2><ul id="discarded"><li>Allowlist de instituições como porta de entrada — 50% de recall na amostra real; virou enriquecimento.</li><li>Carimbar versão após 3 falhas transitórias — perda permanente em outage; substituído por fila ordenada por tentativas.</li><li>`no valor de` como evidência E1 — "Pix recebido" criava lançamento; rebaixado a âncora de extração.</li></ul>
+<h2>Next action</h2><p id="next">Entregue. Pendente do usuário: merge em master, deploy, conferência na VPS.</p>
+<h2>Assumptions in force</h2><ul><li>Uma réplica do backend (guard `running` do scheduler).</li><li>Rótulo aninhado chega como "Sincro/Finanças" em labels.list.</li><li>pdf-parse 2.4.5 API de classe.</li><li>Decisão: `carnê` estrito (carn[êe] casava "carne").</li></ul>

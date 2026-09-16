@@ -81,8 +81,13 @@ model EmailSummary {
   lidoNoApp      Boolean  @default(false) @map("lido_no_app")
   criadoEm       DateTime @default(now()) @map("criado_em")
 
+  labelIds                 String[] @default([]) @map("label_ids")
+  parserFinancasVersao     Int?     @map("parser_financas_versao")
+  parserFinancasTentativas Int      @default(0) @map("parser_financas_tentativas")
+
   @@unique([userId, gmailMessageId])
   @@index([userId])
+  @@index([userId, parserFinancasVersao, parserFinancasTentativas])
   @@map("resumos_email")
 }
 

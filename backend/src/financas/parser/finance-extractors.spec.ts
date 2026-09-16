@@ -17,6 +17,10 @@ describe('extrairValor', () => {
     expect(extrairValor('Pagamento mínimo R$ 123,45 Total da fatura R$ 1.234,56').valor).toBe(1234.56);
     expect(extrairValor('Valor a pagar após o vencimento R$ 1.500,00 Valor a pagar até o vencimento R$ 1.234,56').valor).toBe(1234.56);
   });
+  it('rejects "após/mínimo" within the first 15 chars after the anchor, not just at the very start (labels with ":")', () => {
+    expect(extrairValor('Valor a pagar: após o vencimento R$ 1.500,00 Valor a pagar: até o vencimento R$ 1.234,56').valor).toBe(1234.56);
+    expect(extrairValor('Valor a pagar: (após o vencimento) R$ 1.500,00 Valor a pagar: até o vencimento R$ 1.234,56').valor).toBe(1234.56);
+  });
   it('never takes a value from an installment segment or line', () => {
     expect(extrairValor('Valor total:\nOPÇÃO 1: Pague em até 12 vezes de R$ 86,33').valor).toBeNull();
     expect(extrairValor('Total da fatura: 12x de R$ 100,00').valor).toBeNull();
@@ -79,6 +83,33 @@ describe('extrairDataVencimento', () => {
   });
   it('whole-body fallback still reads a full date, unanchored', () => {
     expect(extrairDataVencimento('Campanha válida até 31/12/2026', r)).toEqual({ data: utc(2026, 12, 31), anchored: false });
+  });
+  it('"em N dias" is NOT a date, even right after an anchor', () => {
+    expect(extrairDataVencimento('Sua fatura vence em 3 dias', rec('2026-09-10T00:00:00Z'))).toEqual({ data: null, anchored: false });
+    expect(extrairDataVencimento('Vencimento em 5 dias', rec('2026-09-10T00:00:00Z'))).toEqual({ data: null, anchored: false });
+    expect(extrairDataVencimento('Seu boleto vence em 2 dias', rec('2026-09-10T00:00:00Z'))).toEqual({ data: null, anchored: false });
+  });
+  it('next-line fallback also works when the label ends with ":" (trailing space or \\r\\n before the date)', () => {
+    expect(extrairDataVencimento('Vencimento: \n10/10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 10), anchored: true });
+    expect(extrairDataVencimento('Vencimento:\r\n10/10/2026', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 10), anchored: true });
+  });
+  it('CONECTOR_RE accepts punctuation AND a connector word together ("Vencimento: dia 10")', () => {
+    expect(extrairDataVencimento('Vencimento: dia 10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 9, 10), anchored: true });
+    expect(extrairDataVencimento('Vencimento: no dia 10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 9, 10), anchored: true });
+    expect(extrairDataVencimento('Vencimento - dia 10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 9, 10), anchored: true });
+  });
+  it('reads dotted/hyphenated full dates with a consistent separator (not misread as day-only)', () => {
+    expect(extrairDataVencimento('Vencimento: 05.10.2026', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 5), anchored: true });
+    expect(extrairDataVencimento('Vencimento: 05-10-2026', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 5), anchored: true });
+  });
+  it('keeps rejecting an invalid Feb 29 day-only anchor without year', () => {
+    expect(extrairDataVencimento('Vencimento: 29/02', rec('2026-09-01T00:00:00Z'))).toEqual({ data: null, anchored: false });
+  });
+  it('keeps reading an unanchored full date nearest to the received year', () => {
+    expect(extrairDataVencimento('10/10/2025', rec('2026-09-01T00:00:00Z')).data).toEqual(utc(2025, 10, 10));
+  });
+  it('keeps rejecting a day-only match too far away (60 days)', () => {
+    expect(extrairDataVencimento('vence dia 31', rec('2026-09-01T00:00:00Z'))).toEqual({ data: null, anchored: false });
   });
 });
 

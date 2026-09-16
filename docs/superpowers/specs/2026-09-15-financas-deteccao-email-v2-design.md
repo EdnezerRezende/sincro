@@ -66,7 +66,11 @@ EmailSyncService.syncUser(userId)
   │      re-enfileira ($executeRaw): UPDATE resumos_email SET parser_financas_versao = NULL
   │        WHERE user_id = $1 AND gmail_message_id = ANY($2) AND NOT (label_ids @> ARRAY[$labelId])
   │        — só quem ainda NÃO tinha o marcador persistido; o processamento grava label_ids ∪ {labelId}
-  │      (falha transitória aqui → log warn, ids = ∅, ciclo continua; marcador só ADICIONA candidatos)
+  │      (falha transitória aqui → log warn, ids = ∅, indisponivel = true; ciclo continua, mas (A)
+  │        carimba parserFinancasVersao = null nos e-mails novos deste ciclo — mesmo com processar()
+  │        já rodando — e (B) é pulado inteiro: rodar (B) com o Set vazio faria um e-mail rotulado
+  │        pelo usuário perder o marcador para sempre, já que o Gmail já devolve o label em
+  │        email.labelIds e "NOT (label_ids @> ARRAY[...])" nunca mais o re-enfileiraria)
   │
   ├─ (A) NOVOS e-mails (como hoje)
   │    fetchNewEmails → FetchedEmail carrega labelIds
@@ -540,7 +544,14 @@ mapa e `deriveInstituicaoFromDomain`).
   ressuscita. Remover o rótulo no Gmail e recolocá-lo também não re-enfileira (limitação declarada;
   orientar `IGNORADO` em vez de apagar). E-mail rotulado com lançamento `CONFIRMADO` é reprocessado
   mas o lançamento não é tocado (regra de escrita).
-- Falha transitória no passo 0 → log `warn`, `Set` vazio, ciclo segue (o marcador só adiciona).
+- Falha transitória no passo 0 → log `warn`, `Set` vazio, ciclo segue (o marcador só adiciona). Mas
+  não é tratada como "hoje não tem marcador": `resolverMarcador` devolve `indisponivel: true`, e com
+  isso (A) carimba `parserFinancasVersao = null` (não `FINANCE_PARSER_VERSION`) nos e-mails novos
+  deste ciclo — mesmo chamando `processar()` normalmente, para o lançamento existir já — e (B) é
+  pulado neste ciclo inteiro (log `warn`, sem consultar `emailSummary.findMany`); sem isso, um
+  e-mail rotulado pelo usuário e processado agora com o `Set` vazio carimbaria versão atual e nunca
+  mais seria revisitado, porque o `labelId` já chega em `email.labelIds` do Gmail e o re-enfileiramento
+  do passo 0 só olha `NOT (label_ids @> ARRAY[...])`.
 - `FetchedEmail.labelIds` passa a ser preenchido por `fetchMessages` e persistido em
   `EmailSummary.labelIds` (informativo; a decisão usa o `Set`).
 - Limitação declarada: e-mail com mais de 90 dias, ou além dos 100 mais recentes rotulados, não é

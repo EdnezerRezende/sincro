@@ -19,6 +19,9 @@ const LOTE_REPROCESSAMENTO = 50;
 interface Marcador {
   labelId: string | null;
   ids: Set<string>;
+  /** true quando o passo 0 falhou neste ciclo (ver `resolverMarcador`) — o `Set` acima está vazio
+   *  por segurança, não porque o usuário não rotulou nada. */
+  indisponivel: boolean;
 }
 
 @Injectable()
@@ -95,7 +98,7 @@ export class EmailSyncService {
             categoria: classification.categoria,
             recebidoEm: email.recebidoEm,
             labelIds,
-            parserFinancasVersao: fin.transitorio ? null : FINANCE_PARSER_VERSION,
+            parserFinancasVersao: fin.transitorio || marcador.indisponivel ? null : FINANCE_PARSER_VERSION,
             parserFinancasTentativas: fin.transitorio ? 1 : 0,
           },
         });
@@ -117,7 +120,15 @@ export class EmailSyncService {
       if (classification.categoria === 'PRECISA_ATENCAO') novosPrecisamAtencao++;
     }
 
-    await this.reprocessarPendentes(userId, refreshToken, marcador);
+    if (marcador.indisponivel) {
+      // Rodar (B) agora, com o Set do marcador vazio por falha transitória, faria os e-mails já
+      // rotulados pelo usuário perderem o marcador para sempre: como (A) já carimbou
+      // parserFinancasVersao = null para os e-mails novos deste ciclo, o próximo ciclo (com o
+      // marcador disponível de novo) revisita todo mundo pendente — inclusive esses.
+      this.logger.warn(`Reprocessamento adiado para ${userId}: marcador indisponível neste ciclo`);
+    } else {
+      await this.reprocessarPendentes(userId, refreshToken, marcador);
+    }
 
     // Duplicate-key races are safe to skip past (the message was already persisted by a
     // concurrent run), so the cursor still advances in that case. But if a message failed to
@@ -149,8 +160,12 @@ export class EmailSyncService {
    *  já que o Prisma não expressa `NOT (label_ids @> ARRAY[...])` sem relação) só quem ainda não
    *  tinha o marcador persistido em `labelIds` — idempotente por evento: uma vez processado com
    *  `marcado: true`, o e-mail grava o labelId e não volta a ser re-enfileirado por este passo.
-   *  Falha transitória aqui nunca derruba o ciclo: loga `warn` e segue com um marcador vazio (o
-   *  marcador só ADICIONA candidatos, nunca reduz). */
+   *  Falha transitória aqui nunca derruba o ciclo, mas NÃO pode ser tratada como "sem marcador
+   *  neste ciclo" e seguir em frente como se nada tivesse acontecido: com um Set vazio, um e-mail
+   *  que o usuário rotulou e que (A) processa agora perderia o marcador para sempre — o Gmail já
+   *  devolve o label em `email.labelIds`, então `NOT (label_ids @> ARRAY[...])` nunca mais o
+   *  re-enfileira. Por isso o chamador usa `indisponivel` para carimbar `parserFinancasVersao =
+   *  null` em (A) (revisita em (B) no próximo ciclo) e pular (B) inteiro neste ciclo. */
   private async resolverMarcador(userId: string, refreshToken: string): Promise<Marcador> {
     try {
       const marcador = await this.gmailApiClient.listarIdsComMarcador(refreshToken);
@@ -160,13 +175,13 @@ export class EmailSyncService {
           WHERE user_id = ${userId} AND gmail_message_id = ANY(${Array.from(marcador.ids)}::text[])
             AND NOT (label_ids @> ARRAY[${marcador.labelId}]::text[])`;
       }
-      return marcador;
+      return { ...marcador, indisponivel: false };
     } catch (error) {
       this.logger.warn(
         `Marcador ${MARCADOR_NOME} indisponível neste ciclo (${classificarErroGmail(error)}); seguindo sem ele`,
         error as Error,
       );
-      return { labelId: null, ids: new Set() };
+      return { labelId: null, ids: new Set(), indisponivel: true };
     }
   }
 

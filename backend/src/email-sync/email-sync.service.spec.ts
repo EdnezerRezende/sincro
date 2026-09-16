@@ -382,6 +382,20 @@ describe('EmailSyncService', () => {
       expect(deps.financeProcessor.processar).toHaveBeenCalledWith('u1', 'rt-123', expect.anything(), { marcado: false });
     });
 
+    it('(0) marcador indisponível: (A) carimba parserFinancasVersao null e ainda processa, (B) não roda neste ciclo', async () => {
+      const deps = buildDeps();
+      comNovo(deps);
+      deps.gmailApiClient.listarIdsComMarcador.mockRejectedValue(
+        Object.assign(new Error('x'), { code: 503, response: { status: 503 }, config: {} }),
+      );
+      await buildService(deps).syncUser('u1');
+      expect(deps.financeProcessor.processar).toHaveBeenCalledWith('u1', 'rt-123', expect.objectContaining({ gmailMessageId: 'm1' }), { marcado: false });
+      expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ parserFinancasVersao: null, parserFinancasTentativas: 0 }),
+      });
+      expect(deps.prisma.emailSummary.findMany).not.toHaveBeenCalled();
+    });
+
     it('(B) reprocessa pendentes ordenados, carimba sucesso e zera tentativas', async () => {
       const deps = buildDeps();
       deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h0' });

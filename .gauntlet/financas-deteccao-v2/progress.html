@@ -38,9 +38,10 @@
 <tr><td>T12</td><td>2</td><td>idem</td><td>7131e91</td><td class=ok>APPROVED</td><td>—</td></tr>
 <tr><td>T13 sync</td><td>1</td><td>Postgres real ($executeRaw) + DI Nest</td><td>1d890d3</td><td class=ok>APPROVED</td><td>risco: marcador perdido se passo 0 falha → corrigido em c686c78</td></tr>
 <tr><td>T14 + síntese</td><td>1</td><td>e2e com DI real, 12/12, 0/12, Postgres descartável</td><td>6779d02</td><td class=rej>REJECTED</td><td>0 bloqueantes; 5 polimentos (fake e2e, helper, limitação marcador, exports, docblock)</td></tr>
-<tr><td>Síntese</td><td>2</td><td>idem</td><td>3e3cbcd</td><td>pendente</td><td>—</td></tr>
+<tr><td>Síntese</td><td>2</td><td>idem (70/70 checks, e2e 29/30)</td><td>3e3cbcd</td><td class=rej>REJECTED</td><td>0 bloqueantes; 2 polimentos: atalho de tipo alarga para consórcio/empréstimo; ramo lifecycle inalcançável</td></tr>
+<tr><td>Síntese</td><td>3</td><td>—</td><td>d25b18b</td><td>não recriticado (plateau: 2 rodadas só polimento; fix auto-avaliado, 736 verdes)</td><td>—</td></tr>
 <!-- rows -->
 </tbody></table>
 <h2>Discarded approaches</h2><ul id="discarded"><li>Allowlist de instituições como porta de entrada — 50% de recall na amostra real; virou enriquecimento.</li><li>Carimbar versão após 3 falhas transitórias — perda permanente em outage; substituído por fila ordenada por tentativas.</li><li>`no valor de` como evidência E1 — "Pix recebido" criava lançamento; rebaixado a âncora de extração.</li></ul>
-<h2>Next action</h2><p id="next">Síntese rodada 2 em curso; depois: registro na vault e entrega.</p>
+<h2>Next action</h2><p id="next">Entregue. Pendente do usuário: merge em master, deploy, conferência na VPS.</p>
 <h2>Assumptions in force</h2><ul><li>Uma réplica do backend (guard `running` do scheduler).</li><li>Rótulo aninhado chega como "Sincro/Finanças" em labels.list.</li><li>pdf-parse 2.4.5 API de classe.</li><li>Decisão: `carnê` estrito (carn[êe] casava "carne").</li></ul>

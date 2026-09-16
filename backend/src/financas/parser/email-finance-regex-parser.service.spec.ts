@@ -118,18 +118,24 @@ describe('EmailFinanceRegexParserService.parse', () => {
         dataVencimento: utc(2026, 9, 20),
       });
     });
-    it('Pefisa em atraso: fraco aceito por E2 (assunto tem "fatura")', () => {
-      const r = parse(
-        'Pefisa <pagamento@pefisa.com.br>',
-        'Sua Fatura CELEBRE! ELO MAIS',
-        fx('pefisa-em-atraso.txt'),
-        new Date('2026-07-24T11:13:35Z'),
-      );
-      expect(r).toMatchObject({
-        valor: 522.88,
-        dataVencimento: utc(2026, 7, 17),
-      });
-    });
+    it(
+      'Pefisa em atraso: fraco aceito por E2 (assunto tem "fatura"); emissor mapeado como ' +
+        'CARTAO com "fatura(s)" no assunto é FATURA_CARTAO mesmo sem palavra de ciclo de vida ' +
+        '("fechou"/"disponível"/...)',
+      () => {
+        const r = parse(
+          'Pefisa <pagamento@pefisa.com.br>',
+          'Sua Fatura CELEBRE! ELO MAIS',
+          fx('pefisa-em-atraso.txt'),
+          new Date('2026-07-24T11:13:35Z'),
+        );
+        expect(r).toMatchObject({
+          tipo: 'FATURA_CARTAO',
+          valor: 522.88,
+          dataVencimento: utc(2026, 7, 17),
+        });
+      },
+    );
     it('Neoenergia "escolha como receber": veto na triagem → null', () => {
       expect(
         parse(

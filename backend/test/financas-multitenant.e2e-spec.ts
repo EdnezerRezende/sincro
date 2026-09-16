@@ -5,55 +5,13 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { FIREBASE_ADMIN } from '../src/auth/firebase-admin.provider';
-import { triagem } from '../src/financas/parser/finance-email-detector';
-import { EmailFinanceRegexParserService } from '../src/financas/parser/email-finance-regex-parser.service';
+import { GmailApiClient } from '../src/gmail/gmail-api-client.service';
+import { FinanceEmailProcessor } from '../src/financas/parser/finance-email-processor.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { buildFakeFirebaseAdmin } from './support/fake-firebase-admin';
+import { buildFakeGmailApiClient } from './support/fake-gmail-api-client';
 
-/** `EmailFinanceRegexParserService.processEmail` (a DB writer coupled to `PrismaService`) was
- *  removed in the triagem-oriented `parse()` rewrite — that concern moves to
- *  `FinanceEmailProcessor` (Task 12/13 of the finanças-detecção-email-v2 plan), not yet built.
- *  This local helper reproduces just enough of the old write path (triagem → parse → dedup
- *  create) so this multi-tenant isolation e2e test keeps exercising the same behaviour until
- *  `FinanceEmailProcessor` lands. */
-async function processarEmailFinanceiro(
-  prisma: PrismaService,
-  parser: EmailFinanceRegexParserService,
-  userId: string,
-  email: { gmailMessageId: string; remetente: string; assunto: string; recebidoEm: Date },
-  corpo: string,
-): Promise<void> {
-  const existing = await prisma.lancamentoFinanceiro.findUnique({
-    where: { userId_emailMessageId: { userId, emailMessageId: email.gmailMessageId } },
-  });
-  if (existing) return;
-
-  const parsed = parser.parse({
-    remetente: email.remetente,
-    assunto: email.assunto,
-    corpo,
-    recebidoEm: email.recebidoEm,
-    triagem: triagem(email.remetente, email.assunto, { marcado: false }),
-    anexos: [],
-  });
-  if (!parsed) return;
-
-  await prisma.lancamentoFinanceiro.create({
-    data: {
-      userId,
-      tipo: parsed.tipo,
-      descricao: parsed.descricao,
-      instituicao: parsed.instituicao,
-      valor: parsed.valor,
-      dataVencimento: parsed.dataVencimento,
-      dataCompetencia: parsed.dataVencimento,
-      status: 'PENDENTE_REVISAO',
-      origem: 'EMAIL_PARSER',
-      emailMessageId: email.gmailMessageId,
-      codigoBarras: parsed.codigoBarras,
-    },
-  });
-}
+const FAKE_REFRESH_TOKEN = 'fake-refresh-token';
 
 interface ResumoResponseBody {
   saldoLivre: number;
@@ -63,7 +21,7 @@ interface ResumoResponseBody {
 describe('Finanças — isolamento multi-tenant (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  let parser: EmailFinanceRegexParserService;
+  let processor: FinanceEmailProcessor;
   let userAId: string;
   let userBId: string;
 
@@ -78,12 +36,18 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
     })
       .overrideProvider(FIREBASE_ADMIN)
       .useValue(buildFakeFirebaseAdmin())
+      .overrideProvider(GmailApiClient)
+      .useValue(
+        buildFakeGmailApiClient({
+          corpo: 'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
+        }),
+      )
       .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
     prisma = moduleRef.get(PrismaService);
-    parser = moduleRef.get(EmailFinanceRegexParserService);
+    processor = moduleRef.get(FinanceEmailProcessor);
 
     const userA = await prisma.user.upsert({
       where: { firebaseUid: firebaseUidA },
@@ -138,20 +102,12 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
       recebidoEm: new Date(),
     };
 
-    await processarEmailFinanceiro(
-      prisma,
-      parser,
-      userAId,
-      emailComum,
-      'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
-    );
-    await processarEmailFinanceiro(
-      prisma,
-      parser,
-      userBId,
-      emailComum,
-      'Total da fatura: R$ 100,00\nVencimento: 10/10/2026',
-    );
+    await processor.processar(userAId, FAKE_REFRESH_TOKEN, emailComum, {
+      marcado: false,
+    });
+    await processor.processar(userBId, FAKE_REFRESH_TOKEN, emailComum, {
+      marcado: false,
+    });
 
     const countA = await prisma.lancamentoFinanceiro.count({
       where: { userId: userAId, emailMessageId: 'msg-encaminhado-1' },
@@ -165,10 +121,20 @@ describe('Finanças — isolamento multi-tenant (e2e)', () => {
 
   it('calculates saldoLivre independently per user', async () => {
     await prisma.contaFinanceira.create({
-      data: { userId: userAId, nome: 'Conta A', tipo: 'CORRENTE', saldoAtual: 500 },
+      data: {
+        userId: userAId,
+        nome: 'Conta A',
+        tipo: 'CORRENTE',
+        saldoAtual: 500,
+      },
     });
     await prisma.contaFinanceira.create({
-      data: { userId: userBId, nome: 'Conta B', tipo: 'CORRENTE', saldoAtual: 9999 },
+      data: {
+        userId: userBId,
+        nome: 'Conta B',
+        tipo: 'CORRENTE',
+        saldoAtual: 9999,
+      },
     });
 
     const resumoA = await request(app.getHttpServer())

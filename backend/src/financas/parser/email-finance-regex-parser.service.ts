@@ -47,6 +47,14 @@ const CARTAO_PERTO_DE_FATURA_RE = wb(
 const BANDEIRA_PERTO_DE_FATURA_RE = wb(
   '\\b(visa|mastercard|master|amex|hipercard)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\b(visa|mastercard|master|amex|hipercard)\\b',
 );
+/** Emissor MAPEADO como cartão (`tipoPadrao === 'CARTAO'`, ex.: Pefisa) já é confiável o bastante
+ *  para não exigir a palavra de ciclo de vida do `FATURA_LIFECYCLE_RE` acima — basta "fatura(s)"
+ *  no ASSUNTO. Ex.: Pefisa "Sua Fatura CELEBRE! ELO MAIS" com corpo de cobrança em atraso ("Ainda
+ *  não identificamos o pagamento de sua fatura...") não tem "fechou"/"disponível"/etc., mas é
+ *  inequivocamente uma fatura de cartão pelo remetente mapeado + assunto. Deliberadamente restrita
+ *  ao assunto (não ao corpo): um emissor mapeado que manda cobrança de outra coisa citando
+ *  "fatura" de passagem no corpo não deve virar FATURA_CARTAO por isso. */
+const ASSUNTO_TEM_FATURA_RE = wb('\\bfaturas?\\b');
 
 /** Orientado à `triagem()` de `finance-email-detector.ts`: `forte` sempre gera lançamento (salvo
  *  evidência negativa no corpo); `fraco` só gera com evidência de cobrança suficiente (E1–E6). O
@@ -114,6 +122,8 @@ export class EmailFinanceRegexParserService {
     if (isCardInvoiceSubject(a)) return 'FATURA_CARTAO';
     if (CARTAO_PERTO_DE_FATURA_RE.test(cabeca)) return 'FATURA_CARTAO';
     if (tipoPadrao === 'CARTAO' && FATURA_LIFECYCLE_RE.test(a))
+      return 'FATURA_CARTAO';
+    if (tipoPadrao === 'CARTAO' && ASSUNTO_TEM_FATURA_RE.test(a))
       return 'FATURA_CARTAO';
     if (
       BANDEIRA_PERTO_DE_FATURA_RE.test(a) ||

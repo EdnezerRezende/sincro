@@ -291,7 +291,8 @@ export class GmailApiClient {
 
   /** Contrato antigo, mantido para o leitor de e-mail (`email-summary.controller.ts`) e o rascunho
    *  de resposta (`email-reply.controller.ts`) — nenhum dos dois precisa de anexos, então recebem
-   *  só `{ texto, ehPreview }`. `email-sync.service.ts` também passa por aqui. */
+   *  só `{ texto, ehPreview }`. Únicos dois chamadores: o caminho de sincronização financeira usa
+   *  `fetchFullBodyComAnexos` diretamente, via `FinanceEmailProcessor`. */
   async fetchFullBody(
     refreshToken: string,
     gmailMessageId: string,

@@ -427,7 +427,9 @@ mapa e `deriveInstituicaoFromDomain`).
 - `tipoPadrao === 'OUTRO'` (mapeado ou inferido por utilidade) → `DESPESA`, sempre.
 - Senão `FATURA_CARTAO` se: `isCardInvoiceSubject(assunto)` OU `\bcart(ão|ao|[õo]es)\b` a ≤ 40
   chars de `\bfatura\b` nos primeiros `CABECA_TIPO` (600) chars do texto ("A fatura mensal do seu cartão
-  SANTANDER…") OU (`tipoPadrao === 'CARTAO'` e `FATURA_LIFECYCLE_RE`) OU bandeira
+  SANTANDER…") OU (`tipoPadrao === 'CARTAO'` e `FATURA_LIFECYCLE_RE`) OU (`tipoPadrao === 'CARTAO'`
+  e `\bfaturas?\b` no assunto — emissor mapeado como cartão não precisa de palavra de ciclo de vida
+  no assunto, ex.: Pefisa "Sua Fatura CELEBRE! ELO MAIS" em atraso) OU bandeira
   `\b(visa|mastercard|master|amex|hipercard)\b` a ≤ 40 chars de `\bfatura\b` no assunto ou
   texto-cabeça (`elo` fica fora por ser palavra comum; "Cartão Celebre! Elo" já entra por "cartão").
 - Caso contrário `DESPESA`.
@@ -556,6 +558,9 @@ mapa e `deriveInstituicaoFromDomain`).
   `EmailSummary.labelIds` (informativo; a decisão usa o `Set`).
 - Limitação declarada: e-mail com mais de 90 dias, ou além dos 100 mais recentes rotulados, não é
   revisitado pelo marcador.
+- Limitação declarada: e-mail com o marcador mas classificado pelo Gmail em
+  Promoções/Social/Atualizações/Fóruns é descartado por NOISE_LABELS antes de virar
+  EmailSummary — o marcador não o alcança.
 
 ## Estratégia de testes
 

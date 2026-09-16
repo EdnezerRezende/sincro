@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 /** Extracts the HTTP status Google's client attached to a failed API call. Different
  *  releases/paths through `googleapis`/`gaxios` have put this in different places
@@ -32,7 +36,10 @@ export function gmailMensagemNaoEncontrada(error: unknown): boolean {
  *  knows how to react to for arquivar/excluir. A 404 means the message itself is gone from Gmail.
  *  Anything else (Gmail's own 5xx, a network hiccup) is a transient failure that isn't the user's
  *  fault, mapped to 503 so a retry is the obvious next step. */
-export function mapearErroGmail(error: unknown, mensagemNaoEncontrado?: string): Error {
+export function mapearErroGmail(
+  error: unknown,
+  mensagemNaoEncontrado?: string,
+): Error {
   const status = statusHttpDoErroGmail(error);
   if (status === 401 || status === 403) {
     return new ForbiddenException(
@@ -40,14 +47,26 @@ export function mapearErroGmail(error: unknown, mensagemNaoEncontrado?: string):
     );
   }
   if (status === 404) {
-    return new NotFoundException(mensagemNaoEncontrado ?? 'Este e-mail não existe mais no Gmail.');
+    return new NotFoundException(
+      mensagemNaoEncontrado ?? 'Este e-mail não existe mais no Gmail.',
+    );
   }
-  return new ServiceUnavailableException('Não foi possível falar com o Gmail agora. Tente novamente em instantes.');
+  return new ServiceUnavailableException(
+    'Não foi possível falar com o Gmail agora. Tente novamente em instantes.',
+  );
 }
 
-export type ClasseErroGmail = 'transitorio-conta' | 'transitorio-mensagem' | 'permanente';
+export type ClasseErroGmail =
+  'transitorio-conta' | 'transitorio-mensagem' | 'permanente';
 
-const CODES_REDE = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE']);
+const CODES_REDE = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'EPIPE',
+]);
 const NOMES_TIMEOUT = new Set(['AbortError', 'TimeoutError']);
 
 /** Decide o que o reprocessamento faz com uma falha. Lê a forma REAL do gaxios 7: um timeout chega com
@@ -63,11 +82,14 @@ export function classificarErroGmail(error: unknown): ClasseErroGmail {
   const ehGaxios =
     typeof err === 'object' &&
     err !== null &&
-    ('config' in err || Symbol.for('gaxios-gaxios-error') in err || err?.constructor?.name === 'GaxiosError');
+    ('config' in err ||
+      Symbol.for('gaxios-gaxios-error') in err ||
+      err?.constructor?.name === 'GaxiosError');
   if (!ehGaxios) return 'permanente';
 
   const status = statusHttpDoErroGmail(error);
-  if (status === 401 || status === 403 || status === 429) return 'transitorio-conta';
+  if (status === 401 || status === 403 || status === 429)
+    return 'transitorio-conta';
   if (
     err.response?.data?.error === 'invalid_grant' ||
     err.message === 'invalid_grant' ||
@@ -75,9 +97,17 @@ export function classificarErroGmail(error: unknown): ClasseErroGmail {
   ) {
     return 'transitorio-conta';
   }
-  const codes = [err.code, err.error?.code, err.cause?.code].filter((c) => typeof c === 'string') as string[];
-  const nomes = [err.name, err.error?.name, err.cause?.name].filter((n) => typeof n === 'string') as string[];
-  if (codes.some((c) => CODES_REDE.has(c)) || nomes.some((n) => NOMES_TIMEOUT.has(n))) return 'transitorio-conta';
+  const codes = [err.code, err.error?.code, err.cause?.code].filter(
+    (c) => typeof c === 'string',
+  );
+  const nomes = [err.name, err.error?.name, err.cause?.name].filter(
+    (n) => typeof n === 'string',
+  );
+  if (
+    codes.some((c) => CODES_REDE.has(c)) ||
+    nomes.some((n) => NOMES_TIMEOUT.has(n))
+  )
+    return 'transitorio-conta';
   if (status === undefined) return 'transitorio-conta';
   if (status >= 500) return 'transitorio-mensagem';
   return 'permanente';

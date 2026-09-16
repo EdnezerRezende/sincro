@@ -26,7 +26,12 @@ import { SaldoLivreCalculator } from './saldo-livre.calculator';
     FinanceCalendarSyncService,
     LancamentosService,
   ],
-  controllers: [ContasController, CartoesController, LancamentosController, ResumoController],
+  controllers: [
+    ContasController,
+    CartoesController,
+    LancamentosController,
+    ResumoController,
+  ],
   exports: [EmailFinanceRegexParserService, FinanceEmailProcessor],
 })
 export class FinancasModule {}

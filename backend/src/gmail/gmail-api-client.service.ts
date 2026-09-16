@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { decode as decodeHtmlEntities } from 'html-entities';
-import { FormatError, InvalidPDFException, PasswordException, PDFParse } from 'pdf-parse';
+import {
+  FormatError,
+  InvalidPDFException,
+  PasswordException,
+  PDFParse,
+} from 'pdf-parse';
 import type { AnexoMeta } from '../financas/parser/finance-evidence';
 import { TimeoutError, withTimeout } from '../common/with-timeout';
 import { GmailOAuthService } from './gmail-oauth.service';
@@ -112,9 +117,13 @@ export class GmailApiClient {
    *  fully apply when the user has the tabbed inbox turned off — the Gmail search-operator
    *  documentation doesn't explicitly guarantee that behavior, so the label check stays as a
    *  safety net instead of being trusted alone. */
-  async fetchInitialUnread(refreshToken: string): Promise<{ emails: FetchedEmail[]; historyId: string | null }> {
+  async fetchInitialUnread(
+    refreshToken: string,
+  ): Promise<{ emails: FetchedEmail[]; historyId: string | null }> {
     const gmail = this.gmailFor(refreshToken);
-    const sevenDaysAgoUnixSeconds = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+    const sevenDaysAgoUnixSeconds = Math.floor(
+      (Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000,
+    );
     const list = await gmail.users.messages.list({
       userId: 'me',
       q: `is:unread after:${sevenDaysAgoUnixSeconds} in:inbox -category:promotions -category:social -category:updates -category:forums`,
@@ -136,7 +145,11 @@ export class GmailApiClient {
   async fetchIncremental(
     refreshToken: string,
     sinceHistoryId: string,
-  ): Promise<{ emails: FetchedEmail[]; historyId: string | null; historyExpired: boolean }> {
+  ): Promise<{
+    emails: FetchedEmail[];
+    historyId: string | null;
+    historyExpired: boolean;
+  }> {
     const gmail = this.gmailFor(refreshToken);
     try {
       const history = await gmail.users.history.list({
@@ -151,7 +164,11 @@ export class GmailApiClient {
         }
       }
       const emails = await this.fetchMessages(gmail, Array.from(messageIds));
-      return { emails, historyId: history.data.historyId ?? sinceHistoryId, historyExpired: false };
+      return {
+        emails,
+        historyId: history.data.historyId ?? sinceHistoryId,
+        historyExpired: false,
+      };
     } catch (error: unknown) {
       // Gmail returns 404 when the stored historyId is too old (beyond Gmail's retention window).
       const status = (error as { code?: number })?.code;
@@ -162,7 +179,10 @@ export class GmailApiClient {
     }
   }
 
-  private async fetchMessages(gmail: gmail_v1.Gmail, ids: string[]): Promise<FetchedEmail[]> {
+  private async fetchMessages(
+    gmail: gmail_v1.Gmail,
+    ids: string[],
+  ): Promise<FetchedEmail[]> {
     const emails: FetchedEmail[] = [];
     for (const id of ids) {
       const message = await gmail.users.messages.get({
@@ -176,7 +196,8 @@ export class GmailApiClient {
       const labelIds = message.data.labelIds ?? [];
       if (labelIds.some((label) => NOISE_LABELS.has(label))) continue;
       const headers = message.data.payload?.headers ?? [];
-      const getHeader = (name: string) => headers.find((h) => h.name === name)?.value ?? '';
+      const getHeader = (name: string) =>
+        headers.find((h) => h.name === name)?.value ?? '';
       emails.push({
         gmailMessageId: id,
         remetente: getHeader('From'),
@@ -242,7 +263,11 @@ export class GmailApiClient {
     gmailMessageId: string,
   ): Promise<CorpoComAnexos> {
     const gmail = this.gmailFor(refreshToken);
-    const message = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+    const message = await gmail.users.messages.get({
+      userId: 'me',
+      id: gmailMessageId,
+      format: 'full',
+    });
     const anexos = this.listarAnexos(message.data.payload);
 
     const textoPlano = this.extractPlainTextBody(message.data.payload);
@@ -271,7 +296,10 @@ export class GmailApiClient {
     refreshToken: string,
     gmailMessageId: string,
   ): Promise<{ texto: string; ehPreview: boolean }> {
-    const { texto, ehPreview } = await this.fetchFullBodyComAnexos(refreshToken, gmailMessageId);
+    const { texto, ehPreview } = await this.fetchFullBodyComAnexos(
+      refreshToken,
+      gmailMessageId,
+    );
     return { texto, ehPreview };
   }
 
@@ -283,7 +311,9 @@ export class GmailApiClient {
   static escolherPdf(anexos: AnexoMeta[]): AnexoMeta | null {
     return (
       anexos.find(
-        (a) => (a.mimeType === 'application/pdf' || /\.pdf$/i.test(a.filename)) && a.size <= PDF_MAX_BYTES,
+        (a) =>
+          (a.mimeType === 'application/pdf' || /\.pdf$/i.test(a.filename)) &&
+          a.size <= PDF_MAX_BYTES,
       ) ?? null
     );
   }
@@ -320,7 +350,10 @@ export class GmailApiClient {
     const buffer = Buffer.from(att.data.data, 'base64url');
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     try {
-      const { text } = await withTimeout(parser.getText({ first: PDF_PAGINAS }), timeoutMs);
+      const { text } = await withTimeout(
+        parser.getText({ first: PDF_PAGINAS }),
+        timeoutMs,
+      );
       return text;
     } catch (e) {
       if (
@@ -337,7 +370,10 @@ export class GmailApiClient {
       // registrada em `warn`, com nome e mensagem do erro: sem isso, um erro de infraestrutura de
       // verdade (ex.: "Setting up fake worker failed" do pdfjs-dist, um ambiente mal configurado)
       // fica indistinguível de um PDF genuinamente corrompido/ilegível nos logs.
-      if (!(e as { config?: unknown }).config && !(e as { response?: unknown }).response) {
+      if (
+        !(e as { config?: unknown }).config &&
+        !(e as { response?: unknown }).response
+      ) {
         const erro = e as { name?: string; message?: string };
         this.logger.warn(
           `PDF ilegível (anexo "${anexo.filename}"): ${erro.name ?? 'Error'}: ${erro.message ?? String(e)}`,
@@ -367,7 +403,9 @@ export class GmailApiClient {
    *  `body.attachmentId`) — sem baixar o conteúdo. Usado pela Task 10 (`fetchPdfAttachmentText`)
    *  para decidir se vale a pena buscar um PDF, e pela evidência de cobrança (`finance-evidence.ts`)
    *  para checar nome/tipo do anexo. */
-  private listarAnexos(payload: gmail_v1.Schema$MessagePart | undefined): AnexoMeta[] {
+  private listarAnexos(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): AnexoMeta[] {
     if (!payload) return [];
     const proprio: AnexoMeta[] =
       payload.filename && payload.body?.attachmentId
@@ -380,10 +418,15 @@ export class GmailApiClient {
             },
           ]
         : [];
-    return [...proprio, ...(payload.parts ?? []).flatMap((p) => this.listarAnexos(p))];
+    return [
+      ...proprio,
+      ...(payload.parts ?? []).flatMap((p) => this.listarAnexos(p)),
+    ];
   }
 
-  private extractPlainTextBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+  private extractPlainTextBody(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): string | null {
     if (!payload) return null;
     if (payload.mimeType === 'text/plain' && payload.body?.data) {
       return Buffer.from(payload.body.data, 'base64url').toString('utf8');
@@ -397,7 +440,9 @@ export class GmailApiClient {
 
   /** Same traversal as `extractPlainTextBody`, looking for `text/html` instead — this is the part
    *  that exists on most real-world e-mail when `text/plain` doesn't. */
-  private extractHtmlBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+  private extractHtmlBody(
+    payload: gmail_v1.Schema$MessagePart | undefined,
+  ): string | null {
     if (!payload) return null;
     if (payload.mimeType === 'text/html' && payload.body?.data) {
       return Buffer.from(payload.body.data, 'base64url').toString('utf8');
@@ -479,7 +524,9 @@ export class GmailApiClient {
       let fim = Math.min(inicio + MAX_BYTES_POR_PALAVRA, bytes.length);
       // Nunca cortar no meio de uma sequência UTF-8 multibyte.
       while (fim < bytes.length && (bytes[fim] & 0xc0) === 0x80) fim--;
-      palavras.push(`=?UTF-8?B?${bytes.subarray(inicio, fim).toString('base64')}?=`);
+      palavras.push(
+        `=?UTF-8?B?${bytes.subarray(inicio, fim).toString('base64')}?=`,
+      );
       inicio = fim;
     }
     return palavras.join('\r\n ');
@@ -503,7 +550,12 @@ export class GmailApiClient {
    *  RFC 5322, no parsing needed. */
   async sendReply(
     refreshToken: string,
-    params: { gmailMessageId: string; para: string; assunto: string; texto: string },
+    params: {
+      gmailMessageId: string;
+      para: string;
+      assunto: string;
+      texto: string;
+    },
   ): Promise<void> {
     const gmail = this.gmailFor(refreshToken);
     const original = await gmail.users.messages.get({
@@ -514,11 +566,19 @@ export class GmailApiClient {
     });
     const headers = original.data.payload?.headers ?? [];
     const sanitizar = GmailApiClient.sanitizarValorDeCabecalho;
-    const messageIdHeader = sanitizar(headers.find((h) => h.name === 'Message-Id')?.value ?? '');
-    const referencesHeader = sanitizar(headers.find((h) => h.name === 'References')?.value ?? '');
-    const references = [referencesHeader, messageIdHeader].filter(Boolean).join(' ');
+    const messageIdHeader = sanitizar(
+      headers.find((h) => h.name === 'Message-Id')?.value ?? '',
+    );
+    const referencesHeader = sanitizar(
+      headers.find((h) => h.name === 'References')?.value ?? '',
+    );
+    const references = [referencesHeader, messageIdHeader]
+      .filter(Boolean)
+      .join(' ');
     const para = GmailApiClient.codificarEnderecoPara(sanitizar(params.para));
-    const assunto = GmailApiClient.codificarCabecalhoRfc2047(`Re: ${sanitizar(params.assunto)}`);
+    const assunto = GmailApiClient.codificarCabecalhoRfc2047(
+      `Re: ${sanitizar(params.assunto)}`,
+    );
 
     // Só os CABEÇALHOS são higienizados/codificados; `params.texto` — exatamente o que o usuário
     // leu e editou na tela — vai para o corpo byte a byte, sem nenhum pós-processamento.
@@ -536,7 +596,10 @@ export class GmailApiClient {
 
     await gmail.users.messages.send({
       userId: 'me',
-      requestBody: { raw: encoded, threadId: original.data.threadId ?? undefined },
+      requestBody: {
+        raw: encoded,
+        threadId: original.data.threadId ?? undefined,
+      },
     });
   }
 
@@ -549,7 +612,9 @@ export class GmailApiClient {
    *  que não existe. Janela de `newer_than:90d` (marcações antigas já passaram pelo reprocessamento
    *  normal ou não interessam mais) e `maxResults: 100` (teto razoável por ciclo; o usuário não
    *  costuma marcar dezenas de e-mails de uma vez). */
-  async listarIdsComMarcador(refreshToken: string): Promise<{ labelId: string | null; ids: Set<string> }> {
+  async listarIdsComMarcador(
+    refreshToken: string,
+  ): Promise<{ labelId: string | null; ids: Set<string> }> {
     const gmail = this.gmailFor(refreshToken);
     const labels = await gmail.users.labels.list({ userId: 'me' });
     const alvo = MARCADOR_NOME.normalize('NFC').toLowerCase();
@@ -565,7 +630,9 @@ export class GmailApiClient {
       maxResults: MARCADOR_MAX,
     });
     const ids = new Set(
-      (lista.data.messages ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string'),
+      (lista.data.messages ?? [])
+        .map((m) => m.id)
+        .filter((id): id is string => typeof id === 'string'),
     );
     return { labelId: label.id, ids };
   }

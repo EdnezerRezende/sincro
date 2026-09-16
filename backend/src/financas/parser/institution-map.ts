@@ -1,4 +1,8 @@
-import { dominio, extrairEndereco, rotulosDominio } from '../../common/email-address.util';
+import {
+  dominio,
+  extrairEndereco,
+  rotulosDominio,
+} from '../../common/email-address.util';
 import { normalizar, wb } from '../../common/text-match.util';
 
 export type TipoPadrao = 'CARTAO' | 'OUTRO';
@@ -39,14 +43,26 @@ const INSTITUTION_MAP: Entrada[] = [
   { dominio: 'bancopan.com.br', nome: 'Banco Pan', tipoPadrao: 'CARTAO' },
   { dominio: 'bancobmg.com.br', nome: 'BMG', tipoPadrao: 'CARTAO' },
   { dominio: 'pefisa.com.br', nome: 'Pefisa', tipoPadrao: 'CARTAO' },
-  { dominio: 'cartaosamsclub.com.br', nome: "Sam's Club", tipoPadrao: 'CARTAO' },
+  {
+    dominio: 'cartaosamsclub.com.br',
+    nome: "Sam's Club",
+    tipoPadrao: 'CARTAO',
+  },
   { dominio: 'midway.com.br', nome: 'Midway', tipoPadrao: 'CARTAO' },
   { dominio: 'claro.com.br', nome: 'Claro', tipoPadrao: 'OUTRO' },
   { dominio: 'vivo.com.br', nome: 'Vivo', tipoPadrao: 'OUTRO' },
   { dominio: 'tim.com.br', nome: 'TIM', tipoPadrao: 'OUTRO' },
   { dominio: 'enel.com.br', nome: 'Enel', tipoPadrao: 'OUTRO' },
-  { dominio: 'neoenergiabrasilia.com.br', nome: 'Neoenergia', tipoPadrao: 'OUTRO' },
-  { dominio: 'faturaneoenergiabrasilia.com.br', nome: 'Neoenergia', tipoPadrao: 'OUTRO' },
+  {
+    dominio: 'neoenergiabrasilia.com.br',
+    nome: 'Neoenergia',
+    tipoPadrao: 'OUTRO',
+  },
+  {
+    dominio: 'faturaneoenergiabrasilia.com.br',
+    nome: 'Neoenergia',
+    tipoPadrao: 'OUTRO',
+  },
   { dominio: 'light.com.br', nome: 'Light', tipoPadrao: 'OUTRO' },
   { dominio: 'cpfl.com.br', nome: 'CPFL', tipoPadrao: 'OUTRO' },
   { dominio: 'cemig.com.br', nome: 'Cemig', tipoPadrao: 'OUTRO' },
@@ -58,8 +74,11 @@ const INSTITUTION_MAP: Entrada[] = [
 
 /** Radicais de concessionária, como prefixo/sufixo de um rótulo do domínio (`^gas` e `^net` ficaram
  *  de fora: casavam `gastrobar`/`netflix`). Só decide tipoPadrao de desconhecidos. */
-export const UTILIDADE_RE = /^(energia|eletr|luz|agua|saneamento|telecom)|(energia|eletrica|luz|agua|gas)$/i;
-const CONTA_DE_RE = wb('\\bconta de (luz|energia|[áa]gua|g[áa]s|internet|telefone)\\b');
+export const UTILIDADE_RE =
+  /^(energia|eletr|luz|agua|saneamento|telecom)|(energia|eletrica|luz|agua|gas)$/i;
+const CONTA_DE_RE = wb(
+  '\\bconta de (luz|energia|[áa]gua|g[áa]s|internet|telefone)\\b',
+);
 
 const GENERIC_SECOND_LEVEL = new Set(['com', 'net', 'org', 'gov', 'edu', 'co']);
 const GENERIC_SUBDOMAIN_LABELS = new Set([
@@ -83,22 +102,38 @@ export function deriveInstituicaoFromDomain(endereco: string): string | null {
   const labels = rotulosDominio(endereco.toLowerCase());
   if (labels.length < 2) return null;
   const publicSuffixLength =
-    labels.length > 2 && GENERIC_SECOND_LEVEL.has(labels[labels.length - 2]) ? 2 : 1;
+    labels.length > 2 && GENERIC_SECOND_LEVEL.has(labels[labels.length - 2])
+      ? 2
+      : 1;
   const candidates = labels.slice(0, labels.length - publicSuffixLength);
   if (candidates.length === 0) return null;
-  const significant = candidates.find((l) => !GENERIC_SUBDOMAIN_LABELS.has(l)) ?? candidates[candidates.length - 1];
+  const significant =
+    candidates.find((l) => !GENERIC_SUBDOMAIN_LABELS.has(l)) ??
+    candidates[candidates.length - 1];
   return significant.charAt(0).toUpperCase() + significant.slice(1);
 }
 
-export function resolverInstituicao(remetente: string, assunto: string): Instituicao {
+export function resolverInstituicao(
+  remetente: string,
+  assunto: string,
+): Instituicao {
   const endereco = extrairEndereco(remetente);
-  if (!endereco) return { nome: 'Desconhecida', tipoPadrao: undefined, mapeada: false };
+  if (!endereco)
+    return { nome: 'Desconhecida', tipoPadrao: undefined, mapeada: false };
   const dom = dominio(endereco);
-  const entrada = INSTITUTION_MAP.find((e) => dom === e.dominio || dom.endsWith(`.${e.dominio}`));
-  if (entrada) return { nome: entrada.nome, tipoPadrao: entrada.tipoPadrao, mapeada: true };
+  const entrada = INSTITUTION_MAP.find(
+    (e) => dom === e.dominio || dom.endsWith(`.${e.dominio}`),
+  );
+  if (entrada)
+    return {
+      nome: entrada.nome,
+      tipoPadrao: entrada.tipoPadrao,
+      mapeada: true,
+    };
 
   const utilidade =
-    rotulosDominio(endereco).some((l) => UTILIDADE_RE.test(l)) || CONTA_DE_RE.test(normalizar(assunto));
+    rotulosDominio(endereco).some((l) => UTILIDADE_RE.test(l)) ||
+    CONTA_DE_RE.test(normalizar(assunto));
   return {
     nome: deriveInstituicaoFromDomain(endereco) ?? 'Desconhecida',
     tipoPadrao: utilidade ? 'OUTRO' : undefined,

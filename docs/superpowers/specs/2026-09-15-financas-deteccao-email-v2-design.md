@@ -658,6 +658,9 @@ Esperado: os três com versão 2; Nubank 08/09 (`valor null`, venc. 15/09), Sant
 ## Critérios de sucesso
 
 - Amostra real: 12/12 capturados, 0/12 ruídos, sem valor fabricado (teste automatizado).
+- Medido na verificação final (Task 14, 2026-09-16): `cd backend && npm test` → 49 suítes / 732
+  testes verdes; `triagem()` real sobre `__fixtures__/amostra-real-2026-09.json` → 12/12 financeiros
+  viram candidato (`forte`/`fraco`), 0/12 ruídos viram `forte` indevidamente.
 - Instituições fictícias fora da lista: 3/3 cobranças criam lançamento, 1/1 marketing não;
   29 adversariais de assunto não são `forte`; 8 adversariais de corpo não criam.
 - Após um ciclo completo de reprocessamento na VPS, os e-mails de fatura já visíveis no

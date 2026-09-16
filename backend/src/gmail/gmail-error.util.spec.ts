@@ -3,7 +3,11 @@ import { GaxiosError } from 'googleapis-common/node_modules/gaxios';
 import { classificarErroGmail } from './gmail-error.util';
 
 function gaxios(status?: number, extra: Record<string, unknown> = {}) {
-  const err = new GaxiosError('x', { url: 'https://gmail' } as any, status ? ({ status, data: {} } as any) : undefined);
+  const err = new GaxiosError(
+    'x',
+    { url: 'https://gmail' } as any,
+    status ? ({ status, data: {} } as any) : undefined,
+  );
   if (status) (err as any).code = status;
   Object.assign(err, extra);
   return err;
@@ -18,7 +22,10 @@ function invalidGrant() {
     { url: 'https://oauth2.googleapis.com/token' } as any,
     {
       status: 400,
-      data: { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' },
+      data: {
+        error: 'invalid_grant',
+        error_description: 'Token has been expired or revoked.',
+      },
     } as any,
   );
 }
@@ -49,13 +56,24 @@ describe('classificarErroGmail', () => {
     [{ code: 'P2002' }, 'permanente'],
     [invalidGrant(), 'transitorio-conta'],
     [new InternalServerErrorException('bug'), 'permanente'],
-    [Object.assign(new Error('x'), { response: { status: 503 } }), 'permanente'],
     [
-      gaxiosFetchError({ code: 'ENOTFOUND', error: { name: 'FetchError' }, cause: { code: 'ENOTFOUND' } }),
+      Object.assign(new Error('x'), { response: { status: 503 } }),
+      'permanente',
+    ],
+    [
+      gaxiosFetchError({
+        code: 'ENOTFOUND',
+        error: { name: 'FetchError' },
+        cause: { code: 'ENOTFOUND' },
+      }),
       'transitorio-conta',
     ],
     [
-      gaxiosFetchError({ code: undefined, error: { name: 'AbortError' }, cause: { name: 'AbortError' } }),
+      gaxiosFetchError({
+        code: undefined,
+        error: { name: 'AbortError' },
+        cause: { name: 'AbortError' },
+      }),
       'transitorio-conta',
     ],
   ])('%p → %s', (err, esperado) => {

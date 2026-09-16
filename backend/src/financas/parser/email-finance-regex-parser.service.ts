@@ -1,8 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { normalizar, wb } from '../../common/text-match.util';
 import { ResultadoTriagem } from './finance-email-detector';
-import { AnexoMeta, evidenciaSuficiente, evidenciasDeCobranca, temEvidenciaNegativa } from './finance-evidence';
-import { extrairCodigoBarras, extrairDataVencimento, extrairValor } from './finance-extractors';
+import {
+  AnexoMeta,
+  evidenciaSuficiente,
+  evidenciasDeCobranca,
+  temEvidenciaNegativa,
+} from './finance-evidence';
+import {
+  extrairCodigoBarras,
+  extrairDataVencimento,
+  extrairValor,
+} from './finance-extractors';
 import { resolverInstituicao } from './institution-map';
 import { isCardInvoiceSubject } from './invoice-subject-patterns';
 
@@ -29,9 +38,15 @@ export interface ParseParams {
   anexos: AnexoMeta[];
 }
 
-const FATURA_LIFECYCLE_RE = wb('\\b(sua|a)\\s+faturas?\\s.{0,15}(fechou|fechada|dispon[ií]vel|gerada|emitida|chegou|vence em breve)');
-const CARTAO_PERTO_DE_FATURA_RE = wb('\\bcart(ão|ao|[õo]es)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\bcart(ão|ao|[õo]es)\\b');
-const BANDEIRA_PERTO_DE_FATURA_RE = wb('\\b(visa|mastercard|master|amex|hipercard)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\b(visa|mastercard|master|amex|hipercard)\\b');
+const FATURA_LIFECYCLE_RE = wb(
+  '\\b(sua|a)\\s+faturas?\\s.{0,15}(fechou|fechada|dispon[ií]vel|gerada|emitida|chegou|vence em breve)',
+);
+const CARTAO_PERTO_DE_FATURA_RE = wb(
+  '\\bcart(ão|ao|[õo]es)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\bcart(ão|ao|[õo]es)\\b',
+);
+const BANDEIRA_PERTO_DE_FATURA_RE = wb(
+  '\\b(visa|mastercard|master|amex|hipercard)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\b(visa|mastercard|master|amex|hipercard)\\b',
+);
 
 /** Orientado à `triagem()` de `finance-email-detector.ts`: `forte` sempre gera lançamento (salvo
  *  evidência negativa no corpo); `fraco` só gera com evidência de cobrança suficiente (E1–E6). O
@@ -46,7 +61,8 @@ export class EmailFinanceRegexParserService {
     if (!marcado && temEvidenciaNegativa(corpo, p.assunto)) return null;
     if (p.triagem.nivel === 'fraco') {
       const ev = evidenciasDeCobranca(corpo, p.anexos, p.recebidoEm);
-      if (!evidenciaSuficiente(ev, p.triagem.assuntoTemSubstantivoCobranca)) return null;
+      if (!evidenciaSuficiente(ev, p.triagem.assuntoTemSubstantivoCobranca))
+        return null;
     }
 
     const inst = resolverInstituicao(p.remetente, p.assunto);
@@ -67,7 +83,11 @@ export class EmailFinanceRegexParserService {
 
   /** Preenche só o que falta (valor null / data não encontrada) com texto do PDF anexo. Nunca
    *  sobrescreve o que já veio do corpo. */
-  complementarComTexto(parsed: ParsedLancamento, texto: string | null, recebidoEm: Date): ParsedLancamento {
+  complementarComTexto(
+    parsed: ParsedLancamento,
+    texto: string | null,
+    recebidoEm: Date,
+  ): ParsedLancamento {
     if (!texto) return parsed;
     const t = normalizar(texto);
     const out = { ...parsed };
@@ -83,14 +103,23 @@ export class EmailFinanceRegexParserService {
     return out;
   }
 
-  private decidirTipo(assunto: string, corpo: string, tipoPadrao: 'CARTAO' | 'OUTRO' | undefined): TipoLancamentoParser {
+  private decidirTipo(
+    assunto: string,
+    corpo: string,
+    tipoPadrao: 'CARTAO' | 'OUTRO' | undefined,
+  ): TipoLancamentoParser {
     if (tipoPadrao === 'OUTRO') return 'DESPESA';
     const a = normalizar(assunto);
     const cabeca = corpo.slice(0, CABECA_TIPO);
     if (isCardInvoiceSubject(a)) return 'FATURA_CARTAO';
     if (CARTAO_PERTO_DE_FATURA_RE.test(cabeca)) return 'FATURA_CARTAO';
-    if (tipoPadrao === 'CARTAO' && FATURA_LIFECYCLE_RE.test(a)) return 'FATURA_CARTAO';
-    if (BANDEIRA_PERTO_DE_FATURA_RE.test(a) || BANDEIRA_PERTO_DE_FATURA_RE.test(cabeca)) return 'FATURA_CARTAO';
+    if (tipoPadrao === 'CARTAO' && FATURA_LIFECYCLE_RE.test(a))
+      return 'FATURA_CARTAO';
+    if (
+      BANDEIRA_PERTO_DE_FATURA_RE.test(a) ||
+      BANDEIRA_PERTO_DE_FATURA_RE.test(cabeca)
+    )
+      return 'FATURA_CARTAO';
     return 'DESPESA';
   }
 }

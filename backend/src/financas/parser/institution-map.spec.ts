@@ -1,20 +1,30 @@
-import { deriveInstituicaoFromDomain, resolverInstituicao, UTILIDADE_RE } from './institution-map';
+import {
+  deriveInstituicaoFromDomain,
+  resolverInstituicao,
+  UTILIDADE_RE,
+} from './institution-map';
 
 describe('deriveInstituicaoFromDomain', () => {
   it('lowercases the address before comparing, regardless of input case', () => {
     expect(deriveInstituicaoFromDomain('X@MAIL.MEUBANCO.COM')).toBe('Meubanco');
-    expect(deriveInstituicaoFromDomain('x@Noreply.Bancoalfa.com.br')).toBe('Bancoalfa');
+    expect(deriveInstituicaoFromDomain('x@Noreply.Bancoalfa.com.br')).toBe(
+      'Bancoalfa',
+    );
   });
 });
 
 describe('resolverInstituicao', () => {
   it('matches by domain suffix, covering subdomains', () => {
-    expect(resolverInstituicao('Leroy <noreply@leroymerlinpay.pefisa.com.br>', '')).toEqual({
+    expect(
+      resolverInstituicao('Leroy <noreply@leroymerlinpay.pefisa.com.br>', ''),
+    ).toEqual({
       nome: 'Pefisa',
       tipoPadrao: 'CARTAO',
       mapeada: true,
     });
-    expect(resolverInstituicao('x@faturaneoenergiabrasilia.com.br', '')).toEqual({
+    expect(
+      resolverInstituicao('x@faturaneoenergiabrasilia.com.br', ''),
+    ).toEqual({
       nome: 'Neoenergia',
       tipoPadrao: 'OUTRO',
       mapeada: true,
@@ -22,11 +32,18 @@ describe('resolverInstituicao', () => {
   });
 
   it('does not match a look-alike domain', () => {
-    expect(resolverInstituicao('x@nubank.com.br.evil.com', '').mapeada).toBe(false);
+    expect(resolverInstituicao('x@nubank.com.br.evil.com', '').mapeada).toBe(
+      false,
+    );
   });
 
   it('derives a name for an unknown institution and leaves tipo undefined', () => {
-    expect(resolverInstituicao('Banco Alfa <fatura@bancoalfa.com.br>', 'Sua fatura fechou')).toEqual({
+    expect(
+      resolverInstituicao(
+        'Banco Alfa <fatura@bancoalfa.com.br>',
+        'Sua fatura fechou',
+      ),
+    ).toEqual({
       nome: 'Bancoalfa',
       tipoPadrao: undefined,
       mapeada: false,
@@ -34,8 +51,16 @@ describe('resolverInstituicao', () => {
   });
 
   it('infers OUTRO for an unknown utility by domain radical or "conta de" subject', () => {
-    expect(resolverInstituicao('avisos@energiaxyz.com.br', 'Sua conta chegou').tipoPadrao).toBe('OUTRO');
-    expect(resolverInstituicao('contato@fornecedora.com.br', 'Sua conta de luz chegou').tipoPadrao).toBe('OUTRO');
+    expect(
+      resolverInstituicao('avisos@energiaxyz.com.br', 'Sua conta chegou')
+        .tipoPadrao,
+    ).toBe('OUTRO');
+    expect(
+      resolverInstituicao(
+        'contato@fornecedora.com.br',
+        'Sua conta de luz chegou',
+      ).tipoPadrao,
+    ).toBe('OUTRO');
   });
 
   it('UTILIDADE_RE does not match gastrobar or netflix', () => {
@@ -50,8 +75,12 @@ describe('resolverInstituicao', () => {
   });
 
   it('tolerates a null/undefined subject without throwing', () => {
-    expect(resolverInstituicao('x@energiaxyz.com.br', undefined as any).tipoPadrao).toBe('OUTRO');
-    expect(() => resolverInstituicao('x@energiaxyz.com.br', null as any)).not.toThrow();
+    expect(
+      resolverInstituicao('x@energiaxyz.com.br', undefined as any).tipoPadrao,
+    ).toBe('OUTRO');
+    expect(() =>
+      resolverInstituicao('x@energiaxyz.com.br', null as any),
+    ).not.toThrow();
   });
 
   it.each([

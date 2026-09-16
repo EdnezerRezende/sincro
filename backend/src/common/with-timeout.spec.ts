@@ -6,8 +6,8 @@ describe('withTimeout', () => {
   });
 
   it('rejects with TimeoutError when slow', async () => {
-    await expect(withTimeout(new Promise((r) => setTimeout(r, 200)), 20)).rejects.toBeInstanceOf(
-      TimeoutError,
-    );
+    await expect(
+      withTimeout(new Promise((r) => setTimeout(r, 200)), 20),
+    ).rejects.toBeInstanceOf(TimeoutError);
   });
 });

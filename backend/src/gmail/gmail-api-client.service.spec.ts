@@ -320,6 +320,8 @@ describe('GmailApiClient — filtro de ruído (Promoções/Social/Atualizações
     const result = await buildClient().fetchInitialUnread('rt-123');
 
     expect(result.emails.map((e) => e.gmailMessageId)).toEqual(['principal-1']);
+    // Task 9: FetchedEmail carrega as labelIds da mensagem (não só serve para filtrar ruído).
+    expect(result.emails[0].labelIds).toEqual(['CATEGORY_PERSONAL', 'UNREAD', 'INBOX']);
   });
 
   it('fetchIncremental descarta mensagens de Promoções/Social/Atualizações/Fóruns pelas labelIds', async () => {
@@ -408,6 +410,15 @@ describe('GmailApiClient — arquivar/excluir', () => {
 
 function base64url(texto: string): string {
   return Buffer.from(texto, 'utf8').toString('base64url');
+}
+
+/** Mocka `users.messages.get` para devolver `{ data: { payload, snippet: 's' } }` — mesma técnica
+ *  usada nos testes de `fetchFullBody` acima, extraída para reuso pelos testes de
+ *  `fetchFullBodyComAnexos`/`pareceHtml`. */
+function clientComPayload(payload: unknown) {
+  const { __get } = mocks();
+  __get.mockReset().mockResolvedValue({ data: { payload, snippet: 's' } });
+  return buildClient();
 }
 
 describe('GmailApiClient.fetchFullBody — corpo completo do e-mail (item 2: HTML não pode virar snippet cortado)', () => {
@@ -508,5 +519,88 @@ describe('GmailApiClient.fetchFullBody — corpo completo do e-mail (item 2: HTM
     const result = await buildClient().fetchFullBody('rt-123', 'msg-1');
 
     expect(result).toEqual({ texto: 'Corpo aninhado', ehPreview: false });
+  });
+});
+
+describe('GmailApiClient.pareceHtml', () => {
+  it.each(['﻿<html>', 'Preheader de texto\n<html>', '<p>x</p>', '<body>', '<!-- x --><html>'])(
+    'detects %p as HTML',
+    (t) => {
+      expect(GmailApiClient.pareceHtml(t)).toBe(true);
+    },
+  );
+
+  it('does not convert genuine plain text nor a tag past 300 chars', () => {
+    expect(GmailApiClient.pareceHtml('Olá, segue sua fatura.')).toBe(false);
+    expect(GmailApiClient.pareceHtml(`${'x'.repeat(301)}<html>`)).toBe(false);
+  });
+});
+
+describe('GmailApiClient.fetchFullBodyComAnexos', () => {
+  beforeEach(() => {
+    mocks().__get.mockReset();
+  });
+
+  it('converts a text/plain part that is actually HTML', async () => {
+    const html =
+      '<html><body><table><tr><td>Vencimento: 17/09<br>Valor total: 520,61</td></tr></table></body></html>';
+    const payload = { mimeType: 'text/plain', body: { data: base64url(html) } };
+
+    const r = await clientComPayload(payload).fetchFullBodyComAnexos('rt', 'm1');
+
+    expect(r.texto).toContain('Vencimento: 17/09\nValor total: 520,61');
+    expect(r.anexos).toEqual([]);
+    expect(r.ehPreview).toBe(false);
+  });
+
+  it('lists attachment metadata without downloading, including octet-stream .PDF', async () => {
+    const payload = {
+      mimeType: 'multipart/mixed',
+      parts: [
+        { mimeType: 'text/plain', body: { data: base64url('oi') } },
+        { mimeType: 'application/octet-stream', filename: 'Fatura_082026.PDF', body: { attachmentId: 'att1', size: 12345 } },
+        { mimeType: 'image/png', filename: 'logo.png', body: { attachmentId: 'att2', size: 10 } },
+      ],
+    };
+
+    const r = await clientComPayload(payload).fetchFullBodyComAnexos('rt', 'm1');
+
+    expect(r.anexos).toEqual([
+      { filename: 'Fatura_082026.PDF', mimeType: 'application/octet-stream', size: 12345, attachmentId: 'att1' },
+      { filename: 'logo.png', mimeType: 'image/png', size: 10, attachmentId: 'att2' },
+    ]);
+  });
+
+  it('não converte texto plano genuíno mesmo com anexos presentes', async () => {
+    const payload = {
+      mimeType: 'multipart/mixed',
+      parts: [
+        { mimeType: 'text/plain', body: { data: base64url('Olá, segue sua fatura em anexo.') } },
+        { mimeType: 'application/pdf', filename: 'fatura.pdf', body: { attachmentId: 'att1', size: 999 } },
+      ],
+    };
+
+    const r = await clientComPayload(payload).fetchFullBodyComAnexos('rt', 'm1');
+
+    expect(r.texto).toBe('Olá, segue sua fatura em anexo.');
+    expect(r.ehPreview).toBe(false);
+    expect(r.anexos).toEqual([{ filename: 'fatura.pdf', mimeType: 'application/pdf', size: 999, attachmentId: 'att1' }]);
+  });
+});
+
+describe('GmailApiClient.fetchFullBody — wrapper fino sobre fetchFullBodyComAnexos', () => {
+  it('devolve só { texto, ehPreview }, sem o campo anexos, mantendo o contrato antigo', async () => {
+    const payload = {
+      mimeType: 'multipart/mixed',
+      parts: [
+        { mimeType: 'text/plain', body: { data: base64url('Olá, tudo bem?') } },
+        { mimeType: 'application/pdf', filename: 'fatura.pdf', body: { attachmentId: 'att1', size: 999 } },
+      ],
+    };
+
+    const result = await clientComPayload(payload).fetchFullBody('rt', 'm1');
+
+    expect(result).toEqual({ texto: 'Olá, tudo bem?', ehPreview: false });
+    expect(result).not.toHaveProperty('anexos');
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { decode as decodeHtmlEntities } from 'html-entities';
+import type { AnexoMeta } from '../financas/parser/finance-evidence';
 import { GmailOAuthService } from './gmail-oauth.service';
 
 export interface FetchedEmail {
@@ -9,6 +10,15 @@ export interface FetchedEmail {
   assunto: string;
   corpo: string;
   recebidoEm: Date;
+  labelIds: string[];
+}
+
+/** Corpo completo mais os anexos DA MENSAGEM (sem baixar o conteúdo — só o metadado necessário
+ *  para decidir se vale a pena buscar um PDF depois, ver `fetchPdfAttachmentText` na Task 10). */
+export interface CorpoComAnexos {
+  texto: string;
+  ehPreview: boolean;
+  anexos: AnexoMeta[];
 }
 
 /** Categorias/labels do Gmail que não são a caixa "Principal". `fetchInitialUnread` já exclui a
@@ -31,6 +41,10 @@ const NOISE_LABELS = new Set([
   'CATEGORY_FORUMS',
   'SPAM',
 ]);
+
+/** Usado por `GmailApiClient.pareceHtml` para detectar HTML entregue como `text/plain` — ver o
+ *  doc daquele método. */
+const HTML_TAG_RE = /<(!doctype|html|head|body|table|div|p|center|br|span|font)\b|<!--/i;
 
 @Injectable()
 export class GmailApiClient {
@@ -131,6 +145,7 @@ export class GmailApiClient {
         assunto: getHeader('Subject'),
         corpo: message.data.snippet ?? '',
         recebidoEm: new Date(Number(message.data.internalDate ?? Date.now())),
+        labelIds,
       });
     }
     return emails;
@@ -168,27 +183,70 @@ export class GmailApiClient {
    *  part exists does this fall back to Gmail's own `snippet` — `ehPreview: true` tells callers
    *  that what they got is a short preview, not the full message, so the UI can say so instead of
    *  presenting it as complete. */
-  async fetchFullBody(
+  async fetchFullBodyComAnexos(
     refreshToken: string,
     gmailMessageId: string,
-  ): Promise<{ texto: string; ehPreview: boolean }> {
+  ): Promise<CorpoComAnexos> {
     const gmail = this.gmailFor(refreshToken);
     const message = await gmail.users.messages.get({ userId: 'me', id: gmailMessageId, format: 'full' });
+    const anexos = this.listarAnexos(message.data.payload);
 
     const textoPlano = this.extractPlainTextBody(message.data.payload);
     if (textoPlano !== null && textoPlano.trim() !== '') {
-      return { texto: textoPlano, ehPreview: false };
+      const texto = GmailApiClient.pareceHtml(textoPlano)
+        ? GmailApiClient.htmlParaTextoLegivel(textoPlano)
+        : textoPlano;
+      if (texto.trim() !== '') return { texto, ehPreview: false, anexos };
     }
 
     const html = this.extractHtmlBody(message.data.payload);
     if (html !== null) {
       const textoConvertido = GmailApiClient.htmlParaTextoLegivel(html);
       if (textoConvertido !== '') {
-        return { texto: textoConvertido, ehPreview: false };
+        return { texto: textoConvertido, ehPreview: false, anexos };
       }
     }
 
-    return { texto: message.data.snippet ?? '', ehPreview: true };
+    return { texto: message.data.snippet ?? '', ehPreview: true, anexos };
+  }
+
+  /** Contrato antigo, mantido para o leitor de e-mail (`email-summary.controller.ts`) e o rascunho
+   *  de resposta (`email-reply.controller.ts`) — nenhum dos dois precisa de anexos, então recebem
+   *  só `{ texto, ehPreview }`. `email-sync.service.ts` também passa por aqui. */
+  async fetchFullBody(
+    refreshToken: string,
+    gmailMessageId: string,
+  ): Promise<{ texto: string; ehPreview: boolean }> {
+    const { texto, ehPreview } = await this.fetchFullBodyComAnexos(refreshToken, gmailMessageId);
+    return { texto, ehPreview };
+  }
+
+  /** Remetentes reais (Pefisa/Leroy) mandam HTML dentro da parte `text/plain` (MIME type errado,
+   *  conteúdo certo). Olha os 300 primeiros caracteres, depois de remover BOM e espaços do início —
+   *  a busca não é ancorada no início, então um preheader de texto puro antes de `<html>` não
+   *  engana a detecção. */
+  static pareceHtml(texto: string): boolean {
+    return HTML_TAG_RE.test(texto.replace(/^﻿/, '').trimStart().slice(0, 300));
+  }
+
+  /** Percorre a árvore MIME coletando metadado de todo anexo (qualquer parte com `filename` e
+   *  `body.attachmentId`) — sem baixar o conteúdo. Usado pela Task 10 (`fetchPdfAttachmentText`)
+   *  para decidir se vale a pena buscar um PDF, e pela evidência de cobrança (`finance-evidence.ts`)
+   *  para checar nome/tipo do anexo. */
+  private listarAnexos(payload: gmail_v1.Schema$MessagePart | undefined): AnexoMeta[] {
+    if (!payload) return [];
+    const proprio: AnexoMeta[] =
+      payload.filename && payload.body?.attachmentId
+        ? [
+            {
+              filename: payload.filename,
+              mimeType: payload.mimeType ?? '',
+              size: payload.body.size ?? 0,
+              attachmentId: payload.body.attachmentId,
+            },
+          ]
+        : [];
+    return [...proprio, ...(payload.parts ?? []).flatMap((p) => this.listarAnexos(p))];
   }
 
   private extractPlainTextBody(payload: gmail_v1.Schema$MessagePart | undefined): string | null {

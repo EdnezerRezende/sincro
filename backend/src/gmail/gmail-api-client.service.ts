@@ -14,6 +14,12 @@ export const PDF_MAX_BYTES = 5 * 1024 * 1024;
 export const PDF_PAGINAS = 3;
 export const PDF_TIMEOUT_MS = 10_000;
 
+/** Nome do marcador (label) Gmail que o usuário aplica manualmente a e-mails financeiros que a
+ *  triagem automática perdeu — usado por `GmailApiClient.listarIdsComMarcador`, Task 11. */
+export const MARCADOR_NOME = 'Sincro/Finanças';
+const MARCADOR_JANELA = 'newer_than:90d';
+const MARCADOR_MAX = 100;
+
 export interface FetchedEmail {
   gmailMessageId: string;
   remetente: string;
@@ -514,5 +520,35 @@ export class GmailApiClient {
       userId: 'me',
       requestBody: { raw: encoded, threadId: original.data.threadId ?? undefined },
     });
+  }
+
+  /** IDs de mensagens marcadas manualmente pelo usuário com o label `MARCADOR_NOME` — sinal de que
+   *  a triagem automática perdeu um e-mail financeiro real. O nome do label é comparado com
+   *  `normalize('NFC')` + `toLowerCase()` (o usuário pode ter criado o label com acentuação
+   *  digitada de outra forma, ou capitalização diferente). Se o label não existir na conta ainda
+   *  (usuário nunca marcou nada), devolve `{ labelId: null, ids: new Set() }` sem nenhuma chamada a
+   *  `messages.list` — não há por que gastar uma chamada de API procurando mensagens de um label
+   *  que não existe. Janela de `newer_than:90d` (marcações antigas já passaram pelo reprocessamento
+   *  normal ou não interessam mais) e `maxResults: 100` (teto razoável por ciclo; o usuário não
+   *  costuma marcar dezenas de e-mails de uma vez). */
+  async listarIdsComMarcador(refreshToken: string): Promise<{ labelId: string | null; ids: Set<string> }> {
+    const gmail = this.gmailFor(refreshToken);
+    const labels = await gmail.users.labels.list({ userId: 'me' });
+    const alvo = MARCADOR_NOME.normalize('NFC').toLowerCase();
+    const label = (labels.data.labels ?? []).find(
+      (l) => (l.name ?? '').normalize('NFC').toLowerCase() === alvo,
+    );
+    if (!label?.id) return { labelId: null, ids: new Set() };
+
+    const lista = await gmail.users.messages.list({
+      userId: 'me',
+      labelIds: [label.id],
+      q: MARCADOR_JANELA,
+      maxResults: MARCADOR_MAX,
+    });
+    const ids = new Set(
+      (lista.data.messages ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string'),
+    );
+    return { labelId: label.id, ids };
   }
 }

@@ -10,6 +10,7 @@ jest.mock('googleapis', () => {
   const getProfile = jest.fn().mockResolvedValue({ data: { historyId: 'h1' } });
   const historyList = jest.fn().mockResolvedValue({ data: { history: [] } });
   const attachmentsGet = jest.fn();
+  const labelsList = jest.fn().mockResolvedValue({ data: { labels: [] } });
   return {
     google: {
       gmail: jest.fn(() => ({
@@ -17,6 +18,7 @@ jest.mock('googleapis', () => {
           messages: { get, send, list, modify, trash, attachments: { get: attachmentsGet } },
           getProfile,
           history: { list: historyList },
+          labels: { list: labelsList },
         },
       })),
     },
@@ -28,6 +30,7 @@ jest.mock('googleapis', () => {
     __getProfile: getProfile,
     __historyList: historyList,
     __attachmentsGet: attachmentsGet,
+    __labelsList: labelsList,
   };
 });
 
@@ -41,6 +44,7 @@ function mocks() {
     __getProfile: jest.Mock;
     __historyList: jest.Mock;
     __attachmentsGet: jest.Mock;
+    __labelsList: jest.Mock;
   };
 }
 
@@ -758,5 +762,41 @@ describe('GmailApiClient.fetchPdfAttachmentText', () => {
     );
 
     await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).rejects.toBeDefined();
+  });
+});
+
+/** Mocka `users.labels.list` (com `labels`, cada um `{ id, name }`) e `users.messages.list` (com
+ *  `messages`, cada um `{ id }`) — usado pelos testes de `listarIdsComMarcador`. */
+function clientComLabels(labels: { id: string; name: string }[], messages: { id: string }[]) {
+  const { __labelsList, __list } = mocks();
+  __labelsList.mockReset().mockResolvedValue({ data: { labels } });
+  __list.mockReset().mockResolvedValue({ data: { messages } });
+  return buildClient();
+}
+
+describe('GmailApiClient.listarIdsComMarcador', () => {
+  it('resolves the label (NFC, case-insensitive) and lists message ids', async () => {
+    const client = clientComLabels(
+      [{ id: 'Label_7', name: 'sincro/finanças' }],
+      [{ id: 'm1' }, { id: 'm2' }],
+    );
+
+    await expect(client.listarIdsComMarcador('rt')).resolves.toEqual({
+      labelId: 'Label_7',
+      ids: new Set(['m1', 'm2']),
+    });
+    expect(mocks().__list).toHaveBeenCalledWith({
+      userId: 'me',
+      labelIds: ['Label_7'],
+      q: 'newer_than:90d',
+      maxResults: 100,
+    });
+  });
+
+  it('returns an empty set without extra calls when the label does not exist', async () => {
+    const client = clientComLabels([{ id: 'Label_1', name: 'Outro' }], []);
+
+    await expect(client.listarIdsComMarcador('rt')).resolves.toEqual({ labelId: null, ids: new Set() });
+    expect(mocks().__list).not.toHaveBeenCalled();
   });
 });

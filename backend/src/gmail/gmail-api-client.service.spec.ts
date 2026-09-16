@@ -1,4 +1,5 @@
-import { PasswordException, PDFParse } from 'pdf-parse';
+import { Logger } from '@nestjs/common';
+import { PDFParse } from 'pdf-parse';
 import { GmailApiClient } from './gmail-api-client.service';
 
 jest.mock('googleapis', () => {
@@ -714,6 +715,32 @@ endobj
 5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
 trailer<</Root 1 0 R>>`);
 
+// PDF real de 200x100, uma página em branco, protegido por senha ("senha123", usuário e
+// proprietário), gerado com pypdf 6.18.0 (algoritmo RC4-128 — o algoritmo AES exigiria o pacote
+// `cryptography`, indisponível no ambiente usado para gerar a fixture; RC4-128 já é suficiente
+// para exercitar o caminho real de `PasswordException` do pdf-parse/pdfjs-dist, que é o que este
+// teste verifica). Script usado:
+//   from pypdf import PdfWriter
+//   writer = PdfWriter()
+//   writer.add_blank_page(width=200, height=100)
+//   writer.encrypt(user_password="senha123", owner_password="senha123", algorithm="RC4-128")
+//   writer.write("encrypted.pdf")
+// Confirmado localmente (fora do Jest) que `new PDFParse({ data }).getText()` rejeita com
+// `PasswordException` — "No password given" — para este buffer.
+const PDF_CIFRADO_BASE64URL =
+  'JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgPGRiNmMwZGI1NjQ-Cj4-CmVuZG9iagoyIDAgb2JqCjw8Ci' +
+  '9UeXBlIC9QYWdlcwovQ291bnQgMQovS2lkcyBbIDQgMCBSIF0KPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2' +
+  'cKL1BhZ2VzIDIgMCBSCj4-CmVuZG9iago0IDAgb2JqCjw8Ci9UeXBlIC9QYWdlCi9SZXNvdXJjZXMgPDwKPj4KL01lZGlhQm' +
+  '94IFsgMC4wIDAuMCAyMDAgMTAwIF0KL1BhcmVudCAyIDAgUgo-PgplbmRvYmoKNSAwIG9iago8PAovViAyCi9SIDMKL0xlbm' +
+  'd0aCAxMjgKL1AgNDI5NDk2NzI5MgovRmlsdGVyIC9TdGFuZGFyZAovTyA8YmYzZGFkMGM3OWIyZmVhZTdiMjVjZjEzNDIxND' +
+  'c2YmM0ZWFjOTRmODQxOGZlM2E2M2E3NzRiNWJkNjA3NTJiMT4KL1UgPGUwZjBkYjU4MzYyODlhMjExMTYzZDQzNDE0MWQwMD' +
+  'gzMjhiZjRlNWU0ZTc1OGE0MTY0MDA0ZTU2ZmZmYTAxMDg-Cj4-CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IG' +
+  'YgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA1OSAwMDAwMCBuIAowMDAwMDAwMTE4IDAwMDAwIG4gCjAwMDAwMDAxNj' +
+  'cgMDAwMDAgbiAKMDAwMDAwMDI2MSAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDYKL1Jvb3QgMyAwIFIKL0luZm8gMSAwIF' +
+  'IKL0lEIFsgPDY0NjE2MTM2MzU2NjM3MzY2NjY1MzkzNzY0NjUzODM1MzI2MTMxMzA2NjY0MzMzMTMyMzE2NTYyMzYzNjMzMz' +
+  'M-IDw2NDYxNjEzNjM1NjYzNzM2NjY2NTM5Mzc2NDY1MzgzNTMyNjEzMTMwNjY2NDMzMzEzMjMxNjU2MjM2MzYzMzMzPiBdCi' +
+  '9FbmNyeXB0IDUgMCBSCj4-CnN0YXJ0eHJlZgo0NzYKJSVFT0YK';
+
 describe('GmailApiClient.fetchPdfAttachmentText', () => {
   const anexo = { filename: 'f.pdf', mimeType: 'application/pdf', size: PDF_MINIMO.length, attachmentId: 'att1' };
 
@@ -729,15 +756,51 @@ describe('GmailApiClient.fetchPdfAttachmentText', () => {
     await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toBeNull();
   });
 
-  it('returns null when the PDF is password-protected (PasswordException)', async () => {
-    const client = clientComAttachment(PDF_MINIMO.toString('base64url'));
-    const getTextSpy = jest
-      .spyOn(PDFParse.prototype, 'getText')
-      .mockRejectedValueOnce(new PasswordException('senha necessária'));
+  it('returns null for a REAL password-protected PDF fixture, destroying the parser exactly once', async () => {
+    const client = clientComAttachment(PDF_CIFRADO_BASE64URL);
+    const destroySpy = jest.spyOn(PDFParse.prototype, 'destroy');
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 
     await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toBeNull();
 
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    // Confirma que este PDF cifrado é resolvido pelo ramo conhecido (`PasswordException`), não
+    // pelo ramo de erro desconhecido — senão este teste estaria testando `warn`, não a senha.
+    expect(warnSpy).not.toHaveBeenCalled();
+    destroySpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('logs the unknown error (name + message) at warn level before returning null, so an infra '
+    + 'error is not indistinguishable from an unreadable PDF', async () => {
+    const client = clientComAttachment(PDF_MINIMO.toString('base64url'));
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const getTextSpy = jest
+      .spyOn(PDFParse.prototype, 'getText')
+      .mockRejectedValueOnce(new Error('Setting up fake worker failed'));
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toBeNull();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toEqual(expect.stringContaining('fake worker'));
+
     getTextSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('returns null and destroys the parser exactly once when getText never resolves (timeout)', async () => {
+    const client = clientComAttachment(PDF_MINIMO.toString('base64url'));
+    const getTextSpy = jest
+      .spyOn(PDFParse.prototype, 'getText')
+      .mockReturnValueOnce(new Promise(() => undefined));
+    const destroySpy = jest.spyOn(PDFParse.prototype, 'destroy');
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo, 20)).resolves.toBeNull();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+
+    getTextSpy.mockRestore();
+    destroySpy.mockRestore();
   });
 
   it('escolherPdf picks by mimeType or extension within size cap', () => {

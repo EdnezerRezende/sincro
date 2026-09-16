@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { decode as decodeHtmlEntities } from 'html-entities';
 import { FormatError, InvalidPDFException, PasswordException, PDFParse } from 'pdf-parse';
@@ -84,6 +84,8 @@ const HTML_TAG_RE =
 
 @Injectable()
 export class GmailApiClient {
+  private readonly logger = new Logger(GmailApiClient.name);
+
   constructor(private readonly oauthService: GmailOAuthService) {}
 
   private gmailFor(refreshToken: string): gmail_v1.Gmail {
@@ -295,11 +297,18 @@ export class GmailApiClient {
    *
    *  `pdf-parse` 2.x usa a API de classe (`PDFParse`); `rag/document-processor.service.ts` usa a
    *  API 1.x (função solta) e está incompatível com a versão instalada — dívida separada, não
-   *  copiada aqui. */
+   *  copiada aqui.
+   *
+   *  `timeoutMs` tem `PDF_TIMEOUT_MS` como padrão e só existe como parâmetro para os testes
+   *  conseguirem apertar o prazo (evita um teste de timeout real de 10s). Qualquer erro
+   *  desconhecido tratado como "PDF ilegível" (`null`) é registrado em `warn` com nome+mensagem
+   *  antes de virar `null` — um erro de infraestrutura genuíno (ex.: `pdfjs-dist` falhando ao
+   *  montar seu worker) não pode ficar indistinguível de um PDF corrompido de verdade nos logs. */
   async fetchPdfAttachmentText(
     refreshToken: string,
     gmailMessageId: string,
     anexo: AnexoMeta,
+    timeoutMs: number = PDF_TIMEOUT_MS,
   ): Promise<string | null> {
     const gmail = this.gmailFor(refreshToken);
     const att = await gmail.users.messages.attachments.get({
@@ -311,7 +320,7 @@ export class GmailApiClient {
     const buffer = Buffer.from(att.data.data, 'base64url');
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     try {
-      const { text } = await withTimeout(parser.getText({ first: PDF_PAGINAS }), PDF_TIMEOUT_MS);
+      const { text } = await withTimeout(parser.getText({ first: PDF_PAGINAS }), timeoutMs);
       return text;
     } catch (e) {
       if (
@@ -324,8 +333,17 @@ export class GmailApiClient {
       }
       // Erro gaxios de verdade (tem `.config` ou `.response`, como todo GaxiosError) propaga para
       // o chamador classificar. Qualquer outra coisa (lixo binário que o pdf-parse não reconheceu
-      // com uma exceção específica sequer) é tratada como "PDF ilegível".
-      if (!(e as { config?: unknown }).config && !(e as { response?: unknown }).response) return null;
+      // com uma exceção específica sequer) é tratada como "PDF ilegível" — mas primeiro é
+      // registrada em `warn`, com nome e mensagem do erro: sem isso, um erro de infraestrutura de
+      // verdade (ex.: "Setting up fake worker failed" do pdfjs-dist, um ambiente mal configurado)
+      // fica indistinguível de um PDF genuinamente corrompido/ilegível nos logs.
+      if (!(e as { config?: unknown }).config && !(e as { response?: unknown }).response) {
+        const erro = e as { name?: string; message?: string };
+        this.logger.warn(
+          `PDF ilegível (anexo "${anexo.filename}"): ${erro.name ?? 'Error'}: ${erro.message ?? String(e)}`,
+        );
+        return null;
+      }
       throw e;
     } finally {
       await parser.destroy().catch(() => undefined);

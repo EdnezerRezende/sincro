@@ -99,4 +99,66 @@ describe('FinanceEmailProcessor.processar', () => {
     const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
     expect(r).toMatchObject({ transitorio: false, acao: 'nada' });
   });
+  it('404 do Gmail + falha ao remover no Prisma → não lança, acao erro', async () => {
+    const d = deps();
+    d.gmail.fetchFullBodyComAnexos.mockRejectedValue(Object.assign(new Error('x'), { response: { status: 404 }, code: 404, config: {} }));
+    d.prisma.lancamentoFinanceiro.deleteMany.mockRejectedValue({ code: 'P2024' });
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(r).toMatchObject({ transitorio: false, classe: 'permanente', acao: 'erro' });
+  });
+  it('lançamento existente não é da máquina (CONFIRMADO) + anexo PDF → nada, sem buscar PDF', async () => {
+    const d = deps();
+    const anexo = { filename: 'Nubank.pdf', mimeType: 'application/pdf', size: 10, attachmentId: 'a1' };
+    d.prisma.lancamentoFinanceiro.findUnique.mockResolvedValue({ id: 'l1', origem: 'EMAIL_PARSER', status: 'CONFIRMADO' });
+    d.gmail.fetchFullBodyComAnexos.mockResolvedValue({ texto: 'Sua fatura já está fechada, vence no dia 15 de setembro', ehPreview: false, anexos: [anexo] });
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(r.acao).toBe('nada');
+    expect(d.gmail.fetchPdfAttachmentText).not.toHaveBeenCalled();
+    expect(d.prisma.lancamentoFinanceiro.updateMany).not.toHaveBeenCalled();
+    expect(d.prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+  it('lançamento pendente da máquina existente + anexo PDF → busca PDF e atualiza', async () => {
+    const d = deps();
+    const anexo = { filename: 'Nubank.pdf', mimeType: 'application/pdf', size: 10, attachmentId: 'a1' };
+    d.prisma.lancamentoFinanceiro.findUnique.mockResolvedValue({ id: 'l1', origem: 'EMAIL_PARSER', status: 'PENDENTE_REVISAO' });
+    d.gmail.fetchFullBodyComAnexos.mockResolvedValue({ texto: 'Sua fatura já está fechada, vence no dia 15 de setembro', ehPreview: false, anexos: [anexo] });
+    d.gmail.fetchPdfAttachmentText.mockResolvedValue('Total da fatura R$ 1.234,56');
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(d.gmail.fetchPdfAttachmentText).toHaveBeenCalledWith('rt', 'm1', anexo);
+    expect(r.acao).toBe('atualizado');
+    expect(d.prisma.lancamentoFinanceiro.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', emailMessageId: 'm1', origem: 'EMAIL_PARSER', status: 'PENDENTE_REVISAO' },
+      data: expect.objectContaining({ valor: 1234.56 }),
+    });
+  });
+  it('lançamento existente ignorado pelo usuário → nada, sem escrita', async () => {
+    const d = deps();
+    d.prisma.lancamentoFinanceiro.findUnique.mockResolvedValue({ id: 'l1', origem: 'EMAIL_PARSER', status: 'IGNORADO' });
+    d.gmail.fetchFullBodyComAnexos.mockResolvedValue({ texto: 'Sua fatura já está fechada, vence no dia 15 de setembro', ehPreview: false, anexos: [] });
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(r.acao).toBe('nada');
+    expect(d.prisma.lancamentoFinanceiro.updateMany).not.toHaveBeenCalled();
+    expect(d.prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+  it('lançamento existente criado manualmente (MANUAL/PENDENTE_REVISAO) → nada, sem escrita', async () => {
+    const d = deps();
+    d.prisma.lancamentoFinanceiro.findUnique.mockResolvedValue({ id: 'l1', origem: 'MANUAL', status: 'PENDENTE_REVISAO' });
+    d.gmail.fetchFullBodyComAnexos.mockResolvedValue({ texto: 'Sua fatura já está fechada, vence no dia 15 de setembro', ehPreview: false, anexos: [] });
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(r.acao).toBe('nada');
+    expect(d.prisma.lancamentoFinanceiro.updateMany).not.toHaveBeenCalled();
+    expect(d.prisma.lancamentoFinanceiro.create).not.toHaveBeenCalled();
+  });
+  it('anexo PDF sem texto extraível → cria com valor null, usando a data do corpo', async () => {
+    const d = deps();
+    const anexo = { filename: 'Nubank.pdf', mimeType: 'application/pdf', size: 10, attachmentId: 'a1' };
+    d.gmail.fetchFullBodyComAnexos.mockResolvedValue({ texto: 'Sua fatura já está fechada, vence no dia 15 de setembro', ehPreview: false, anexos: [anexo] });
+    d.gmail.fetchPdfAttachmentText.mockResolvedValue(null);
+    const r = await d.processor.processar('u1', 'rt', nubank, { marcado: false });
+    expect(d.gmail.fetchPdfAttachmentText).toHaveBeenCalledWith('rt', 'm1', anexo);
+    expect(r.acao).toBe('criado');
+    expect(d.prisma.lancamentoFinanceiro.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ valor: null, dataVencimento: new Date(Date.UTC(2026, 8, 15)) }),
+    });
+  });
 });

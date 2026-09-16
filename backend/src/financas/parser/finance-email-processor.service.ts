@@ -35,6 +35,16 @@ export class FinanceEmailProcessor {
       let parsed = this.parser.parse({ remetente: email.remetente, assunto: email.assunto, corpo: texto, recebidoEm: email.recebidoEm, triagem: t, anexos });
       if (!parsed) { await this.removerLancamentoDaMaquina(userId, email.gmailMessageId); return this.ok('removido'); }
 
+      // Consulta o lançamento antes do PDF: se já existir e não for da máquina (revisado/ignorado
+      // pelo usuário, ou criado manualmente), não há por que baixar o PDF — ele só serviria para
+      // complementar um registro que de qualquer forma não será escrito.
+      const existente = await this.prisma.lancamentoFinanceiro.findUnique({
+        where: { userId_emailMessageId: { userId, emailMessageId: email.gmailMessageId } },
+      });
+      if (existente && (existente.origem !== 'EMAIL_PARSER' || existente.status !== 'PENDENTE_REVISAO')) {
+        return this.ok('nada');
+      }
+
       if (parsed.valor === null || !parsed.dataEncontrada) {
         const pdf = GmailApiClient.escolherPdf(anexos);
         if (pdf) {
@@ -42,11 +52,19 @@ export class FinanceEmailProcessor {
           parsed = this.parser.complementarComTexto(parsed, textoPdf, email.recebidoEm);
         }
       }
-      return await this.gravar(userId, email.gmailMessageId, parsed);
+      return await this.gravar(userId, email.gmailMessageId, parsed, existente);
     } catch (error) {
       const classe = classificarErroGmail(error);
       if (classe === 'permanente' && gmailMensagemNaoEncontrada(error)) {
-        await this.removerLancamentoDaMaquina(userId, email.gmailMessageId);
+        try {
+          await this.removerLancamentoDaMaquina(userId, email.gmailMessageId);
+        } catch (removalError) {
+          this.logger.error(
+            `Failed to remove finance entry for message ${email.gmailMessageId} after 404`,
+            removalError as Error,
+          );
+          return { transitorio: false, classe: 'permanente', acao: 'erro' };
+        }
         return { transitorio: false, classe, acao: 'removido' };
       }
       const log = classe === 'permanente' ? 'error' : 'warn';
@@ -59,12 +77,18 @@ export class FinanceEmailProcessor {
     await this.prisma.lancamentoFinanceiro.deleteMany({ where: { userId, emailMessageId, ...FILTRO_MAQUINA } });
   }
 
-  private async gravar(userId: string, emailMessageId: string, parsed: ParsedLancamento): Promise<ResultadoProcessamento> {
+  /** `existente` já veio de `processar` (uma única consulta por chamada, feita antes do PDF) —
+   *  aqui só decide o que fazer com ele. */
+  private async gravar(
+    userId: string,
+    emailMessageId: string,
+    parsed: ParsedLancamento,
+    existente: { origem: string; status: string } | null,
+  ): Promise<ResultadoProcessamento> {
     const campos = {
       tipo: parsed.tipo, descricao: parsed.descricao, instituicao: parsed.instituicao, valor: parsed.valor,
       dataVencimento: parsed.dataVencimento, dataCompetencia: parsed.dataVencimento, codigoBarras: parsed.codigoBarras,
     };
-    const existente = await this.prisma.lancamentoFinanceiro.findUnique({ where: { userId_emailMessageId: { userId, emailMessageId } } });
     if (existente) {
       if (existente.origem !== 'EMAIL_PARSER' || existente.status !== 'PENDENTE_REVISAO') return this.ok('nada');
       await this.prisma.lancamentoFinanceiro.updateMany({ where: { userId, emailMessageId, ...FILTRO_MAQUINA }, data: campos });

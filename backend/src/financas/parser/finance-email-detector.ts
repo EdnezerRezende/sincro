@@ -10,6 +10,8 @@ export interface ResultadoTriagem {
   assuntoTemSubstantivoCobranca: boolean;
 }
 
+const VENC_FLEXAO = 'venc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\\b';
+
 // ---------- Vetos ----------
 /** Duros: nunca criam lançamento, nem com S1a. Marketing, segurança, pagamento já feito, movimentações
  *  que NÃO são cobrança (pix/depósito/estorno recebido, agendado). */
@@ -47,7 +49,7 @@ const VETOS_DUROS: RegExp[] = [
   wb('\\bestorno\\b'),
   wb('\\brecebid[oa]\\b'),
   wb('\\b(receipt|paid|payment (received|successful|confirmed))\\b'),
-  wb('\\bparab[ée]ns\\b|\\bpr[êe]mios?\\b|\\bvoc[êe] venceu\\b'),
+  wb('\\bparab[ée]ns\\b|\\bpremia[çc][ãa]o\\b|\\bvoc[êe] venceu\\b'),
 ];
 /** Brandos: cauda de marketing num aviso legítimo ("Sua fatura chegou. Saiba como pagar") não o anula —
  *  só derrubam quando S1a NÃO casa. Checados antes de S1b/S2/S3/S8: só S1a sobrevive. */
@@ -59,16 +61,21 @@ const VETOS_BRANDOS: RegExp[] = [
  *  "Taxa de adesão — boleto disponível" tem S2 e deve ficar forte; "Adesão à fatura digital",
  *  sem nenhum sinal forte, cai aqui e vira 'nao'. "com/de desconto" mora aqui (não em
  *  VETOS_BRANDOS) para não derrubar antes de S1b/S2/S3/S8: "Boleto disponível com desconto até
- *  dia 5" precisa chegar a S2. Traz uma exceção: se "disponível" já apareceu antes do "desconto"
- *  (quase-sinal de ciclo, mesmo sem o sujeito exato de S1a bater), o veto não se aplica e o
- *  assunto cai nos sinais fracos (ex.: "Fatura disponível com desconto por pagamento antecipado" →
- *  fraco S6, não 'nao'); sem esse quase-sinal, ainda vira 'nao' ("Parcele sua fatura com desconto"). */
-const VETOS_BRANDOS_TARDIOS: RegExp[] = [
-  wb('\\bade(rir|r[êe]ncia|s[ãa]o)\\b'),
-  wb('(?<!\\bdispon[ií]vel\\b.{0,60})\\b(com|de) desconto\\b'),
-];
+ *  dia 5" precisa chegar a S2. */
+const VETOS_BRANDOS_TARDIOS: RegExp[] = [wb('\\bade(rir|r[êe]ncia|s[ãa]o)\\b')];
+/** "com/de desconto" só é veto tardio se o assunto NÃO tiver nenhum verbo de ciclo de cobrança —
+ *  reaproveita a flexão de vencimento de S2/S8. Com verbo de ciclo presente em qualquer posição do
+ *  assunto (não só antes de "desconto"), o veto não se aplica e o assunto segue para os sinais
+ *  fracos: "Fatura gerada com desconto por pagamento antecipado", "Mensalidade de outubro vence
+ *  dia 5 com desconto", "Pague com desconto: fatura disponível" → não 'nao'. Sem nenhum verbo de
+ *  ciclo, o veto ainda vale: "Parcele sua fatura com desconto", "Antecipe parcelas da sua fatura
+ *  com desconto" → 'nao'. */
+const CICLO_RE = wb(
+  `\\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|em atraso|pendente|at[ée] (o )?dia \\d|${VENC_FLEXAO})`,
+);
+const DESCONTO_TARDIO_RE = wb('\\b(com|de) desconto\\b');
 const VETO_REMETENTE =
-  /novidades\.|^novidades@|^news@|newsletter|^marketing@|(^|[@.\-_])promo(?=[@.\-_])|^promo[cç][aã]o@|^promo[cç][oõ]es@|^promocional@|^ofertas?@|^comunicacao@/i;
+  /novidades\.|^novidades@|^news@|newsletter|^marketing@|(^|[@.\-_])promo([cç]([aã]o|[oõ]es)|cional|tions?)?(?=[@.\-_])|^ofertas?@|^comunicacao@/i;
 
 // ---------- Sinais fortes ----------
 const S1A = wb(
@@ -76,7 +83,6 @@ const S1A = wb(
 );
 const MESES = 'janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro';
 const S1B = wb(`\\bfatura\\s+(por e-?mail|digital|do m[êe]s|do cart[ãa]o)\\b.{0,20}[-–|:]\\s*(\\w+\\s*/\\s*\\d{4}|\\d{5,}|${MESES})`);
-const VENC_FLEXAO = 'venc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\\b';
 const S2: RegExp[] = [
   wb(`\\bboletos?\\b.{0,45}\\b(emitid|gerad|dispon[ií]vel|chegou|${VENC_FLEXAO})`),
   wb(`\\bcarnê\\b.{0,45}\\b(chegou|dispon[ií]vel|${VENC_FLEXAO})`),
@@ -121,6 +127,9 @@ export function triagem(remetente: string, assunto: string, opts: { marcado: boo
 
   const brandoTardio = VETOS_BRANDOS_TARDIOS.find((re) => re.test(aLower));
   if (brandoTardio) return { ...base, nivel: 'nao', sinais: [], motivo: `veto brando: ${brandoTardio.source}` };
+  if (DESCONTO_TARDIO_RE.test(aLower) && !CICLO_RE.test(aLower)) {
+    return { ...base, nivel: 'nao', sinais: [], motivo: `veto brando: ${DESCONTO_TARDIO_RE.source}` };
+  }
 
   const fracos: string[] = [];
   if (temSubstantivo) fracos.push('S6');

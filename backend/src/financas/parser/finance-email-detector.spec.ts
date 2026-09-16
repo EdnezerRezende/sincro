@@ -95,6 +95,27 @@ describe('triagem — vetos duros', () => {
   it('"Vencimento amanhã: R$ 89,90" continua forte S8 (não pega no veto de prêmio)', () => {
     expect(t('Gama <no-reply@gamapay.com>', 'Vencimento amanhã: R$ 89,90')).toMatchObject({ nivel: 'forte', sinais: ['S8'] });
   });
+  it('"Premiação: R$ 500,00 — resgate até o vencimento" → nao (veto duro premiação)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Premiação: R$ 500,00 — resgate até o vencimento').nivel).toBe('nao');
+  });
+});
+
+describe('triagem — prêmio de seguro não é veto (removido do veto duro)', () => {
+  it('"Boleto do prêmio do seguro auto disponível" → forte S2', () => {
+    expect(t('Seguradora <contato@seguradora.com.br>', 'Boleto do prêmio do seguro auto disponível')).toMatchObject({
+      nivel: 'forte',
+      sinais: ['S2'],
+    });
+  });
+  it('"Prêmio do seguro: R$ 189,90 com vencimento em 10/10" → forte S8', () => {
+    expect(t('Seguradora <contato@seguradora.com.br>', 'Prêmio do seguro: R$ 189,90 com vencimento em 10/10')).toMatchObject({
+      nivel: 'forte',
+      sinais: ['S8'],
+    });
+  });
+  it('"Pagamento do prêmio — parcela 3/12 vence 10/10" → not nao (fraco S6, sem centavos)', () => {
+    expect(t('Seguradora <contato@seguradora.com.br>', 'Pagamento do prêmio — parcela 3/12 vence 10/10').nivel).not.toBe('nao');
+  });
 });
 
 describe('triagem — adversariais de assunto nunca são forte', () => {
@@ -208,11 +229,23 @@ describe('triagem — vetos brandos: desconto e adesão não anulam sinal forte'
       sinais: ['S2'],
     });
   });
-  it('"Fatura disponível com desconto por pagamento antecipado" não é nao (quase-sinal "disponível" isenta o veto tardio)', () => {
+  it('"Fatura disponível com desconto por pagamento antecipado" não é nao (verbo de ciclo "disponível" isenta o veto tardio)', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Fatura disponível com desconto por pagamento antecipado').nivel).not.toBe('nao');
   });
-  it('"Parcele sua fatura com desconto" continua nao (sem quase-sinal, veto brando tardio)', () => {
+  it('"Parcele sua fatura com desconto" continua nao (sem verbo de ciclo, veto brando tardio)', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Parcele sua fatura com desconto').nivel).toBe('nao');
+  });
+  it('"Antecipe parcelas da sua fatura com desconto" continua nao (sem verbo de ciclo, veto brando tardio)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Antecipe parcelas da sua fatura com desconto').nivel).toBe('nao');
+  });
+  it('"Mensalidade de outubro vence dia 5 com desconto" não é nao (verbo de ciclo "vence" em qualquer posição isenta o veto)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Mensalidade de outubro vence dia 5 com desconto').nivel).not.toBe('nao');
+  });
+  it('"Fatura gerada com desconto por pagamento antecipado" não é nao (verbo de ciclo "gerada")', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Fatura gerada com desconto por pagamento antecipado').nivel).not.toBe('nao');
+  });
+  it('"Pague com desconto: fatura disponível" não é nao (verbo de ciclo "disponível" em qualquer posição, não só antes de "desconto")', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Pague com desconto: fatura disponível').nivel).not.toBe('nao');
   });
   it('"Sua fatura está disponível: aproveite 20% de desconto" continua nao (veto duro "% de desconto")', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Sua fatura está disponível: aproveite 20% de desconto').nivel).toBe('nao');
@@ -259,7 +292,15 @@ describe('triagem — veto de remetente "promo" ancorado', () => {
       expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('forte');
     },
   );
-  it.each(['promo@x.com', 'promo.x@y.com', 'x@promo.bancoz.com.br', 'promocoes@x.com'])('remetente %s → nao', (endereco) => {
+  it.each([
+    'promo@x.com',
+    'promo.x@y.com',
+    'x@promo.bancoz.com.br',
+    'promocoes@x.com',
+    'todomundo@promocoes.nubank.com.br',
+    'promocoes.x@y.com',
+    'x@promocional.loja.com.br',
+  ])('remetente %s → nao (forma derivada de "promo" em qualquer posição)', (endereco) => {
     expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('nao');
   });
 });

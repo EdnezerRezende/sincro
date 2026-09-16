@@ -131,23 +131,34 @@ exatamente o estado "precisa reprocessar"). `LancamentoFinanceiro` não muda.
 `GmailApiClient.fetchFullBody` hoje devolve a parte `text/plain` crua quando existe. Remetentes
 reais (Pefisa/Leroy) entregam HTML dentro de `text/plain`. Regra nova, em
 `fetchFullBodyComAnexos` (que substitui `fetchFullBody` para os **três** consumidores —
-`email-summary.controller.ts`, `email-reply.controller.ts` e o parser): se os **primeiros 300
-caracteres** do texto plano (após `trimStart()` — que já remove um BOM inicial sozinho, `﻿` é
+`email-summary.controller.ts`, `email-reply.controller.ts` e o parser): se os **primeiros 340
+caracteres** do texto plano (após `trimStart()` — que já remove um BOM inicial sozinho, U+FEFF é
 `WhiteSpace` pela spec ECMA-262, sem precisar de `.replace()` separado) casam com
 
 ```
-/<(!doctype|html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w-]+(?:=|\s*>))|<!--\s/i
+/<!doctype\s|<!--|<(html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w:.-]+(?:\s+[\w:.-]+)*\s*=)/i
 ```
 
-o texto passa por `htmlParaTextoLegivel`. Uma tag de verdade precisa ser seguida por `>`, `/>`, ou
-espaço+atributo — não basta `<` + nome de tag: isso evita falso positivo em prosa genuína como
-"O preço <p 10 reais", "De: Paulo <p@empresa.com>" ou "<br@empresa.com.br>", que a versão anterior
-(ancorada só em `\b`) detectava incorretamente como HTML. Preheader de texto antes de `<html>` é
-coberto porque a busca não é ancorada no início. Texto plano genuíno (sem tag real nos 300
-primeiros chars) **não** passa pela conversão. Quando não há `text/plain` utilizável, cai para a
-parte `text/html` (também via `htmlParaTextoLegivel`) — mas só se essa conversão gerar texto
-não-vazio; senão, cai no `snippet` com `ehPreview: true`, como antes. Melhoria colateral para o
-leitor de e-mail do app; sem mudança de contrato para ele (`{ texto, ehPreview }` continua;
+o texto passa por `htmlParaTextoLegivel`. A janela é 340 chars, não 300: uma tag que começa perto
+do limite de 300 (preheader longo antes do doctype/`<html>`) precisa de espaço depois do `<` para
+o nome da tag, o(s) atributo(s) e o fechamento — cortar em 300 partiria a tag ao meio e perderia a
+detecção. O regex tem três alternativas: (1) `<!doctype\s` cobre o doctype legado do Word/Outlook
+(`<!DOCTYPE HTML PUBLIC "-//W3C//DTD ...">`), cujo conteúdo não é `nome=valor` e por isso é tratado
+à parte da regra de atributos; (2) `<!--` cobre comentários, incluindo condicionais do Outlook
+(`<!--[if mso]>`) e preheaders, sem exigir espaço depois dos hífens; (3) uma tag conhecida seguida
+de fechamento imediato (`<br>`, `<br/>`) OU de uma lista de um ou mais atributos (nomes com
+letra/dígito/`_`/`:`/`.`/`-` — `:` e `.` cobrem `xmlns:v=`) terminando em `=`. A lista de atributos
+só termina em `=`, nunca direto em `>`: é isso que mantém "Se x<p então y > z" como falso positivo
+evitado (senão "y > z", com espaço antes do `>`, colaria como fechamento de uma tag `<p ...>`), e
+ainda cobre atributo booleano antes de outro com valor, como em `<table border cellpadding=0>`
+("border" sem valor, só "cellpadding=" precisa fechar em `=`). Também evita falso positivo em
+prosa genuína como "O preço <p 10 reais", "De: Paulo <p@empresa.com>" ou "<br@empresa.com.br>", que
+a versão anterior (ancorada só em `\b`) detectava incorretamente como HTML. Preheader de texto
+antes de `<html>` é coberto porque a busca não é ancorada no início. Texto plano genuíno (sem tag
+real nos 340 primeiros chars) **não** passa pela conversão. Quando não há `text/plain` utilizável,
+cai para a parte `text/html` (também via `htmlParaTextoLegivel`) — mas só se essa conversão gerar
+texto não-vazio; senão, cai no `snippet` com `ehPreview: true`, como antes. Melhoria colateral para
+o leitor de e-mail do app; sem mudança de contrato para ele (`{ texto, ehPreview }` continua;
 `anexos` é campo adicional, coletado recursivamente pela árvore MIME inteira sem baixar conteúdo).
 
 ## Detecção — genérica para qualquer instituição
@@ -192,19 +203,27 @@ evidência negativa da etapa 2. O usuário decidiu.
   `\brenove\b` · `\bcupom\b` · `\bofertas?\b` · `promo[çc][ãa]o` ·
   `\bagendad[oa]\b` · `\bestorno\b` · `\brecebid[oa]\b` (assunto: "Pix recebido", "Pagamento recebido") ·
   `\b(receipt|paid|payment (received|successful|confirmed))\b` (assunto em inglês: "Your receipt from
-  SaaS", "Payment received — thank you") · `\bparab[ée]ns\b|\bpr[êe]mios?\b|\bvoc[êe] venceu\b`
-  (assunto: "Você venceu! Prêmio de R$ 500,00" — sem esse veto, `venceu` + centavos bateria S8
-  indevidamente; "Vencimento amanhã: R$ 89,90" não tem nenhuma das três formas, continua S8).
-- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|(^|[@.\-_])promo(?=[@.\-_])|
-  ^promo[cç][aã]o@|^promo[cç][oõ]es@|^promocional@|^ofertas?@|^comunicacao@` — o `promo` do
-  remetente é ancorado a `@`/`.`/`-`/`_` (ou início) de um lado e a `@`/`.`/`-`/`_` do outro, para
-  não pegar substring dentro de um domínio maior: `contato@compromovel.com.br` e
-  `atendimento@promotoracredito.com.br` não são vetados; `promo@x.com`, `promo.x@y.com` e
-  `x@promo.bancoz.com.br` são (âncora do lado esquerdo inclui `@`, não só `.`/`-`/`_`). As formas
-  com sufixo de gênero/número que não terminam em separador (`promoção@`, `promoções@`,
-  `promocional@`) precisam de alternativas literais ancoradas ao início (`^promo[cç][aã]o@`,
-  `^promo[cç][oõ]es@`, `^promocional@`), porque a consoante seguinte (`ç`/`c`) quebra o
-  lookahead `(?=[@.\-_])` da regra genérica; `promocoes@x.com` é vetado por essa alternativa.
+  SaaS", "Payment received — thank you") · `\bparab[ée]ns\b|\bpremia[çc][ãa]o\b|\bvoc[êe] venceu\b`
+  (assunto: "Você venceu! Prêmio de R$ 500,00" cai em `você venceu`; "Premiação: R$ 500,00 —
+  resgate até o vencimento" cai em `premiação`; "Vencimento amanhã: R$ 89,90" não tem nenhuma das
+  três formas, continua S8). `\bpr[êe]mios?\b` **não** é veto duro: em seguro, "prêmio" é o valor
+  cobrado pela apólice, não um prêmio de sorteio — "Boleto do prêmio do seguro auto disponível" é
+  `forte` (S2), "Prêmio do seguro: R$ 189,90 com vencimento em 10/10" é `forte` (S8), "Pagamento do
+  prêmio — parcela 3/12 vence 10/10" não é `'nao'` (cai em S6 fraco). O veto só dispara quando o
+  assunto tem a moldura de sorteio/prêmio de resgate (`parabéns`, `você venceu`, `premiação`), não
+  a palavra `prêmio` isolada.
+- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|
+  (^|[@.\-_])promo([cç]([aã]o|[oõ]es)|cional|tions?)?(?=[@.\-_])|^ofertas?@|^comunicacao@` — o
+  `promo` do remetente (com ou sem as formas derivadas `promoção`/`promoções`/`promocional`/
+  `promotion(s)`) é ancorado a `@`/`.`/`-`/`_` (ou início) de um lado e a `@`/`.`/`-`/`_` do outro,
+  em qualquer posição do endereço — não só no início ou logo após `@` — para não pegar substring
+  dentro de um domínio/local-part maior: `contato@compromovel.com.br` e
+  `atendimento@promotoracredito.com.br` não são vetados (o `m` antes de `promo` em `compromovel`
+  quebra a âncora à esquerda; `promotoracredito` tem `promo` seguido de `t`, que não é nenhuma das
+  formas derivadas nem a âncora de fronteira à direita). São vetados: `promo@x.com`,
+  `promo.x@y.com`, `x@promo.bancoz.com.br`, `promocoes@x.com`, `todomundo@promocoes.nubank.com.br`
+  (o domínio inteiro é varrido, não só o local-part), `promocoes.x@y.com`,
+  `x@promocional.loja.com.br`.
 
 **Vetos brandos** (→ `'nao'` **salvo** se S1a casar — cauda de marketing num aviso legítimo não
 o anula): `\bnovidades?\b` · `\bdescubra\b` · `\bconhe[çc]a\b` · `\bdica\b` · `\bsaiba\b` ·
@@ -219,17 +238,27 @@ saiba como aderir" (duro `como aderir`) → `'nao'`.
 
 **Vetos brandos tardios** (→ `'nao'` **salvo** se algum sinal forte — S1a a S8 — já tiver casado;
 checados depois de S8, só antes dos fracos): `\bade(rir|r[êe]ncia|s[ãa]o)\b` ·
-`(?<!\bdispon[ií]vel\b.{0,60})\b(com|de) desconto\b`. Diferente dos vetos brandos "normais" (que só
-deixam S1a sobreviver), este deixa **qualquer** sinal forte sobreviver: "Taxa de adesão — boleto
-disponível" → `forte` (S2), porque o veto só é aplicado depois de S2 não ter achado nada melhor.
-"Adesão à fatura digital" (sem nenhum sinal forte) → `'nao'`.
+`\b(com|de) desconto\b` **quando o assunto não tem verbo de ciclo** (ver `CICLO_RE` abaixo).
+Diferente dos vetos brandos "normais" (que só deixam S1a sobreviver), este deixa **qualquer** sinal
+forte sobreviver: "Taxa de adesão — boleto disponível" → `forte` (S2), porque o veto só é aplicado
+depois de S2 não ter achado nada melhor. "Adesão à fatura digital" (sem nenhum sinal forte) →
+`'nao'`.
 - `\b(com|de) desconto\b` mora aqui, não nos brandos "normais" (checados antes de S1b/S2/S3/S8):
   se estivesse lá, "Boleto disponível com desconto até dia 5" seria vetado antes de S2 conseguir
-  casar; ficando tardio, chega a S2 e dá `forte`. Tem uma exceção via lookbehind negativo: se
-  "disponível" já apareceu antes do "desconto" (quase-sinal de ciclo, mesmo sem o sujeito exato de
-  S1a bater — falta o "a"/"sua" antes de "fatura"), o veto não se aplica e o assunto cai nos sinais
-  fracos: "Fatura disponível com desconto por pagamento antecipado" → `fraco` (S6), não `'nao'`.
-  Sem esse quase-sinal, o veto tardio ainda vale: "Parcele sua fatura com desconto" → `'nao'`.
+  casar; ficando tardio, chega a S2 e dá `forte`. A regra de exceção não é mais um lookbehind
+  amarrado à distância entre "disponível" e "desconto": o veto só se aplica se o assunto **não
+  tiver nenhum verbo de ciclo de cobrança**, testado no assunto inteiro (não só antes de
+  "desconto"), via
+  `CICLO_RE = wb('\\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|em atraso|pendente|
+  at[ée] (o )?dia \\d|' + VENC_FLEXAO + ')')` (reaproveita a mesma flexão de vencimento de S2/S8).
+  Com verbo de ciclo em qualquer posição do assunto, o veto tardio não se aplica e o assunto cai
+  nos sinais fracos (ou permanece `fraco`/segue adiante conforme outros sinais): "Fatura disponível
+  com desconto por pagamento antecipado" → `fraco` (S6); "Fatura gerada com desconto por pagamento
+  antecipado" → não `'nao'`; "Mensalidade de outubro vence dia 5 com desconto" → não `'nao'`;
+  "Pague com desconto: fatura disponível" → não `'nao'` (o "disponível" está depois do "desconto",
+  mas isso não importa mais — a checagem é sobre o assunto inteiro, não sobre precedência).
+  Sem nenhum verbo de ciclo, o veto tardio ainda vale: "Parcele sua fatura com desconto" → `'nao'`;
+  "Antecipe parcelas da sua fatura com desconto" → `'nao'`.
   "Sua fatura está disponível: aproveite 20% de desconto" continua `'nao'` pelo duro `% de
   desconto`, antes de chegar aos brandos tardios.
 
@@ -265,12 +294,13 @@ disponível" → `forte` (S2), porque o veto só é aplicado depois de S2 não t
 - S8. **Valor com centavos e vencimento no assunto**: `R\$\s?(\d{1,3}(\.\d{3})*|\d+),\d{2}` **e**
   `\bvenc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\b` ("Vencimento amanhã: R$ 89,90", "Parcelas
   vencem dia 10: R$ 350,00"). A flexão é fechada, não um prefixo `\bvenc` aberto — "Parabéns! Você
-  é o vencedor de R$ 1.000,00" tem centavos mas `vencedor` não é nenhuma das flexões (e agora cai
-  também no veto duro de prêmio, antes de chegar a S8), então não é `forte`. Negativos: "Ganhe R$
+  é o vencedor de R$ 1.000,00" tem centavos mas `vencedor` não é nenhuma das flexões (e cai também
+  no veto duro `parabéns`, antes de chegar a S8), então não é `forte`. Negativos: "Ganhe R$
   50 de bônus até o vencimento" (veto `ganhe`; sem centavos); "Seu limite subiu para R$ 5.000"
   (sem `venc`); "Promoção: R$ 20 de desconto vence hoje" (veto `promoção`; sem centavos); "Oferta:
   R$ 0 de anuidade — vence hoje" (veto `oferta`; sem centavos); "Você venceu! Prêmio de R$ 500,00"
-  (veto duro `\bvocê venceu\b`/`\bprêmios?\b`, mesmo com `venceu` + centavos).
+  (veto duro `\bvocê venceu\b`, mesmo com `venceu` + centavos — `\bpr[êe]mios?\b` não é mais veto
+  duro, ver seção de vetos duros).
 
 **Sinais fracos** (→ `'fraco'`; busca corpo, cria só com evidência transacional):
 - S6. Substantivo de cobrança sem ciclo: `\bfaturas?\b` · `\bboletos?\b` · `\bcarnês?\b` ·

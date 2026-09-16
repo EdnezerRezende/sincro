@@ -400,11 +400,12 @@ mapa e `deriveInstituicaoFromDomain`).
   (`googleapis-common/node_modules/gaxios@7`): `status = statusHttpDoErroGmail(err)`;
   `codes = {err.code, err.error?.code, err.cause?.code}` (strings); `nomes = {err.name, err.error?.name,
   err.cause?.name}` (**conjunto** — um timeout real tem `err.name === 'Error'` e `err.error.name ===
-  'AbortError'`); `ehGaxios = err instanceof GaxiosError || 'config' in err || 'response' in err`.
+  'AbortError'`); `ehGaxios = err instanceof GaxiosError || 'config' in err || Symbol.for('gaxios-gaxios-error') in err`.
   | Condição (na ordem) | Classe | Ação em (B) |
   |---------------------|--------|-------------|
-  | `!ehGaxios` (exceção nossa: parser, PDF, Prisma exceto P2002) | permanente | carimba `V`, `tentativas = 0`, log `error` (PDF: `debug`) |
+  | `!ehGaxios` (exceção nossa: parser, PDF, Prisma exceto P2002, `HttpException` do Nest) | permanente | carimba `V`, `tentativas = 0`, log `error` (PDF: `debug`) |
   | `status ∈ {401, 403, 429}` | transitório-conta | `tentativas += 1`; **interrompe o lote** (afeta todos) |
+  | GaxiosError do endpoint de token (invalid_grant, HTTP 400) | transitório-conta | idem |
   | `codes ∩ {ECONNRESET, ETIMEDOUT, ECONNREFUSED, EAI_AGAIN, ENOTFOUND, EPIPE} ≠ ∅` ou `nomes ∩ {AbortError, TimeoutError} ≠ ∅` ou (`ehGaxios` e `status === undefined`) | transitório-conta (rede) | idem |
   | `500 ≤ status ≤ 599` | transitório-mensagem (a API do Gmail devolve 5xx persistente para mensagens isoladas) | `tentativas += 1`; **não** carimba; **segue** para a próxima |
   | `status === 404` (mensagem apagada) | permanente | carimba `V`, `tentativas = 0`, `removerLancamentoDaMaquina` |

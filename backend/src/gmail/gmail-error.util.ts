@@ -52,14 +52,29 @@ const NOMES_TIMEOUT = new Set(['AbortError', 'TimeoutError']);
 
 /** Decide o que o reprocessamento faz com uma falha. Lê a forma REAL do gaxios 7: um timeout chega com
  *  `err.name === 'Error'` e `err.error.name === 'AbortError'`; erros de rede trazem `code` string; HTTP
- *  traz `status` numérico. Exceção que não veio do gaxios (parser, Prisma) é nossa → permanente. */
+ *  traz `status` numérico. Exceção que não veio do gaxios (parser, Prisma, `HttpException` do próprio
+ *  Nest) é nossa → permanente — por isso `ehGaxios` NÃO usa `'response' in err` (toda `HttpException`
+ *  tem `.response`) e sim `config`/o símbolo interno do gaxios/o nome do construtor. Um refresh token
+ *  revogado/expirado não vira um HTTP na chamada à API do Gmail: ele derruba a troca de token ANTES
+ *  disso, como um GaxiosError 400 do endpoint `/token` com `error: 'invalid_grant'` — sem essa checagem
+ *  explícita cairia no fallthrough "outro 4xx → permanente" e carimbaria o lote inteiro como processado. */
 export function classificarErroGmail(error: unknown): ClasseErroGmail {
   const err = (error ?? {}) as Record<string, any>;
-  const ehGaxios = typeof err === 'object' && ('config' in err || 'response' in err || err?.constructor?.name === 'GaxiosError');
+  const ehGaxios =
+    typeof err === 'object' &&
+    err !== null &&
+    ('config' in err || Symbol.for('gaxios-gaxios-error') in err || err?.constructor?.name === 'GaxiosError');
   if (!ehGaxios) return 'permanente';
 
   const status = statusHttpDoErroGmail(error);
   if (status === 401 || status === 403 || status === 429) return 'transitorio-conta';
+  if (
+    err.response?.data?.error === 'invalid_grant' ||
+    err.message === 'invalid_grant' ||
+    /\/token$/.test(String(err.config?.url ?? ''))
+  ) {
+    return 'transitorio-conta';
+  }
   const codes = [err.code, err.error?.code, err.cause?.code].filter((c) => typeof c === 'string') as string[];
   const nomes = [err.name, err.error?.name, err.cause?.name].filter((n) => typeof n === 'string') as string[];
   if (codes.some((c) => CODES_REDE.has(c)) || nomes.some((n) => NOMES_TIMEOUT.has(n))) return 'transitorio-conta';

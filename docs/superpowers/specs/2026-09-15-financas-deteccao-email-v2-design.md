@@ -460,6 +460,9 @@ mapa e `deriveInstituicaoFromDomain`).
 - `ParsedLancamento` ganha `dataEncontrada: boolean` (hoje interno como `encontradaNoCorpo`).
 
 **PDF anexo — `GmailApiClient.fetchPdfAttachmentText(refreshToken, messageId, anexo)`**
+- `pdf-parse` v2 usa `pdfjs-dist`, que carrega via ESM dinâmico; sob Jest isso só funciona com a
+  flag `NODE_OPTIONS=--experimental-vm-modules` (já embutida nos scripts `test`/`test:watch`/
+  `test:cov` do `package.json`) — sem ela, o teste com PDF real falha mesmo com o código correto.
 - `anexo` vem dos metadados do passo 2: primeira parte com `mimeType === 'application/pdf'` ou
   `filename` terminando em `.pdf` (Santander manda `octet-stream`), `size ≤ 5 MB`.
 - `attachments.get` (erro do `attachments.get` segue `classificarErroGmail`; só o parse do buffer é

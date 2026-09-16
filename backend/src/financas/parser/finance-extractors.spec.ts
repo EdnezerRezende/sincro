@@ -42,6 +42,24 @@ describe('extrairValor', () => {
   });
 });
 
+describe('extrairValor — regressão: janela após/mínimo só antes da primeira moeda', () => {
+  it('accepts the value even when "após" appears only after the currency, inside parentheses', () => {
+    expect(extrairValor('Valor do boleto R$ 89,90 (após vencimento R$ 92,00)')).toEqual({ valor: 89.9, anchored: true, ancoraCobranca: true });
+  });
+  it('accepts the value even when "Mínimo" appears only after the currency, as a separate label', () => {
+    expect(extrairValor('Total da fatura R$ 1.234,56 Mínimo R$ 123,45').valor).toBe(1234.56);
+  });
+  it('accepts the value even when "(mínimo ...)" trails the currency on the same anchor', () => {
+    expect(extrairValor('Total da fatura: R$ 50,00 (mínimo R$ 10,00)').valor).toBe(50);
+  });
+  it('accepts the value even when "Após o vencimento" is a separate sentence after the currency', () => {
+    expect(extrairValor('Valor a pagar: R$ 89,90. Após o vencimento, multa de 2%.')).toEqual({ valor: 89.9, anchored: true, ancoraCobranca: true });
+  });
+  it('still rejects when "após"/"mínimo" appears BEFORE the first currency of this anchor occurrence', () => {
+    expect(extrairValor('Valor a pagar: após o vencimento R$ 1.500,00 Valor a pagar: até o vencimento R$ 1.234,56').valor).toBe(1234.56);
+  });
+});
+
 describe('inferirAno / proximoDia', () => {
   it('picks the year nearest to recebidoEm', () => {
     expect(inferirAno(10, 1, rec('2026-12-28T00:00:00Z'))).toEqual(utc(2027, 1, 10));
@@ -110,6 +128,30 @@ describe('extrairDataVencimento', () => {
   });
   it('keeps rejecting a day-only match too far away (60 days)', () => {
     expect(extrairDataVencimento('vence dia 31', rec('2026-09-01T00:00:00Z'))).toEqual({ data: null, anchored: false });
+  });
+});
+
+describe('extrairDataVencimento — regressões (ISO antes de dd/mm/aaaa, janela após/mínimo, barra solta)', () => {
+  it('reads an ISO date after an anchor correctly, not misread as dd/mm/aaaa anchored to the wrong digits', () => {
+    expect(extrairDataVencimento('Vencimento 2026-10-10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 10), anchored: true });
+    expect(extrairDataVencimento('Pague até 2026-10-10', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 10), anchored: true });
+    expect(extrairDataVencimento('Vencimento 2026-12-31', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 12, 31), anchored: true });
+    expect(extrairDataVencimento('Vencimento: 2026-10-10T00:00:00', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 10, 10), anchored: true });
+  });
+  it('reads an ISO date from the whole-body fallback even inside a URL, unanchored', () => {
+    expect(extrairDataVencimento('https://x.com/promo/2026-01-15/abc', rec('2026-09-01T00:00:00Z'))).toEqual({ data: utc(2026, 1, 15), anchored: false });
+  });
+  it('does not misread a bare "dd/mês" or "dd/MÊS/aaaa" as day-only', () => {
+    expect(extrairDataVencimento('Vencimento: 10/out', rec('2026-09-01T00:00:00Z'))).toEqual({ data: null, anchored: false });
+    expect(extrairDataVencimento('Vencimento: 10/OUT/2026', rec('2026-09-01T00:00:00Z'))).toEqual({ data: null, anchored: false });
+  });
+  it('does not misread "dd / mm / aaaa" with spaces around the slashes as day-only', () => {
+    const r = extrairDataVencimento('Vencimento 10 / 10 / 2026', rec('2026-09-01T00:00:00Z'));
+    expect(r.data === null || r.data!.getUTCDate() !== 10 || r.data!.getUTCMonth() !== 8).toBe(true);
+  });
+  it('reads dotted/hyphenated full dates with spaces without producing a wrong date', () => {
+    expect(extrairDataVencimento('Vencimento: 05 . 10 . 2026', rec('2026-09-01T00:00:00Z')).data).not.toEqual(utc(2026, 9, 5));
+    expect(extrairDataVencimento('Vencimento: 05 - 10 - 2026', rec('2026-09-01T00:00:00Z')).data).not.toEqual(utc(2026, 9, 5));
   });
 });
 

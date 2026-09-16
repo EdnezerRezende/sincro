@@ -18,8 +18,9 @@ const MOEDA_RS_G = new RegExp(String.raw`R\$\s*${MOEDA_NUM}`, 'g');
 /** Prefixo R$ opcional — SÓ para texto ancorado. Exige que não venha colado a dígito/%. */
 const MOEDA_OPCIONAL_RE = new RegExp(String.raw`(?:R\$\s*)?(?<![\d,.])${MOEDA_NUM}(?![\d%])`);
 const PARCELAMENTO_RE = /\d+\s*(x|vezes)\s+de|parcelas?\s+de|m[ií]nimo/i;
-/** "após/mínimo" em qualquer lugar dos primeiros 15 caracteres depois da âncora — não só no início
- *  literal (rótulos como "Valor a pagar:" ou "(após o vencimento)" também devem ser rejeitados). */
+/** "após/mínimo" em qualquer lugar dos primeiros 15 caracteres depois da âncora, mas só no trecho
+ *  ANTES da primeira moeda — texto depois da moeda (ex.: "(após o vencimento)" numa frase seguinte)
+ *  não deve rejeitar um valor já reconhecido (rótulos como "Valor a pagar:" continuam rejeitados). */
 const APOS_MINIMO_INICIO_RE = wb(String.raw`^.{0,15}?\b(ap[óo]s|m[ií]nimo)\b`);
 
 function parseBr(raw: string): number {
@@ -40,10 +41,12 @@ export function extrairValor(texto: string): { valor: number | null; anchored: b
       if (matches.length === 0) continue;
       for (const m of matches) {
         const depois = linha.slice((m.index ?? 0) + m[0].length);
-        if (APOS_MINIMO_INICIO_RE.test(depois)) continue;
-        // Segmento até a primeira moeda: se houver parcelamento antes dela, o número é parcela.
+        // Segmento até a primeira moeda: se houver parcelamento ou "após/mínimo" antes dela, o
+        // número é parcela/valor mínimo — mas isso só vale para o texto ANTES da moeda.
         const primeiraMoeda = depois.match(MOEDA_OPCIONAL_RE);
         if (!primeiraMoeda || primeiraMoeda.index === undefined) continue;
+        const antesMoeda = depois.slice(0, primeiraMoeda.index);
+        if (APOS_MINIMO_INICIO_RE.test(antesMoeda)) continue;
         if (PARCELAMENTO_RE.test(depois.slice(0, primeiraMoeda.index + primeiraMoeda[0].length))) continue;
         return { valor: zeroParaNull(parseBr(primeiraMoeda[1])), anchored: true, ancoraCobranca: ehCobranca };
       }
@@ -82,14 +85,17 @@ export const DATE_ANCHORS: RegExp[] = [
  *  "para o dia") podem aparecer juntos ("Vencimento: dia 10", "Vencimento - dia 10"). */
 const CONECTOR_RE = /^\s*(?:[:.\-–—]+\s*)?(?:(?:em|no dia|dia|para o dia)\s+)?\s*/i;
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-/** dd/mm/aaaa, dd.mm.aaaa ou dd-mm-aaaa — o separador precisa ser o mesmo nas duas posições. */
-const DATA_COMPLETA_RE = /(\d{1,2})([./-])(\d{1,2})\2(\d{4}|\d{2})/;
+/** dd/mm/aaaa, dd.mm.aaaa ou dd-mm-aaaa — o separador precisa ser o mesmo nas duas posições.
+ *  Guardas de dígito (lookbehind/lookahead) evitam casar um trecho no MEIO de uma data ISO
+ *  (aaaa-mm-dd), ex.: "2026-10-10" não deve virar "26-10-20" nem "10-10-20" por acidente. */
+const DATA_COMPLETA_RE = /(?<!\d)(\d{1,2})([./-])(\d{1,2})\2(\d{4}|\d{2})(?!\d)/;
 const DATA_ISO_RE = /(\d{4})-(\d{2})-(\d{2})/;
 const DATA_EXTENSO_RE = new RegExp(String.raw`(\d{1,2})\s+de\s+(${MESES.join('|')})(?:\s+de\s+(\d{4}))?`, 'i');
 const DATA_DDMM_RE = /(\d{1,2})\/(\d{1,2})(?![/\d])/;
-/** Só-dia ("vence dia 10"): rejeita quando o número é seguido de "dias" ("em 3 dias" não é data)
- *  ou continua como data com outro separador ("05.10" — isso é dd.mm, não o dia 5). */
-const SO_DIA_RE = /^(\d{1,2})\b(?!\s*(?:[./-]\d|dias?\b|de\s))/;
+/** Só-dia ("vence dia 10"): rejeita quando o número é seguido de "dias" ("em 3 dias" não é data),
+ *  continua como data com outro separador ("05.10" — isso é dd.mm, não o dia 5), ou é seguido de
+ *  uma barra solta mesmo com espaço ou texto não numérico ("10/out", "10 / 10 / 2026"). */
+const SO_DIA_RE = /^(\d{1,2})\b(?!\s*(?:\/|[.-]\s*\d|dias?\b|de\s))/;
 
 function dataValida(y: number, m: number, d: number): Date | null {
   if (m < 1 || m > 12 || d < 1 || d > 31) return null;
@@ -120,12 +126,14 @@ export function proximoDia(dia: number, recebidoEm: Date): Date | null {
   return null;
 }
 
-/** Formatos COMPLETOS (com ano) — permitidos em qualquer lugar. */
+/** Formatos COMPLETOS (com ano) — permitidos em qualquer lugar. ISO (aaaa-mm-dd) é avaliado
+ *  ANTES de dd/mm/aaaa: sem essa ordem, DATA_COMPLETA_RE pode casar um trecho no meio de uma
+ *  data ISO (ex.: "2026-10-10" lido como dia 10, mês 10, ano 20 → 2010-10-26, errado). */
 function dataCompleta(texto: string): Date | null {
-  const n = texto.match(DATA_COMPLETA_RE);
-  if (n) { const yyyy = n[4].length === 2 ? 2000 + Number(n[4]) : Number(n[4]); return dataValida(yyyy, Number(n[3]), Number(n[1])); }
   const iso = texto.match(DATA_ISO_RE);
   if (iso) return dataValida(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  const n = texto.match(DATA_COMPLETA_RE);
+  if (n) { const yyyy = n[4].length === 2 ? 2000 + Number(n[4]) : Number(n[4]); return dataValida(yyyy, Number(n[3]), Number(n[1])); }
   const ext = texto.match(DATA_EXTENSO_RE);
   if (ext && ext[3]) return dataValida(Number(ext[3]), MESES.indexOf(ext[2].toLowerCase()) + 1, Number(ext[1]));
   return null;

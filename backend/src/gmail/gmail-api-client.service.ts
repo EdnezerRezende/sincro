@@ -1,8 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { decode as decodeHtmlEntities } from 'html-entities';
+import { FormatError, InvalidPDFException, PasswordException, PDFParse } from 'pdf-parse';
 import type { AnexoMeta } from '../financas/parser/finance-evidence';
+import { TimeoutError, withTimeout } from '../common/with-timeout';
 import { GmailOAuthService } from './gmail-oauth.service';
+
+/** Limite de tamanho do PDF baixado (evita segurar um anexo gigante em memória), quantidade de
+ *  páginas lidas (fatura raramente tem valor/vencimento além da 3ª página) e prazo máximo de
+ *  parsing (`pdf-parse`/`pdfjs-dist` pode travar em PDF malformado) — usados por
+ *  `GmailApiClient.escolherPdf`/`fetchPdfAttachmentText`, Task 10. */
+export const PDF_MAX_BYTES = 5 * 1024 * 1024;
+export const PDF_PAGINAS = 3;
+export const PDF_TIMEOUT_MS = 10_000;
 
 export interface FetchedEmail {
   gmailMessageId: string;
@@ -241,6 +251,65 @@ export class GmailApiClient {
   ): Promise<{ texto: string; ehPreview: boolean }> {
     const { texto, ehPreview } = await this.fetchFullBodyComAnexos(refreshToken, gmailMessageId);
     return { texto, ehPreview };
+  }
+
+  /** Primeiro anexo elegível para leitura como PDF: `mimeType === 'application/pdf'` OU nome
+   *  terminado em `.pdf`/`.PDF` (Santander manda `application/octet-stream` com extensão certa),
+   *  dentro do limite de tamanho `PDF_MAX_BYTES`. Estática porque não depende de estado da
+   *  instância — só decide, a partir dos metadados já coletados por `listarAnexos`, se vale a
+   *  pena chamar `fetchPdfAttachmentText`. */
+  static escolherPdf(anexos: AnexoMeta[]): AnexoMeta | null {
+    return (
+      anexos.find(
+        (a) => (a.mimeType === 'application/pdf' || /\.pdf$/i.test(a.filename)) && a.size <= PDF_MAX_BYTES,
+      ) ?? null
+    );
+  }
+
+  /** Texto das `PDF_PAGINAS` primeiras páginas do PDF anexo escolhido por `escolherPdf`. Erros do
+   *  `attachments.get` (rede, permissão, mensagem apagada) PROPAGAM para o chamador classificar
+   *  via `classificarErroGmail` — não são "PDF ilegível". Só o que acontece DEPOIS do download
+   *  (senha, corrompido, timeout, ou qualquer outra exceção não reconhecida que não tenha a forma
+   *  de um erro gaxios) vira `null`: a extração de valor/vencimento simplesmente fica sem esse
+   *  dado, sem derrubar o processamento do e-mail.
+   *
+   *  `pdf-parse` 2.x usa a API de classe (`PDFParse`); `rag/document-processor.service.ts` usa a
+   *  API 1.x (função solta) e está incompatível com a versão instalada — dívida separada, não
+   *  copiada aqui. */
+  async fetchPdfAttachmentText(
+    refreshToken: string,
+    gmailMessageId: string,
+    anexo: AnexoMeta,
+  ): Promise<string | null> {
+    const gmail = this.gmailFor(refreshToken);
+    const att = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId: gmailMessageId,
+      id: anexo.attachmentId,
+    });
+    if (!att.data.data) return null;
+    const buffer = Buffer.from(att.data.data, 'base64url');
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const { text } = await withTimeout(parser.getText({ first: PDF_PAGINAS }), PDF_TIMEOUT_MS);
+      return text;
+    } catch (e) {
+      if (
+        e instanceof PasswordException ||
+        e instanceof InvalidPDFException ||
+        e instanceof FormatError ||
+        e instanceof TimeoutError
+      ) {
+        return null;
+      }
+      // Erro gaxios de verdade (tem `.config` ou `.response`, como todo GaxiosError) propaga para
+      // o chamador classificar. Qualquer outra coisa (lixo binário que o pdf-parse não reconheceu
+      // com uma exceção específica sequer) é tratada como "PDF ilegível".
+      if (!(e as { config?: unknown }).config && !(e as { response?: unknown }).response) return null;
+      throw e;
+    } finally {
+      await parser.destroy().catch(() => undefined);
+    }
   }
 
   /** Remetentes reais (Pefisa/Leroy) mandam HTML dentro da parte `text/plain` (MIME type errado,

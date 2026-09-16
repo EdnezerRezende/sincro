@@ -1,3 +1,4 @@
+import { PasswordException, PDFParse } from 'pdf-parse';
 import { GmailApiClient } from './gmail-api-client.service';
 
 jest.mock('googleapis', () => {
@@ -8,11 +9,12 @@ jest.mock('googleapis', () => {
   const trash = jest.fn().mockResolvedValue({ data: {} });
   const getProfile = jest.fn().mockResolvedValue({ data: { historyId: 'h1' } });
   const historyList = jest.fn().mockResolvedValue({ data: { history: [] } });
+  const attachmentsGet = jest.fn();
   return {
     google: {
       gmail: jest.fn(() => ({
         users: {
-          messages: { get, send, list, modify, trash },
+          messages: { get, send, list, modify, trash, attachments: { get: attachmentsGet } },
           getProfile,
           history: { list: historyList },
         },
@@ -25,6 +27,7 @@ jest.mock('googleapis', () => {
     __trash: trash,
     __getProfile: getProfile,
     __historyList: historyList,
+    __attachmentsGet: attachmentsGet,
   };
 });
 
@@ -37,6 +40,7 @@ function mocks() {
     __trash: jest.Mock;
     __getProfile: jest.Mock;
     __historyList: jest.Mock;
+    __attachmentsGet: jest.Mock;
   };
 }
 
@@ -659,5 +663,88 @@ describe('GmailApiClient.fetchFullBody — wrapper fino sobre fetchFullBodyComAn
 
     expect(result).toEqual({ texto: 'Olá, tudo bem?', ehPreview: false });
     expect(result).not.toHaveProperty('anexos');
+  });
+});
+
+/** Mocka `users.messages.attachments.get` para devolver `{ data: { data: dataBase64url } }` — o
+ *  formato que o Gmail usa para o conteúdo binário de um anexo. */
+function clientComAttachment(dataBase64url: string) {
+  const { __attachmentsGet } = mocks();
+  __attachmentsGet.mockReset().mockResolvedValue({ data: { data: dataBase64url } });
+  return buildClient();
+}
+
+/** Mocka `users.messages.attachments.get` para rejeitar com `erro` — usado para verificar que um
+ *  erro do Gmail (não do `pdf-parse`) PROPAGA para o chamador classificar, em vez de virar `null`
+ *  como "PDF ilegível". */
+function clientComAttachmentErro(erro: unknown) {
+  const { __attachmentsGet } = mocks();
+  __attachmentsGet.mockReset().mockRejectedValue(erro);
+  return buildClient();
+}
+
+// PDF mínimo válido com uma única linha de texto, gerado à mão (sem xref table: os leitores PDF
+// tolerantes — incluindo o pdfjs-dist usado pelo pdf-parse — reconstroem a partir dos objetos
+// `N 0 obj` quando o `trailer` aponta para o catálogo). Confirmado localmente que o pdf-parse 2.4.5
+// extrai "Total da fatura R$ 1.234,56" deste buffer.
+const PDF_MINIMO = Buffer.from(`%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 100]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 60>>stream
+BT /F1 12 Tf 10 50 Td (Total da fatura R$ 1.234,56) Tj ET
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R>>`);
+
+describe('GmailApiClient.fetchPdfAttachmentText', () => {
+  const anexo = { filename: 'f.pdf', mimeType: 'application/pdf', size: PDF_MINIMO.length, attachmentId: 'att1' };
+
+  it('extracts text from a PDF attachment', async () => {
+    const client = clientComAttachment(PDF_MINIMO.toString('base64url'));
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toContain('Total da fatura');
+  });
+
+  it('returns null for an unreadable PDF', async () => {
+    const client = clientComAttachment(Buffer.from('nao e pdf').toString('base64url'));
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toBeNull();
+  });
+
+  it('returns null when the PDF is password-protected (PasswordException)', async () => {
+    const client = clientComAttachment(PDF_MINIMO.toString('base64url'));
+    const getTextSpy = jest
+      .spyOn(PDFParse.prototype, 'getText')
+      .mockRejectedValueOnce(new PasswordException('senha necessária'));
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).resolves.toBeNull();
+
+    getTextSpy.mockRestore();
+  });
+
+  it('escolherPdf picks by mimeType or extension within size cap', () => {
+    expect(
+      GmailApiClient.escolherPdf([
+        { filename: 'x.PDF', mimeType: 'application/octet-stream', size: 10, attachmentId: 'a' },
+      ])?.attachmentId,
+    ).toBe('a');
+    expect(
+      GmailApiClient.escolherPdf([
+        { filename: 'big.pdf', mimeType: 'application/pdf', size: 6 * 1024 * 1024, attachmentId: 'b' },
+      ]),
+    ).toBeNull();
+    expect(
+      GmailApiClient.escolherPdf([{ filename: 'logo.png', mimeType: 'image/png', size: 1, attachmentId: 'c' }]),
+    ).toBeNull();
+  });
+
+  it('propagates a gaxios error from attachments.get (classified by the caller)', async () => {
+    const client = clientComAttachmentErro(
+      Object.assign(new Error('boom'), { response: { status: 503 }, code: 503, config: {} }),
+    );
+
+    await expect(client.fetchPdfAttachmentText('rt', 'm1', anexo)).rejects.toBeDefined();
   });
 });

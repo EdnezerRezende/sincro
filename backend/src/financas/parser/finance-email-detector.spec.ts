@@ -54,8 +54,9 @@ describe('triagem — sinais fortes', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Boleto emitido — descubra o app').nivel).toBe('nao');
   });
   it('assunto em NFD dá o mesmo resultado', () => {
-    // NFD explícito (combining marks), não o "ã"/"á" pré-compostos — o editor normaliza para NFC
-    // ao salvar se a string for digitada como literal, por isso os escapes \u.
+    // NFD explícito: "cartão" e "está" usam aqui os caracteres de combinação
+    // Unicode U+0303 (~) e U+0301 (´) logo após a vogal-base, não os precompostos "ã"/"á" — por
+    // isso normalize('NFC') muda a string (assert abaixo).
     const assuntoNfd = 'A fatura do seu cartão está fechada';
     expect(assuntoNfd.normalize('NFC')).not.toBe(assuntoNfd);
     expect(assuntoNfd.normalize('NFC')).toBe('A fatura do seu cartão está fechada');
@@ -86,6 +87,13 @@ describe('triagem — vetos duros', () => {
   );
   it('comprovante de pagamento → nao (settled)', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Comprovante de pagamento da fatura').nivel).toBe('nao');
+  });
+  it('"Você venceu! Prêmio de R$ 500,00" → nao (veto duro, não S8)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Você venceu! Prêmio de R$ 500,00').nivel).not.toBe('forte');
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Você venceu! Prêmio de R$ 500,00').nivel).toBe('nao');
+  });
+  it('"Vencimento amanhã: R$ 89,90" continua forte S8 (não pega no veto de prêmio)', () => {
+    expect(t('Gama <no-reply@gamapay.com>', 'Vencimento amanhã: R$ 89,90')).toMatchObject({ nivel: 'forte', sinais: ['S8'] });
   });
 });
 
@@ -194,6 +202,43 @@ describe('triagem — vetos brandos: desconto e adesão não anulam sinal forte'
   it('"Adesão à fatura digital" continua nao (sem sinal forte, veto brando tardio)', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Adesão à fatura digital').nivel).toBe('nao');
   });
+  it('"Boleto disponível com desconto até dia 5" é forte S2 (desconto é tardio, não normal)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Boleto disponível com desconto até dia 5')).toMatchObject({
+      nivel: 'forte',
+      sinais: ['S2'],
+    });
+  });
+  it('"Fatura disponível com desconto por pagamento antecipado" não é nao (quase-sinal "disponível" isenta o veto tardio)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Fatura disponível com desconto por pagamento antecipado').nivel).not.toBe('nao');
+  });
+  it('"Parcele sua fatura com desconto" continua nao (sem quase-sinal, veto brando tardio)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Parcele sua fatura com desconto').nivel).toBe('nao');
+  });
+  it('"Sua fatura está disponível: aproveite 20% de desconto" continua nao (veto duro "% de desconto")', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Sua fatura está disponível: aproveite 20% de desconto').nivel).toBe('nao');
+  });
+});
+
+describe('triagem — flexão de venc ampliada (vence/vencem/vencendo/vencerá/vencidos)', () => {
+  it.each([
+    'Boletos vencem amanhã',
+    'Boletos vencidos — regularize',
+    'Boleto vencendo hoje',
+    'Boleto vencerá em 3 dias',
+  ])('"%s" → forte S2', (assunto) => {
+    expect(t('Banco Z <contato@bancoz.com.br>', assunto)).toMatchObject({ nivel: 'forte', sinais: ['S2'] });
+  });
+  it('"Parcelas vencem dia 10: R$ 350,00" → forte S8 (venc + centavos)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Parcelas vencem dia 10: R$ 350,00')).toMatchObject({
+      nivel: 'forte',
+      sinais: ['S8'],
+    });
+  });
+  it('"vencedor" continua não sendo flexão de vencimento', () => {
+    const r = t('Promo <contato@bancoz.com.br>', 'Parabéns! Você é o vencedor de R$ 1.000,00');
+    expect(r.nivel).not.toBe('forte');
+    expect(r.sinais).not.toContain('S8');
+  });
 });
 
 describe('triagem — veto duro de recibo/pagamento em inglês', () => {
@@ -214,7 +259,7 @@ describe('triagem — veto de remetente "promo" ancorado', () => {
       expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('forte');
     },
   );
-  it.each(['promo@x.com', 'promo.x@y.com'])('remetente %s → nao', (endereco) => {
+  it.each(['promo@x.com', 'promo.x@y.com', 'x@promo.bancoz.com.br', 'promocoes@x.com'])('remetente %s → nao', (endereco) => {
     expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('nao');
   });
 });

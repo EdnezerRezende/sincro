@@ -180,16 +180,23 @@ evidência negativa da etapa 2. O usuário decidiu.
   `\brenove\b` · `\bcupom\b` · `\bofertas?\b` · `promo[çc][ãa]o` ·
   `\bagendad[oa]\b` · `\bestorno\b` · `\brecebid[oa]\b` (assunto: "Pix recebido", "Pagamento recebido") ·
   `\b(receipt|paid|payment (received|successful|confirmed))\b` (assunto em inglês: "Your receipt from
-  SaaS", "Payment received — thank you").
-- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|(^|[.\-_])promo(?=[@.\-_])|
-  promo[cç][aã]o@|^ofertas?@|^comunicacao@` — o `promo` do remetente é ancorado a um separador
-  (`.`/`-`/`_`/início) de um lado e a `@`/`.`/`-`/`_` do outro, para não pegar substring dentro de
-  um domínio maior: `contato@compromovel.com.br` e `atendimento@promotoracredito.com.br` não são
-  vetados; `promo@x.com` e `promo.x@y.com` são.
+  SaaS", "Payment received — thank you") · `\bparab[ée]ns\b|\bpr[êe]mios?\b|\bvoc[êe] venceu\b`
+  (assunto: "Você venceu! Prêmio de R$ 500,00" — sem esse veto, `venceu` + centavos bateria S8
+  indevidamente; "Vencimento amanhã: R$ 89,90" não tem nenhuma das três formas, continua S8).
+- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|(^|[@.\-_])promo(?=[@.\-_])|
+  ^promo[cç][aã]o@|^promo[cç][oõ]es@|^promocional@|^ofertas?@|^comunicacao@` — o `promo` do
+  remetente é ancorado a `@`/`.`/`-`/`_` (ou início) de um lado e a `@`/`.`/`-`/`_` do outro, para
+  não pegar substring dentro de um domínio maior: `contato@compromovel.com.br` e
+  `atendimento@promotoracredito.com.br` não são vetados; `promo@x.com`, `promo.x@y.com` e
+  `x@promo.bancoz.com.br` são (âncora do lado esquerdo inclui `@`, não só `.`/`-`/`_`). As formas
+  com sufixo de gênero/número que não terminam em separador (`promoção@`, `promoções@`,
+  `promocional@`) precisam de alternativas literais ancoradas ao início (`^promo[cç][aã]o@`,
+  `^promo[cç][oõ]es@`, `^promocional@`), porque a consoante seguinte (`ç`/`c`) quebra o
+  lookahead `(?=[@.\-_])` da regra genérica; `promocoes@x.com` é vetado por essa alternativa.
 
 **Vetos brandos** (→ `'nao'` **salvo** se S1a casar — cauda de marketing num aviso legítimo não
 o anula): `\bnovidades?\b` · `\bdescubra\b` · `\bconhe[çc]a\b` · `\bdica\b` · `\bsaiba\b` ·
-`\bentenda\b` · `\bcomo entender\b` · `\baproveite\b` · `\b(com|de) desconto\b`.
+`\bentenda\b` · `\bcomo entender\b` · `\baproveite\b`.
 Positivos preservados: "Sua fatura chegou. Saiba como pagar", "Sua fatura fechou — conheça o
 Nubank Ultravioleta", "Sua fatura chegou com desconto por pagamento antecipado" → `forte`.
 Negativos: "Dica: como entender sua fatura", "Descubra o seu novo Cartão PJ", "Fatura digital:
@@ -199,10 +206,20 @@ saiba como aderir" (duro `como aderir`) → `'nao'`.
   "Promoção: R$ 20 de desconto vence hoje" → `'nao'` (duro `promoção`, não pelo brando `de desconto`).
 
 **Vetos brandos tardios** (→ `'nao'` **salvo** se algum sinal forte — S1a a S8 — já tiver casado;
-checados depois de S8, só antes dos fracos): `\bade(rir|r[êe]ncia|s[ãa]o)\b`. Diferente dos vetos
-brandos "normais" (que só deixam S1a sobreviver), este deixa **qualquer** sinal forte sobreviver:
-"Taxa de adesão — boleto disponível" → `forte` (S2), porque o veto só é aplicado depois de S2 não
-ter achado nada melhor. "Adesão à fatura digital" (sem nenhum sinal forte) → `'nao'`.
+checados depois de S8, só antes dos fracos): `\bade(rir|r[êe]ncia|s[ãa]o)\b` ·
+`(?<!\bdispon[ií]vel\b.{0,60})\b(com|de) desconto\b`. Diferente dos vetos brandos "normais" (que só
+deixam S1a sobreviver), este deixa **qualquer** sinal forte sobreviver: "Taxa de adesão — boleto
+disponível" → `forte` (S2), porque o veto só é aplicado depois de S2 não ter achado nada melhor.
+"Adesão à fatura digital" (sem nenhum sinal forte) → `'nao'`.
+- `\b(com|de) desconto\b` mora aqui, não nos brandos "normais" (checados antes de S1b/S2/S3/S8):
+  se estivesse lá, "Boleto disponível com desconto até dia 5" seria vetado antes de S2 conseguir
+  casar; ficando tardio, chega a S2 e dá `forte`. Tem uma exceção via lookbehind negativo: se
+  "disponível" já apareceu antes do "desconto" (quase-sinal de ciclo, mesmo sem o sujeito exato de
+  S1a bater — falta o "a"/"sua" antes de "fatura"), o veto não se aplica e o assunto cai nos sinais
+  fracos: "Fatura disponível com desconto por pagamento antecipado" → `fraco` (S6), não `'nao'`.
+  Sem esse quase-sinal, o veto tardio ainda vale: "Parcele sua fatura com desconto" → `'nao'`.
+  "Sua fatura está disponível: aproveite 20% de desconto" continua `'nao'` pelo duro `% de
+  desconto`, antes de chegar aos brandos tardios.
 
 **Sinais fortes** (→ `'forte'`; cria lançamento mesmo sem evidência no corpo):
 - S1. **Ciclo de fatura própria** (sem "conta" isolada):
@@ -217,10 +234,13 @@ ter achado nada melhor. "Adesão à fatura digital" (sem nenhum sinal forte) →
   (veto e sem período), "Cadastre-se na fatura por e-mail" (veto), "Fatura do mês: prefira o
   débito automático" (veto; sem período → seria fraco).
 - S2. **Boleto/carnê com ciclo**: `\bboletos?\b.{0,45}\b(emitid|gerad|dispon[ií]vel|chegou|
-  venc(e|eu|ido|ida|imento|imentos)\b)` ou `\bcarnê\b.{0,45}\b(chegou|dispon[ií]vel|
-  venc(e|eu|ido|ida|imento|imentos)\b)`. A flexão de `venc` é fechada (não um prefixo aberto) para
-  não pegar "vencedor" — ver nota em S8.
-  Positivos reais: "Novo boleto emitido no seu CPF", "Boleto vence hoje", "Seu carnê chegou".
+  venc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\b)` ou `\bcarnê\b.{0,45}\b(chegou|dispon[ií]vel|
+  venc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\b)`. A flexão de `venc` é fechada (não um prefixo
+  aberto) para não pegar "vencedor" — ver nota em S8. A lista de flexões cobre `vence`, `vencem`,
+  `venceu`, `vencendo`, `vencerá`, `vencido(s)`/`vencida(s)` e `vencimento(s)`.
+  Positivos reais: "Novo boleto emitido no seu CPF", "Boleto vence hoje", "Seu carnê chegou",
+  "Boletos vencem amanhã", "Boletos vencidos — regularize", "Boleto vencendo hoje", "Boleto
+  vencerá em 3 dias".
   Negativos: "Boleto: como funciona?" (veto), "Agora você pode pagar boletos escaneando o código
   de barras" (veto `agora você pode`; sem ciclo → seria fraco), "Carne de primeira toda semana"
   (`carnê` estrito; `carne` não casa).
@@ -231,12 +251,14 @@ ter achado nada melhor. "Adesão à fatura digital" (sem nenhum sinal forte) →
   `forte`, e a fixture `porto-consorcio.txt` testa esse caminho). Negativos: `todomundo@`,
   `financeiro@escolax.com.br` ("Reunião de pais" — `financeiro` saiu de S3, vai a S3f).
 - S8. **Valor com centavos e vencimento no assunto**: `R\$\s?(\d{1,3}(\.\d{3})*|\d+),\d{2}` **e**
-  `\bvenc(e|eu|ido|ida|imento|imentos)\b` ("Vencimento amanhã: R$ 89,90"). A flexão é fechada, não
-  um prefixo `\bvenc` aberto — "Parabéns! Você é o vencedor de R$ 1.000,00" tem centavos mas
-  `vencedor` não é nenhuma das flexões, então não é `forte`. Negativos: "Ganhe R$ 50 de bônus até
-  o vencimento" (veto `ganhe`; sem centavos); "Seu limite subiu para R$ 5.000" (sem `venc`);
-  "Promoção: R$ 20 de desconto vence hoje" (veto `promoção`; sem centavos); "Oferta: R$ 0 de
-  anuidade — vence hoje" (veto `oferta`; sem centavos).
+  `\bvenc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\b` ("Vencimento amanhã: R$ 89,90", "Parcelas
+  vencem dia 10: R$ 350,00"). A flexão é fechada, não um prefixo `\bvenc` aberto — "Parabéns! Você
+  é o vencedor de R$ 1.000,00" tem centavos mas `vencedor` não é nenhuma das flexões (e agora cai
+  também no veto duro de prêmio, antes de chegar a S8), então não é `forte`. Negativos: "Ganhe R$
+  50 de bônus até o vencimento" (veto `ganhe`; sem centavos); "Seu limite subiu para R$ 5.000"
+  (sem `venc`); "Promoção: R$ 20 de desconto vence hoje" (veto `promoção`; sem centavos); "Oferta:
+  R$ 0 de anuidade — vence hoje" (veto `oferta`; sem centavos); "Você venceu! Prêmio de R$ 500,00"
+  (veto duro `\bvocê venceu\b`/`\bprêmios?\b`, mesmo com `venceu` + centavos).
 
 **Sinais fracos** (→ `'fraco'`; busca corpo, cria só com evidência transacional):
 - S6. Substantivo de cobrança sem ciclo: `\bfaturas?\b` · `\bboletos?\b` · `\bcarnês?\b` ·

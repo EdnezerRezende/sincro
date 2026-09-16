@@ -47,22 +47,28 @@ const VETOS_DUROS: RegExp[] = [
   wb('\\bestorno\\b'),
   wb('\\brecebid[oa]\\b'),
   wb('\\b(receipt|paid|payment (received|successful|confirmed))\\b'),
+  wb('\\bparab[ée]ns\\b|\\bpr[êe]mios?\\b|\\bvoc[êe] venceu\\b'),
 ];
 /** Brandos: cauda de marketing num aviso legítimo ("Sua fatura chegou. Saiba como pagar") não o anula —
  *  só derrubam quando S1a NÃO casa. Checados antes de S1b/S2/S3/S8: só S1a sobrevive. */
 const VETOS_BRANDOS: RegExp[] = [
   wb('\\bnovidades?\\b'), wb('\\bdescubra\\b'), wb('\\bconhe[çc]a\\b'), wb('\\bdica\\b'),
   wb('\\bsaiba\\b'), wb('\\bentenda\\b'), wb('\\bcomo entender\\b'), wb('\\baproveite\\b'),
-  wb('\\b(com|de) desconto\\b'),
 ];
 /** Brandos tardios: mais fracos ainda — só derrubam quando NENHUM sinal forte (S1a a S8) casou.
  *  "Taxa de adesão — boleto disponível" tem S2 e deve ficar forte; "Adesão à fatura digital",
- *  sem nenhum sinal forte, cai aqui e vira 'nao'. */
+ *  sem nenhum sinal forte, cai aqui e vira 'nao'. "com/de desconto" mora aqui (não em
+ *  VETOS_BRANDOS) para não derrubar antes de S1b/S2/S3/S8: "Boleto disponível com desconto até
+ *  dia 5" precisa chegar a S2. Traz uma exceção: se "disponível" já apareceu antes do "desconto"
+ *  (quase-sinal de ciclo, mesmo sem o sujeito exato de S1a bater), o veto não se aplica e o
+ *  assunto cai nos sinais fracos (ex.: "Fatura disponível com desconto por pagamento antecipado" →
+ *  fraco S6, não 'nao'); sem esse quase-sinal, ainda vira 'nao' ("Parcele sua fatura com desconto"). */
 const VETOS_BRANDOS_TARDIOS: RegExp[] = [
   wb('\\bade(rir|r[êe]ncia|s[ãa]o)\\b'),
+  wb('(?<!\\bdispon[ií]vel\\b.{0,60})\\b(com|de) desconto\\b'),
 ];
 const VETO_REMETENTE =
-  /novidades\.|^novidades@|^news@|newsletter|^marketing@|(^|[.\-_])promo(?=[@.\-_])|promo[cç][aã]o@|^ofertas?@|^comunicacao@/i;
+  /novidades\.|^novidades@|^news@|newsletter|^marketing@|(^|[@.\-_])promo(?=[@.\-_])|^promo[cç][aã]o@|^promo[cç][oõ]es@|^promocional@|^ofertas?@|^comunicacao@/i;
 
 // ---------- Sinais fortes ----------
 const S1A = wb(
@@ -70,7 +76,7 @@ const S1A = wb(
 );
 const MESES = 'janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro';
 const S1B = wb(`\\bfatura\\s+(por e-?mail|digital|do m[êe]s|do cart[ãa]o)\\b.{0,20}[-–|:]\\s*(\\w+\\s*/\\s*\\d{4}|\\d{5,}|${MESES})`);
-const VENC_FLEXAO = 'venc(?:e|eu|ido|ida|imento|imentos)\\b';
+const VENC_FLEXAO = 'venc(?:e|em|eu|endo|er[áa]|id[oa]s?|imentos?)\\b';
 const S2: RegExp[] = [
   wb(`\\bboletos?\\b.{0,45}\\b(emitid|gerad|dispon[ií]vel|chegou|${VENC_FLEXAO})`),
   wb(`\\bcarnê\\b.{0,45}\\b(chegou|dispon[ií]vel|${VENC_FLEXAO})`),

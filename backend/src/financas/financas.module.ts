@@ -11,6 +11,7 @@ import { ContasService } from './contas.service';
 import { LancamentosController } from './lancamentos.controller';
 import { LancamentosService } from './lancamentos.service';
 import { EmailFinanceRegexParserService } from './parser/email-finance-regex-parser.service';
+import { FinanceEmailProcessor } from './parser/finance-email-processor.service';
 import { ResumoController } from './resumo.controller';
 import { SaldoLivreCalculator } from './saldo-livre.calculator';
 
@@ -18,6 +19,7 @@ import { SaldoLivreCalculator } from './saldo-livre.calculator';
   imports: [AuthModule, UsersModule, CalendarModule, GmailModule],
   providers: [
     EmailFinanceRegexParserService,
+    FinanceEmailProcessor,
     SaldoLivreCalculator,
     ContasService,
     CartoesService,
@@ -25,6 +27,6 @@ import { SaldoLivreCalculator } from './saldo-livre.calculator';
     LancamentosService,
   ],
   controllers: [ContasController, CartoesController, LancamentosController, ResumoController],
-  exports: [EmailFinanceRegexParserService],
+  exports: [EmailFinanceRegexParserService, FinanceEmailProcessor],
 })
 export class FinancasModule {}

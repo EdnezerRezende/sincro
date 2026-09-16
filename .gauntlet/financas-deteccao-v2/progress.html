@@ -21,8 +21,26 @@
 <tr><td>T4</td><td>2</td><td>idem</td><td>306a4e4</td><td>pendente</td><td>—</td></tr>
 <tr><td>T6 evidência</td><td>1</td><td>23 corpos</td><td>fdba24e</td><td class=rej>REJECTED</td><td>settled no assunto não checado; E6 sem cedilha</td></tr>
 <tr><td>T6</td><td>2</td><td>idem</td><td>167ce93</td><td>pendente</td><td>—</td></tr>
+<tr><td>T4</td><td>2</td><td>spec + adversariais</td><td>306a4e4</td><td class=rej>REJECTED</td><td>promo sem @/plural; "venceu" em S8; desconto/adesão; flexão venc; comentário NFD</td></tr>
+<tr><td>T4</td><td>3</td><td>idem</td><td>60708de</td><td class=rej>REJECTED</td><td>veto "prêmio" mata seguro; lookbehind "disponível" é gambiarra; promo derivado</td></tr>
+<tr><td>T4</td><td>4</td><td>idem</td><td>327e416</td><td class=ok>APPROVED</td><td>polimento: apólice/prêmio em S6; IPTU com desconto</td></tr>
+<tr><td>T6</td><td>2</td><td>23 corpos</td><td>167ce93</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T7 parse()</td><td>1</td><td>corpos reais</td><td>e0ad5f1</td><td class=rej>REJECTED</td><td>lifecycle sem "chegou"; fallback próxima linha após parcela; fixtures órfãs</td></tr>
+<tr><td>T7</td><td>2</td><td>idem</td><td>ffbfff7</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T9 gmail body</td><td>1</td><td>payload Pefisa real-shape</td><td>c0a344b</td><td class=rej>REJECTED</td><td>docblock; BOM literal; pareceHtml FP em prosa</td></tr>
+<tr><td>T9</td><td>2</td><td>idem</td><td>c47c079</td><td class=rej>REJECTED</td><td>regressão Outlook header; &lt;!--\s; BOM ainda cru</td></tr>
+<tr><td>T9</td><td>3</td><td>idem</td><td>5627b6f</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T10 PDF</td><td>1</td><td>pdf-parse real, PDFs gerados</td><td>96a0298+0f36bd9</td><td class=rej>REJECTED</td><td>erro desconhecido silencioso; sem teste de timeout; senha mockada</td></tr>
+<tr><td>T10</td><td>2</td><td>idem</td><td>d97a941</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T11 marcador</td><td>1</td><td>typings googleapis + mutação</td><td>c02560f</td><td class=rej>REJECTED</td><td>fixture NFC (mutante sem normalize passa)</td></tr>
+<tr><td>T11</td><td>2</td><td>idem</td><td>e7d7a4a</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T12 processor</td><td>1</td><td>pipeline real + Prisma em memória</td><td>ea6c51c</td><td class=rej>REJECTED</td><td>deleteMany no catch lança; PDF antes de findUnique</td></tr>
+<tr><td>T12</td><td>2</td><td>idem</td><td>7131e91</td><td class=ok>APPROVED</td><td>—</td></tr>
+<tr><td>T13 sync</td><td>1</td><td>Postgres real ($executeRaw) + DI Nest</td><td>1d890d3</td><td class=ok>APPROVED</td><td>risco: marcador perdido se passo 0 falha → corrigido em c686c78</td></tr>
+<tr><td>T14 + síntese</td><td>1</td><td>e2e com DI real, 12/12, 0/12, Postgres descartável</td><td>6779d02</td><td class=rej>REJECTED</td><td>0 bloqueantes; 5 polimentos (fake e2e, helper, limitação marcador, exports, docblock)</td></tr>
+<tr><td>Síntese</td><td>2</td><td>idem</td><td>3e3cbcd</td><td>pendente</td><td>—</td></tr>
 <!-- rows -->
 </tbody></table>
 <h2>Discarded approaches</h2><ul id="discarded"><li>Allowlist de instituições como porta de entrada — 50% de recall na amostra real; virou enriquecimento.</li><li>Carimbar versão após 3 falhas transitórias — perda permanente em outage; substituído por fila ordenada por tentativas.</li><li>`no valor de` como evidência E1 — "Pix recebido" criava lançamento; rebaixado a âncora de extração.</li></ul>
-<h2>Next action</h2><p id="next">T4/T6 em rodada 2; Grupo 4 (T7, T9) em build.</p>
+<h2>Next action</h2><p id="next">Síntese rodada 2 em curso; depois: registro na vault e entrega.</p>
 <h2>Assumptions in force</h2><ul><li>Uma réplica do backend (guard `running` do scheduler).</li><li>Rótulo aninhado chega como "Sincro/Finanças" em labels.list.</li><li>pdf-parse 2.4.5 API de classe.</li><li>Decisão: `carnê` estrito (carn[êe] casava "carne").</li></ul>

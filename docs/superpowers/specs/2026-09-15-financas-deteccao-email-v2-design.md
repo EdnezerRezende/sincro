@@ -426,12 +426,10 @@ mapa e `deriveInstituicaoFromDomain`).
 **Tipo (`FATURA_CARTAO` vs `DESPESA`)** — conteúdo decide, lista desempata:
 - `tipoPadrao === 'OUTRO'` (mapeado ou inferido por utilidade) → `DESPESA`, sempre.
 - Senão `FATURA_CARTAO` se: `isCardInvoiceSubject(assunto)` OU `\bcart(ão|ao|[õo]es)\b` a ≤ 40
-  chars de `\bfatura\b` nos primeiros `CABECA_TIPO` (600) chars do texto ("A fatura mensal do seu cartão
-  SANTANDER…") OU (`tipoPadrao === 'CARTAO'` e `FATURA_LIFECYCLE_RE`) OU (`tipoPadrao === 'CARTAO'`
-  e `\bfaturas?\b` no assunto — emissor mapeado como cartão não precisa de palavra de ciclo de vida
-  no assunto, ex.: Pefisa "Sua Fatura CELEBRE! ELO MAIS" em atraso) OU bandeira
-  `\b(visa|mastercard|master|amex|hipercard)\b` a ≤ 40 chars de `\bfatura\b` no assunto ou
-  texto-cabeça (`elo` fica fora por ser palavra comum; "Cartão Celebre! Elo" já entra por "cartão").
+  chars de `\bfatura\b` nos primeiros `CABECA_TIPO` (600) chars do texto OU (`tipoPadrao === 'CARTAO'`
+  e assunto com `\bfaturas?\b` **sem** produto não-cartão `cons[óo]rcio|empr[ée]stimo|financiamento|
+  seguro|presta[çc][ãa]o|consignad[oa]`) OU bandeira `\b(visa|mastercard|master|amex|hipercard)\b` a ≤ 40
+  chars de `\bfatura\b` no assunto ou texto-cabeça (`elo` fica fora por ser palavra comum).
 - Caso contrário `DESPESA`.
 
 **Valor**

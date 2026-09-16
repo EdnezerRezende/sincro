@@ -393,4 +393,40 @@ describe('EmailFinanceRegexParserService.parse', () => {
       );
     });
   });
+
+  describe('tipo — emissor CARTAO mapeado cobrando outro produto', () => {
+    const service3 = new EmailFinanceRegexParserService();
+    it.each([
+      ['Itaú <fatura@itau.com.br>', 'Fatura do seu consórcio Itaú disponível'],
+      [
+        'Mercado Pago <fatura@mercadopago.com.br>',
+        'Fatura do seu empréstimo pessoal',
+      ],
+      ['BB <fatura@bb.com.br>', 'Fatura do financiamento imobiliário'],
+      ['Sicredi <fatura@sicredi.com.br>', 'Fatura do seguro residencial'],
+    ])('%s / %s → DESPESA', (rem, ass) => {
+      const r = service3.parse({
+        remetente: rem,
+        assunto: ass,
+        corpo: 'Valor a pagar: R$ 300,00\nVencimento 10/10/2026',
+        recebidoEm: utc(2026, 9, 1),
+        triagem: triagem(rem, ass, { marcado: false }),
+        anexos: [],
+      });
+      expect(r?.tipo).toBe('DESPESA');
+    });
+    it('emissor CARTAO com "fatura" sem produto → FATURA_CARTAO', () => {
+      const rem = 'Itaú <fatura@itau.com.br>',
+        ass = 'Sua fatura Itaú de outubro';
+      const r = service3.parse({
+        remetente: rem,
+        assunto: ass,
+        corpo: 'Valor a pagar: R$ 300,00\nVencimento 10/10/2026',
+        recebidoEm: utc(2026, 9, 1),
+        triagem: triagem(rem, ass, { marcado: false }),
+        anexos: [],
+      });
+      expect(r?.tipo).toBe('FATURA_CARTAO');
+    });
+  });
 });

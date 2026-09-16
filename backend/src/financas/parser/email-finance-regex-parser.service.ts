@@ -38,9 +38,6 @@ export interface ParseParams {
   anexos: AnexoMeta[];
 }
 
-const FATURA_LIFECYCLE_RE = wb(
-  '\\b(sua|a)\\s+faturas?\\s.{0,15}(fechou|fechada|dispon[ií]vel|gerada|emitida|chegou|vence em breve)',
-);
 const CARTAO_PERTO_DE_FATURA_RE = wb(
   '\\bcart(ão|ao|[õo]es)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\bcart(ão|ao|[õo]es)\\b',
 );
@@ -48,13 +45,18 @@ const BANDEIRA_PERTO_DE_FATURA_RE = wb(
   '\\b(visa|mastercard|master|amex|hipercard)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\b(visa|mastercard|master|amex|hipercard)\\b',
 );
 /** Emissor MAPEADO como cartão (`tipoPadrao === 'CARTAO'`, ex.: Pefisa) já é confiável o bastante
- *  para não exigir a palavra de ciclo de vida do `FATURA_LIFECYCLE_RE` acima — basta "fatura(s)"
+ *  para não exigir palavra de ciclo de vida — basta "fatura(s)"
  *  no ASSUNTO. Ex.: Pefisa "Sua Fatura CELEBRE! ELO MAIS" com corpo de cobrança em atraso ("Ainda
  *  não identificamos o pagamento de sua fatura...") não tem "fechou"/"disponível"/etc., mas é
  *  inequivocamente uma fatura de cartão pelo remetente mapeado + assunto. Deliberadamente restrita
  *  ao assunto (não ao corpo): um emissor mapeado que manda cobrança de outra coisa citando
  *  "fatura" de passagem no corpo não deve virar FATURA_CARTAO por isso. */
 const ASSUNTO_TEM_FATURA_RE = wb('\\bfaturas?\\b');
+/** Um emissor de cartão também cobra outros produtos: "Fatura do seu consórcio", "Fatura do
+ *  empréstimo" etc. não são fatura de cartão — o atalho abaixo não se aplica a elas. */
+const PRODUTO_NAO_CARTAO_RE = wb(
+  '\\b(cons[óo]rcio|empr[ée]stimo|financiamento|seguro|presta[çc][ãa]o|consignad[oa])\\b',
+);
 
 /** Orientado à `triagem()` de `finance-email-detector.ts`: `forte` sempre gera lançamento (salvo
  *  evidência negativa no corpo); `fraco` só gera com evidência de cobrança suficiente (E1–E6). O
@@ -121,9 +123,11 @@ export class EmailFinanceRegexParserService {
     const cabeca = corpo.slice(0, CABECA_TIPO);
     if (isCardInvoiceSubject(a)) return 'FATURA_CARTAO';
     if (CARTAO_PERTO_DE_FATURA_RE.test(cabeca)) return 'FATURA_CARTAO';
-    if (tipoPadrao === 'CARTAO' && FATURA_LIFECYCLE_RE.test(a))
-      return 'FATURA_CARTAO';
-    if (tipoPadrao === 'CARTAO' && ASSUNTO_TEM_FATURA_RE.test(a))
+    if (
+      tipoPadrao === 'CARTAO' &&
+      ASSUNTO_TEM_FATURA_RE.test(a) &&
+      !PRODUTO_NAO_CARTAO_RE.test(a)
+    )
       return 'FATURA_CARTAO';
     if (
       BANDEIRA_PERTO_DE_FATURA_RE.test(a) ||

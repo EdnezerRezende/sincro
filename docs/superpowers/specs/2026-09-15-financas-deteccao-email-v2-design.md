@@ -161,7 +161,8 @@ parse(candidato + corpo + anexos)          →  ParsedLancamento | null
 
 ### Etapa 1 — triagem (remetente + assunto + marcador; sem corpo)
 
-Ordem de avaliação: marcador → vetos duros → S1a → vetos brandos → demais fortes → fracos. Constantes:
+Ordem de avaliação: marcador → vetos duros → S1a → vetos brandos → demais fortes (S1b/S2/S3/S8) →
+vetos brandos tardios → fracos. Constantes:
 `CABECA_TIPO = 600` chars (decisão de tipo), `CABECA_EVIDENCIA = 1500` chars (evidência da etapa 2).
 
 **S4 — marcador `Sincro/Finanças`** (`marcado === true`) → `'forte'`, ignorando vetos e a
@@ -174,20 +175,34 @@ evidência negativa da etapa 2. O usuário decidiu.
   `\bpesquisa\b` · `\bconvite\b` · `\bganhe\b` · `\bsorteio\b` · `\bcashback\b` ·
   `\d+ ?% ?(off|de desconto)` · `\bsem juros\b` · `\bsimule\b` · `pr[ée]-aprovad` ·
   `\bcontestad|contesta[çc][ãa]o|em an[áa]lise|\bdisputa\b` · `\bcomo (funciona|aderir|receber)\b` ·
-  `cadastre-se` · `\bader(ir|ência|são)\b` · `\bprefira\b` · `\bagora voc[êe] pode\b` · `\bsenha\b` ·
+  `cadastre-se` · `\bprefira\b` · `\bagora voc[êe] pode\b` · `\bsenha\b` ·
   `\bc[óo]digo de (verifica[çc][ãa]o|seguran[çc]a|acesso)\b` · `\balerta de seguran[çc]a\b` ·
-  `\brenove\b` · `\b(com|de) desconto\b` · `\bcupom\b` · `\bofertas?\b` · `promo[çc][ãa]o` ·
-  `\bagendad[oa]\b` · `\bestorno\b` · `\brecebid[oa]\b` (assunto: "Pix recebido", "Pagamento recebido").
-- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|promo|^ofertas?@|^comunicacao@`.
+  `\brenove\b` · `\bcupom\b` · `\bofertas?\b` · `promo[çc][ãa]o` ·
+  `\bagendad[oa]\b` · `\bestorno\b` · `\brecebid[oa]\b` (assunto: "Pix recebido", "Pagamento recebido") ·
+  `\b(receipt|paid|payment (received|successful|confirmed))\b` (assunto em inglês: "Your receipt from
+  SaaS", "Payment received — thank you").
+- Remetente (endereço): `novidades\.|^news@|newsletter|^marketing@|(^|[.\-_])promo(?=[@.\-_])|
+  promo[cç][aã]o@|^ofertas?@|^comunicacao@` — o `promo` do remetente é ancorado a um separador
+  (`.`/`-`/`_`/início) de um lado e a `@`/`.`/`-`/`_` do outro, para não pegar substring dentro de
+  um domínio maior: `contato@compromovel.com.br` e `atendimento@promotoracredito.com.br` não são
+  vetados; `promo@x.com` e `promo.x@y.com` são.
 
 **Vetos brandos** (→ `'nao'` **salvo** se S1a casar — cauda de marketing num aviso legítimo não
 o anula): `\bnovidades?\b` · `\bdescubra\b` · `\bconhe[çc]a\b` · `\bdica\b` · `\bsaiba\b` ·
-`\bentenda\b` · `\bcomo entender\b` · `\baproveite\b`.
+`\bentenda\b` · `\bcomo entender\b` · `\baproveite\b` · `\b(com|de) desconto\b`.
 Positivos preservados: "Sua fatura chegou. Saiba como pagar", "Sua fatura fechou — conheça o
-Nubank Ultravioleta" → `forte`. Negativos: "Dica: como entender sua fatura", "Descubra o seu novo
-Cartão PJ", "Fatura digital: saiba como aderir" (duro `como aderir`) → `'nao'`.
+Nubank Ultravioleta", "Sua fatura chegou com desconto por pagamento antecipado" → `forte`.
+Negativos: "Dica: como entender sua fatura", "Descubra o seu novo Cartão PJ", "Fatura digital:
+saiba como aderir" (duro `como aderir`) → `'nao'`.
 - Precedência: veto duro > sinal; veto brando > qualquer sinal exceto S1a.
   "Sua fatura está disponível: aproveite 20% de desconto" → `'nao'` (duro `% de desconto`).
+  "Promoção: R$ 20 de desconto vence hoje" → `'nao'` (duro `promoção`, não pelo brando `de desconto`).
+
+**Vetos brandos tardios** (→ `'nao'` **salvo** se algum sinal forte — S1a a S8 — já tiver casado;
+checados depois de S8, só antes dos fracos): `\bade(rir|r[êe]ncia|s[ãa]o)\b`. Diferente dos vetos
+brandos "normais" (que só deixam S1a sobreviver), este deixa **qualquer** sinal forte sobreviver:
+"Taxa de adesão — boleto disponível" → `forte` (S2), porque o veto só é aplicado depois de S2 não
+ter achado nada melhor. "Adesão à fatura digital" (sem nenhum sinal forte) → `'nao'`.
 
 **Sinais fortes** (→ `'forte'`; cria lançamento mesmo sem evidência no corpo):
 - S1. **Ciclo de fatura própria** (sem "conta" isolada):
@@ -201,11 +216,14 @@ Cartão PJ", "Fatura digital: saiba como aderir" (duro `como aderir`) → `'nao'
   está pendente de verificação" ("conta" fora da lista), "Fatura digital: saiba como aderir"
   (veto e sem período), "Cadastre-se na fatura por e-mail" (veto), "Fatura do mês: prefira o
   débito automático" (veto; sem período → seria fraco).
-- S2. **Boleto/carnê com ciclo**: `\bboletos?\b.{0,45}\b(emitid|gerad|dispon[ií]vel|chegou|venc)` ou
-  `\bcarnê\b.{0,45}\b(chegou|dispon[ií]vel|venc)`.
-  Positivo real: "Novo boleto emitido no seu CPF". Negativos: "Boleto: como funciona?" (veto),
-  "Agora você pode pagar boletos escaneando o código de barras" (veto `agora você pode`; sem
-  ciclo → seria fraco), "Carne de primeira toda semana" (`carnê` estrito; `carne` não casa).
+- S2. **Boleto/carnê com ciclo**: `\bboletos?\b.{0,45}\b(emitid|gerad|dispon[ií]vel|chegou|
+  venc(e|eu|ido|ida|imento|imentos)\b)` ou `\bcarnê\b.{0,45}\b(chegou|dispon[ií]vel|
+  venc(e|eu|ido|ida|imento|imentos)\b)`. A flexão de `venc` é fechada (não um prefixo aberto) para
+  não pegar "vencedor" — ver nota em S8.
+  Positivos reais: "Novo boleto emitido no seu CPF", "Boleto vence hoje", "Seu carnê chegou".
+  Negativos: "Boleto: como funciona?" (veto), "Agora você pode pagar boletos escaneando o código
+  de barras" (veto `agora você pode`; sem ciclo → seria fraco), "Carne de primeira toda semana"
+  (`carnê` estrito; `carne` não casa).
 - S3. **Local-part inequivocamente de fatura**, no endereço extraído:
   `^(fatura|faturas|fatura_digital|faturaporemail|boleto|boletos|invoice|invoices|\w*consorcio)($|[._-])`.
   Positivos reais: `faturaporemail@santander.com.br`, `fatura_digital@cartaosamsclub.com.br`,
@@ -213,20 +231,28 @@ Cartão PJ", "Fatura digital: saiba como aderir" (duro `como aderir`) → `'nao'
   `forte`, e a fixture `porto-consorcio.txt` testa esse caminho). Negativos: `todomundo@`,
   `financeiro@escolax.com.br` ("Reunião de pais" — `financeiro` saiu de S3, vai a S3f).
 - S8. **Valor com centavos e vencimento no assunto**: `R\$\s?(\d{1,3}(\.\d{3})*|\d+),\d{2}` **e**
-  `\bvenc` ("Vencimento amanhã: R$ 89,90"). Negativos: "Ganhe R$ 50 de bônus até o vencimento"
-  (veto `ganhe`; sem centavos); "Seu limite subiu para R$ 5.000" (sem `venc`); "Promoção: R$ 20
-  de desconto vence hoje" (veto `de desconto`/`promoção`; sem centavos); "Oferta: R$ 0 de
+  `\bvenc(e|eu|ido|ida|imento|imentos)\b` ("Vencimento amanhã: R$ 89,90"). A flexão é fechada, não
+  um prefixo `\bvenc` aberto — "Parabéns! Você é o vencedor de R$ 1.000,00" tem centavos mas
+  `vencedor` não é nenhuma das flexões, então não é `forte`. Negativos: "Ganhe R$ 50 de bônus até
+  o vencimento" (veto `ganhe`; sem centavos); "Seu limite subiu para R$ 5.000" (sem `venc`);
+  "Promoção: R$ 20 de desconto vence hoje" (veto `promoção`; sem centavos); "Oferta: R$ 0 de
   anuidade — vence hoje" (veto `oferta`; sem centavos).
 
 **Sinais fracos** (→ `'fraco'`; busca corpo, cria só com evidência transacional):
-- S6. Substantivo de cobrança sem ciclo: `\bfaturas?\b` · `\bboletos?\b` · `\bcobran[çc]a\b` ·
-  `\bcons[óo]rcio\b` · `\bfinanciamento\b` · `\bempr[ée]stimo\b` · `\bpresta[çc][ãa]o\b` ·
-  `\bvenc(e|imento)\b` · `\bmensalidade\b` · `\bparcelas?\b` · `\banuidade\b` ·
-  `\bconta de (luz|energia|[áa]gua|g[áa]s|internet|telefone)\b` · `\b(IPTU|IPVA|DARF|DAS)\b`
-  (**case-sensitive** — "das suas compras" não casa) · `\bseguro\b` · `\bsua conta chegou\b` ·
+- S6. Substantivo de cobrança sem ciclo: `\bfaturas?\b` · `\bboletos?\b` · `\bcarnês?\b` ·
+  `\bcobran[çc]a\b` · `\bcons[óo]rcio\b` · `\bfinanciamento\b` · `\bempr[ée]stimo\b` ·
+  `\bpresta[çc][ãa]o\b` · `\bvenc(e|imento)\b` · `\bmensalidade\b` · `\bparcelas?\b` ·
+  `\banuidade\b` · `\bconta de (luz|energia|[áa]gua|g[áa]s|internet|telefone)\b` ·
+  `\b(IPTU|IPVA|DARF|DAS)\b` (**case-sensitive** — "das suas compras" não casa) · `\bseguro\b` ·
+  `\bsua conta\b.{0,25}\b(chegou|dispon[ií]vel|vence|venceu)\b` ou `\bchegou sua conta\b` ·
   `linha digit[áa]vel` · `c[óo]digo de barras` · `\bfatura\s+(por e-?mail|digital|do m[êe]s)\b` (sem período).
-  Reais que caem aqui: "Fatura da Starlink", "Sua Fatura CELEBRE! ELO MAIS" (com S3f), "Escolha
-  como receber sua conta de luz" (veto `como receber` → `'nao'`, na verdade).
+  A janela de "sua conta" foi alargada (era o literal `\bsua conta chegou\b`) para cobrir "Sua
+  conta Vivo chegou", "Sua conta Claro está disponível" e a ordem invertida "Chegou sua conta Vivo
+  de setembro" — mas não pega "Sua conta Google está pendente de verificação" (nenhum dos quatro
+  verbos-âncora aparece).
+  Reais que caem aqui: "Fatura da Starlink", "Sua Fatura CELEBRE! ELO MAIS" (com S3f), "Seu carnê
+  chegou" (também S2, forte), "Escolha como receber sua conta de luz" (veto `como receber` →
+  `'nao'`, na verdade).
 - S3f. Local-part financeira **genérica** (também usada por escolas/clínicas): `^(pagamento|pagamentos|
   financeiro|faturamento|cobranca|cobrancas|billing|cartao|cartoes)($|[._-])`.
 - S7. Radical financeiro/utilidade como **prefixo ou sufixo** de um rótulo do domínio:

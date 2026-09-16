@@ -54,7 +54,12 @@ describe('triagem — sinais fortes', () => {
     expect(t('Banco Z <contato@bancoz.com.br>', 'Boleto emitido — descubra o app').nivel).toBe('nao');
   });
   it('assunto em NFD dá o mesmo resultado', () => {
-    expect(t('Nubank <todomundo@nubank.com.br>', 'A fatura do seu cartão está fechada').nivel).toBe('forte');
+    // NFD explícito (combining marks), não o "ã"/"á" pré-compostos — o editor normaliza para NFC
+    // ao salvar se a string for digitada como literal, por isso os escapes \u.
+    const assuntoNfd = 'A fatura do seu cartão está fechada';
+    expect(assuntoNfd.normalize('NFC')).not.toBe(assuntoNfd);
+    expect(assuntoNfd.normalize('NFC')).toBe('A fatura do seu cartão está fechada');
+    expect(t('Nubank <todomundo@nubank.com.br>', assuntoNfd).nivel).toBe('forte');
   });
   it('S3/S7 usam o endereço extraído, não o From cru', () => {
     expect(t('Pefisa <pagamento@pefisa.com.br>', 'Sua Fatura CELEBRE! ELO MAIS')).toMatchObject({ nivel: 'fraco', sinais: expect.arrayContaining(['S6', 'S3f']) });
@@ -132,5 +137,84 @@ describe('triagem — sinais fracos e substantivo de cobrança', () => {
   it('assuntoTemSubstantivoCobranca reflete S6/S1/S2', () => {
     expect(t('X <x@x.com>', 'Fatura da Starlink').assuntoTemSubstantivoCobranca).toBe(true);
     expect(t('X <x@nubank.com.br>', 'Olá').assuntoTemSubstantivoCobranca).toBe(false);
+  });
+  it('"Seu carnê chegou" também marca assuntoTemSubstantivoCobranca', () => {
+    expect(t('X <x@x.com>', 'Seu carnê chegou').assuntoTemSubstantivoCobranca).toBe(true);
+  });
+});
+
+describe('triagem — venc(e|eu|ido|ida|imento|imentos) não é prefixo aberto', () => {
+  it('"vencedor" não é S8 (prefixo "venc" sem ser flexão de vencimento)', () => {
+    const r = t('Promo <contato@bancoz.com.br>', 'Parabéns! Você é o vencedor de R$ 1.000,00');
+    expect(r.nivel).not.toBe('forte');
+    expect(r.sinais).not.toContain('S8');
+  });
+  it('"Vencimento amanhã: R$ 89,90" continua forte S8', () => {
+    expect(t('Gama <no-reply@gamapay.com>', 'Vencimento amanhã: R$ 89,90')).toMatchObject({ nivel: 'forte', sinais: ['S8'] });
+  });
+  it('"Novo boleto emitido no seu CPF" continua forte S2', () => {
+    expect(t('Nubank <todomundo@nubank.com.br>', 'Novo boleto emitido no seu CPF')).toMatchObject({ nivel: 'forte', sinais: ['S2'] });
+  });
+  it('"Boleto vence hoje" é forte S2', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Boleto vence hoje')).toMatchObject({ nivel: 'forte', sinais: ['S2'] });
+  });
+});
+
+describe('triagem — "sua conta … chegou/disponível/vence" (S6 fraco)', () => {
+  it.each(['Sua conta Vivo chegou', 'Chegou sua conta Vivo de setembro', 'Sua conta Claro está disponível'])(
+    '"%s" → fraco com S6', (assunto) => {
+      const r = t('Empresa <contato@empresa-qualquer.com.br>', assunto);
+      expect(r.nivel).toBe('fraco');
+      expect(r.sinais).toContain('S6');
+    },
+  );
+  it('"Sua conta Google está pendente de verificação" continua não forte', () => {
+    expect(t('Google <no-reply@accounts.google.com>', 'Sua conta Google está pendente de verificação').nivel).not.toBe('forte');
+  });
+});
+
+describe('triagem — vetos brandos: desconto e adesão não anulam sinal forte', () => {
+  it('"Sua fatura chegou com desconto por pagamento antecipado" é forte S1a', () => {
+    expect(
+      t('Banco Z <contato@bancoz.com.br>', 'Sua fatura chegou com desconto por pagamento antecipado'),
+    ).toMatchObject({ nivel: 'forte', sinais: ['S1a'] });
+  });
+  it('"Promoção: R$ 20 de desconto vence hoje" continua nao (veto duro promoção)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Promoção: R$ 20 de desconto vence hoje').nivel).toBe('nao');
+  });
+  it('"Taxa de adesão — boleto disponível" é forte S2 (adesão é veto brando, não duro)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Taxa de adesão — boleto disponível')).toMatchObject({
+      nivel: 'forte',
+      sinais: ['S2'],
+    });
+  });
+  it('"Fatura digital: saiba como aderir" continua nao (veto duro "como aderir")', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Fatura digital: saiba como aderir').nivel).toBe('nao');
+  });
+  it('"Adesão à fatura digital" continua nao (sem sinal forte, veto brando tardio)', () => {
+    expect(t('Banco Z <contato@bancoz.com.br>', 'Adesão à fatura digital').nivel).toBe('nao');
+  });
+});
+
+describe('triagem — veto duro de recibo/pagamento em inglês', () => {
+  it('"Your receipt from SaaS" (invoice@) → nao', () => {
+    expect(t('SaaS <invoice@saas.com>', 'Your receipt from SaaS').nivel).toBe('nao');
+  });
+  it('"Payment received — thank you" → nao', () => {
+    expect(t('SaaS <invoice@saas.com>', 'Payment received — thank you').nivel).toBe('nao');
+  });
+  it('"Your invoice is ready" (invoice@) continua forte S3', () => {
+    expect(t('SaaS <invoice@saas.com>', 'Your invoice is ready')).toMatchObject({ nivel: 'forte', sinais: ['S3'] });
+  });
+});
+
+describe('triagem — veto de remetente "promo" ancorado', () => {
+  it.each(['contato@compromovel.com.br', 'atendimento@promotoracredito.com.br'])(
+    '%s não é falso positivo de "promo" → forte por S1a', (endereco) => {
+      expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('forte');
+    },
+  );
+  it.each(['promo@x.com', 'promo.x@y.com'])('remetente %s → nao', (endereco) => {
+    expect(t(`X <${endereco}>`, 'Sua fatura chegou').nivel).toBe('nao');
   });
 });

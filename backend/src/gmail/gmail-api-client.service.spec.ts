@@ -837,10 +837,24 @@ function clientComLabels(labels: { id: string; name: string }[], messages: { id:
   return buildClient();
 }
 
+// Fixture NFD real (não simulada): "finanças" com o "ç" DECOMPOSTO em "c" + U+0327 (COMBINING
+// CEDILLA), em vez do "ç" precomposto (U+00E7) usado no resto do arquivo. `.normalize('NFD')`
+// gera essa forma a partir da string precomposta — confirmado abaixo, no próprio arquivo, que o
+// resultado NÃO é byte-a-byte igual à string precomposta (a decomposição é real, não um no-op),
+// e que comparar com `.normalize('NFC')` as torna iguais de novo, exatamente o que
+// `listarIdsComMarcador` faz internamente para casar o dois.
+const NOME_MARCADOR_NFD = 'sincro/finanças'.normalize('NFD');
+
 describe('GmailApiClient.listarIdsComMarcador', () => {
-  it('resolves the label (NFC, case-insensitive) and lists message ids', async () => {
+  it('sanity check: a fixture NFD é uma decomposição de verdade, não um no-op', () => {
+    expect(NOME_MARCADOR_NFD).not.toBe('sincro/finanças');
+    expect(NOME_MARCADOR_NFD).toContain('̧'); // COMBINING CEDILLA
+    expect(NOME_MARCADOR_NFD.normalize('NFC')).toBe('sincro/finanças');
+  });
+
+  it('resolves the label from a REAL NFD-normalized name (combining cedilla, U+0327), case-insensitive', async () => {
     const client = clientComLabels(
-      [{ id: 'Label_7', name: 'sincro/finanças' }],
+      [{ id: 'Label_7', name: NOME_MARCADOR_NFD.toUpperCase() }],
       [{ id: 'm1' }, { id: 'm2' }],
     );
 
@@ -856,10 +870,50 @@ describe('GmailApiClient.listarIdsComMarcador', () => {
     });
   });
 
+  it('NEGATIVO: um label sem cedilha nenhuma ("sincro/financas") não casa com "Sincro/Finanças" — nenhuma chamada a messages.list', async () => {
+    const client = clientComLabels([{ id: 'Label_9', name: 'sincro/financas' }], []);
+
+    await expect(client.listarIdsComMarcador('rt')).resolves.toEqual({ labelId: null, ids: new Set() });
+    expect(mocks().__list).not.toHaveBeenCalled();
+  });
+
   it('returns an empty set without extra calls when the label does not exist', async () => {
     const client = clientComLabels([{ id: 'Label_1', name: 'Outro' }], []);
 
     await expect(client.listarIdsComMarcador('rt')).resolves.toEqual({ labelId: null, ids: new Set() });
     expect(mocks().__list).not.toHaveBeenCalled();
+  });
+
+  it('messages.list devolvendo { messages: undefined } vira um Set vazio, com o labelId resolvido mesmo assim', async () => {
+    const { __labelsList, __list } = mocks();
+    __labelsList.mockReset().mockResolvedValue({ data: { labels: [{ id: 'Label_7', name: 'Sincro/Finanças' }] } });
+    __list.mockReset().mockResolvedValue({ data: { messages: undefined } });
+
+    await expect(buildClient().listarIdsComMarcador('rt')).resolves.toEqual({
+      labelId: 'Label_7',
+      ids: new Set(),
+    });
+  });
+
+  it('entradas de messages.list sem id de verdade (só threadId, ou id null) são descartadas do Set', async () => {
+    const { __labelsList, __list } = mocks();
+    __labelsList.mockReset().mockResolvedValue({ data: { labels: [{ id: 'Label_7', name: 'Sincro/Finanças' }] } });
+    __list.mockReset().mockResolvedValue({
+      data: { messages: [{ threadId: 't' }, { id: null }, { id: 'm-valido' }] },
+    });
+
+    await expect(buildClient().listarIdsComMarcador('rt')).resolves.toEqual({
+      labelId: 'Label_7',
+      ids: new Set(['m-valido']),
+    });
+  });
+
+  it('chama users.labels.list exatamente uma vez, com { userId: "me" }', async () => {
+    const client = clientComLabels([{ id: 'Label_7', name: 'Sincro/Finanças' }], [{ id: 'm1' }]);
+
+    await client.listarIdsComMarcador('rt');
+
+    expect(mocks().__labelsList).toHaveBeenCalledTimes(1);
+    expect(mocks().__labelsList).toHaveBeenCalledWith({ userId: 'me' });
   });
 });

@@ -7,6 +7,19 @@ import { HeuristicEmailClassifier } from '../email-classification/heuristic-emai
 import { LlmEmailClassifier } from '../email-classification/llm-email-classifier.service';
 import { EmailClassifier } from '../email-classification/email-classifier.interface';
 import { UsersService } from '../users/users.service';
+import { FinanceEmailProcessor } from '../financas/parser/finance-email-processor.service';
+import { FINANCE_PARSER_VERSION } from '../financas/parser/email-finance-regex-parser.service';
+import { classificarErroGmail } from '../gmail/gmail-error.util';
+import { MARCADOR_NOME } from '../gmail/gmail-api-client.service';
+
+/** Tamanho do lote de reprocessamento (passo B) por usuário por ciclo — ver spec "Reprocessamento
+ *  e escrita idempotente": com cron de 20 min, 500 summaries legados zeram em ~3h. */
+const LOTE_REPROCESSAMENTO = 50;
+
+interface Marcador {
+  labelId: string | null;
+  ids: Set<string>;
+}
 
 @Injectable()
 export class EmailSyncService {
@@ -20,6 +33,7 @@ export class EmailSyncService {
     private readonly heuristicClassifier: HeuristicEmailClassifier,
     private readonly llmClassifier: LlmEmailClassifier,
     private readonly usersService: UsersService,
+    private readonly financeProcessor: FinanceEmailProcessor,
   ) {}
 
   async syncUser(userId: string): Promise<{ novosPrecisamAtencao: number }> {
@@ -28,6 +42,8 @@ export class EmailSyncService {
 
     const refreshToken = await this.connectionsService.getDecryptedRefreshToken(userId);
     if (!refreshToken) return { novosPrecisamAtencao: 0 };
+
+    const marcador = await this.resolverMarcador(userId, refreshToken);
 
     const { emails, historyId } = await this.fetchNewEmails(refreshToken, connection.lastHistoryId);
 
@@ -61,7 +77,12 @@ export class EmailSyncService {
         classification = { categoria: 'PODE_ESPERAR' as const, resumoCurto: email.assunto };
       }
 
-      // TODO Task 13: FinanceEmailProcessor (plan Task 12 builds it, Task 13 wires it)
+      const marcado = marcador.ids.has(email.gmailMessageId);
+      const fin = await this.financeProcessor.processar(userId, refreshToken, email, { marcado });
+      const labelIds =
+        marcado && marcador.labelId && !email.labelIds.includes(marcador.labelId)
+          ? [...email.labelIds, marcador.labelId]
+          : email.labelIds;
 
       try {
         await this.prisma.emailSummary.create({
@@ -73,6 +94,9 @@ export class EmailSyncService {
             resumoCurto: classification.resumoCurto,
             categoria: classification.categoria,
             recebidoEm: email.recebidoEm,
+            labelIds,
+            parserFinancasVersao: fin.transitorio ? null : FINANCE_PARSER_VERSION,
+            parserFinancasTentativas: fin.transitorio ? 1 : 0,
           },
         });
       } catch (error) {
@@ -92,6 +116,8 @@ export class EmailSyncService {
 
       if (classification.categoria === 'PRECISA_ATENCAO') novosPrecisamAtencao++;
     }
+
+    await this.reprocessarPendentes(userId, refreshToken, marcador);
 
     // Duplicate-key races are safe to skip past (the message was already persisted by a
     // concurrent run), so the cursor still advances in that case. But if a message failed to
@@ -116,6 +142,77 @@ export class EmailSyncService {
    *  so this stays resilient to whichever Prisma client version is actually installed. */
   private isDuplicateKeyError(error: unknown): boolean {
     return (error as { code?: string } | null)?.code === 'P2002';
+  }
+
+  /** Passo (0): lista as mensagens marcadas manualmente pelo usuário com o label `MARCADOR_NOME` —
+   *  sinal de que a triagem automática perdeu um e-mail financeiro real. Re-enfileira ($executeRaw,
+   *  já que o Prisma não expressa `NOT (label_ids @> ARRAY[...])` sem relação) só quem ainda não
+   *  tinha o marcador persistido em `labelIds` — idempotente por evento: uma vez processado com
+   *  `marcado: true`, o e-mail grava o labelId e não volta a ser re-enfileirado por este passo.
+   *  Falha transitória aqui nunca derruba o ciclo: loga `warn` e segue com um marcador vazio (o
+   *  marcador só ADICIONA candidatos, nunca reduz). */
+  private async resolverMarcador(userId: string, refreshToken: string): Promise<Marcador> {
+    try {
+      const marcador = await this.gmailApiClient.listarIdsComMarcador(refreshToken);
+      if (marcador.labelId && marcador.ids.size > 0) {
+        await this.prisma.$executeRaw`
+          UPDATE resumos_email SET parser_financas_versao = NULL
+          WHERE user_id = ${userId} AND gmail_message_id = ANY(${Array.from(marcador.ids)}::text[])
+            AND NOT (label_ids @> ARRAY[${marcador.labelId}]::text[])`;
+      }
+      return marcador;
+    } catch (error) {
+      this.logger.warn(
+        `Marcador ${MARCADOR_NOME} indisponível neste ciclo (${classificarErroGmail(error)}); seguindo sem ele`,
+        error as Error,
+      );
+      return { labelId: null, ids: new Set() };
+    }
+  }
+
+  /** Passo (B): e-mails já sincronizados que o parser financeiro atual ainda não avaliou
+   *  (`parserFinancasVersao` nulo ou desatualizado). Fila ordenada por tentativas ascendente (uma
+   *  mensagem venenosa afunda para o fim sem bloquear as demais) e recebidoEm descendente dentro do
+   *  mesmo nível de tentativas. Erro transitório NUNCA carimba a versão — o e-mail permanece
+   *  elegível para sempre; transitório-conta interrompe o lote inteiro (afeta todos os e-mails
+   *  deste usuário), transitório-mensagem só pula este e segue para o próximo. */
+  private async reprocessarPendentes(userId: string, refreshToken: string, marcador: Marcador): Promise<void> {
+    const pendentes = await this.prisma.emailSummary.findMany({
+      where: { userId, OR: [{ parserFinancasVersao: null }, { parserFinancasVersao: { lt: FINANCE_PARSER_VERSION } }] },
+      orderBy: [{ parserFinancasTentativas: 'asc' }, { recebidoEm: 'desc' }],
+      take: LOTE_REPROCESSAMENTO,
+    });
+
+    for (const s of pendentes) {
+      const marcado = marcador.ids.has(s.gmailMessageId);
+      const fin = await this.financeProcessor.processar(
+        userId,
+        refreshToken,
+        { gmailMessageId: s.gmailMessageId, remetente: s.remetente, assunto: s.assunto, recebidoEm: s.recebidoEm },
+        { marcado },
+      );
+
+      if (fin.transitorio) {
+        await this.prisma.emailSummary.update({
+          where: { id: s.id },
+          data: { parserFinancasTentativas: { increment: 1 } },
+        });
+        if (fin.classe === 'transitorio-conta') {
+          this.logger.warn(`Reprocessamento interrompido para ${userId}: Gmail indisponível`);
+          break;
+        }
+        continue;
+      }
+
+      const labelIds =
+        marcado && marcador.labelId && !s.labelIds.includes(marcador.labelId)
+          ? [...s.labelIds, marcador.labelId]
+          : s.labelIds;
+      await this.prisma.emailSummary.update({
+        where: { id: s.id },
+        data: { parserFinancasVersao: FINANCE_PARSER_VERSION, parserFinancasTentativas: 0, labelIds },
+      });
+    }
   }
 
   private async fetchNewEmails(refreshToken: string, lastHistoryId: string | null) {

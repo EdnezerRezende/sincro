@@ -8,18 +8,36 @@ function buildDeps() {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn(),
       create: jest.fn(),
-      findMany: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn(),
     },
+    $executeRaw: jest.fn(),
   };
-  const gmailApiClient = { fetchInitialUnread: jest.fn(), fetchIncremental: jest.fn(), fetchFullBody: jest.fn() };
+  const gmailApiClient = {
+    fetchInitialUnread: jest.fn(),
+    fetchIncremental: jest.fn(),
+    fetchFullBody: jest.fn(),
+    listarIdsComMarcador: jest.fn().mockResolvedValue({ labelId: null, ids: new Set<string>() }),
+  };
   const connectionsService = { getDecryptedRefreshToken: jest.fn().mockResolvedValue('rt-123') };
   const sensoryProfileService = { get: jest.fn().mockResolvedValue(null) };
   const heuristicClassifier = { classify: jest.fn().mockResolvedValue({ categoria: 'PODE_ESPERAR', resumoCurto: 'ok' }) };
   const llmClassifier = { classify: jest.fn().mockResolvedValue({ categoria: 'PRECISA_ATENCAO', resumoCurto: 'llm ok' }) };
   const usersService = { getByFirebaseUidOrThrow: jest.fn().mockResolvedValue({ id: 'u1', firebaseUid: 'fb1' }) };
+  const financeProcessor = { processar: jest.fn().mockResolvedValue({ transitorio: false, classe: null, acao: 'nada' }) };
 
-  return { prisma, gmailApiClient, connectionsService, sensoryProfileService, heuristicClassifier, llmClassifier, usersService };
+  return {
+    prisma,
+    gmailApiClient,
+    connectionsService,
+    sensoryProfileService,
+    heuristicClassifier,
+    llmClassifier,
+    usersService,
+    financeProcessor,
+  };
 }
 
 function buildService(deps: ReturnType<typeof buildDeps>) {
@@ -31,6 +49,7 @@ function buildService(deps: ReturnType<typeof buildDeps>) {
     deps.heuristicClassifier as any,
     deps.llmClassifier as any,
     deps.usersService as any,
+    deps.financeProcessor as any,
   );
 }
 
@@ -299,6 +318,126 @@ describe('EmailSyncService', () => {
       await service.remover('summary-1');
 
       expect(deps.prisma.emailSummary.delete).toHaveBeenCalledWith({ where: { id: 'summary-1' } });
+    });
+  });
+
+  describe('EmailSyncService — finanças', () => {
+    const email = {
+      gmailMessageId: 'm1',
+      remetente: 'Nubank <todomundo@nubank.com.br>',
+      assunto: 'A fatura do seu cartão Nubank está fechada',
+      corpo: 's',
+      recebidoEm: new Date(),
+      labelIds: ['INBOX'],
+    };
+    function comNovo(deps: ReturnType<typeof buildDeps>) {
+      deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
+      deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({ emails: [email], historyId: 'h1' });
+    }
+
+    it('(A) carimba versão e labelIds no summary novo', async () => {
+      const deps = buildDeps();
+      comNovo(deps);
+      await buildService(deps).syncUser('u1');
+      expect(deps.financeProcessor.processar).toHaveBeenCalledWith(
+        'u1',
+        'rt-123',
+        expect.objectContaining({ gmailMessageId: 'm1' }),
+        { marcado: false },
+      );
+      expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ labelIds: ['INBOX'], parserFinancasVersao: 2, parserFinancasTentativas: 0 }),
+      });
+    });
+
+    it('(A) falha transitória grava versão null e tentativas 1', async () => {
+      const deps = buildDeps();
+      comNovo(deps);
+      deps.financeProcessor.processar.mockResolvedValue({ transitorio: true, classe: 'transitorio-mensagem', acao: 'erro' });
+      await buildService(deps).syncUser('u1');
+      expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ parserFinancasVersao: null, parserFinancasTentativas: 1 }),
+      });
+    });
+
+    it('(0) marcador: passa marcado=true e re-enfileira quem não tinha o label', async () => {
+      const deps = buildDeps();
+      comNovo(deps);
+      deps.gmailApiClient.listarIdsComMarcador.mockResolvedValue({ labelId: 'Label_7', ids: new Set(['m1', 'm9']) });
+      await buildService(deps).syncUser('u1');
+      expect(deps.prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(deps.financeProcessor.processar).toHaveBeenCalledWith('u1', 'rt-123', expect.anything(), { marcado: true });
+      expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ labelIds: ['INBOX', 'Label_7'] }),
+      });
+    });
+
+    it('(0) falha transitória no marcador não derruba o ciclo', async () => {
+      const deps = buildDeps();
+      comNovo(deps);
+      deps.gmailApiClient.listarIdsComMarcador.mockRejectedValue(
+        Object.assign(new Error('x'), { code: 503, response: { status: 503 }, config: {} }),
+      );
+      await expect(buildService(deps).syncUser('u1')).resolves.toBeDefined();
+      expect(deps.financeProcessor.processar).toHaveBeenCalledWith('u1', 'rt-123', expect.anything(), { marcado: false });
+    });
+
+    it('(B) reprocessa pendentes ordenados, carimba sucesso e zera tentativas', async () => {
+      const deps = buildDeps();
+      deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h0' });
+      deps.gmailApiClient.fetchIncremental.mockResolvedValue({ emails: [], historyId: 'h1', historyExpired: false });
+      deps.prisma.emailSummary.findMany.mockResolvedValue([
+        { id: 's1', gmailMessageId: 'm1', remetente: 'r', assunto: 'a', recebidoEm: new Date(), labelIds: [] },
+      ]);
+      await buildService(deps).syncUser('u1');
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', OR: [{ parserFinancasVersao: null }, { parserFinancasVersao: { lt: 2 } }] },
+        orderBy: [{ parserFinancasTentativas: 'asc' }, { recebidoEm: 'desc' }],
+        take: 50,
+      });
+      expect(deps.prisma.emailSummary.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
+        data: { parserFinancasVersao: 2, parserFinancasTentativas: 0, labelIds: [] },
+      });
+    });
+
+    it('(B) transitório-mensagem incrementa e segue; transitório-conta incrementa e interrompe', async () => {
+      const deps = buildDeps();
+      deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h0' });
+      deps.gmailApiClient.fetchIncremental.mockResolvedValue({ emails: [], historyId: 'h1', historyExpired: false });
+      deps.prisma.emailSummary.findMany.mockResolvedValue([
+        { id: 's1', gmailMessageId: 'm1', remetente: 'r', assunto: 'a', recebidoEm: new Date(), labelIds: [], parserFinancasTentativas: 0 },
+        { id: 's2', gmailMessageId: 'm2', remetente: 'r', assunto: 'a', recebidoEm: new Date(), labelIds: [], parserFinancasTentativas: 0 },
+        { id: 's3', gmailMessageId: 'm3', remetente: 'r', assunto: 'a', recebidoEm: new Date(), labelIds: [], parserFinancasTentativas: 0 },
+      ]);
+      deps.financeProcessor.processar
+        .mockResolvedValueOnce({ transitorio: true, classe: 'transitorio-mensagem', acao: 'erro' })
+        .mockResolvedValueOnce({ transitorio: true, classe: 'transitorio-conta', acao: 'erro' });
+      await buildService(deps).syncUser('u1');
+      expect(deps.financeProcessor.processar).toHaveBeenCalledTimes(2);
+      expect(deps.prisma.emailSummary.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 's1' },
+        data: { parserFinancasTentativas: { increment: 1 } },
+      });
+      expect(deps.prisma.emailSummary.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 's2' },
+        data: { parserFinancasTentativas: { increment: 1 } },
+      });
+    });
+
+    it('(B) erro permanente carimba', async () => {
+      const deps = buildDeps();
+      deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: 'h0' });
+      deps.gmailApiClient.fetchIncremental.mockResolvedValue({ emails: [], historyId: 'h1', historyExpired: false });
+      deps.prisma.emailSummary.findMany.mockResolvedValue([
+        { id: 's1', gmailMessageId: 'm1', remetente: 'r', assunto: 'a', recebidoEm: new Date(), labelIds: [] },
+      ]);
+      deps.financeProcessor.processar.mockResolvedValue({ transitorio: false, classe: 'permanente', acao: 'erro' });
+      await buildService(deps).syncUser('u1');
+      expect(deps.prisma.emailSummary.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
+        data: { parserFinancasVersao: 2, parserFinancasTentativas: 0, labelIds: [] },
+      });
     });
   });
 });

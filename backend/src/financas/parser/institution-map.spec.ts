@@ -1,4 +1,11 @@
-import { resolverInstituicao, UTILIDADE_RE } from './institution-map';
+import { deriveInstituicaoFromDomain, resolverInstituicao, UTILIDADE_RE } from './institution-map';
+
+describe('deriveInstituicaoFromDomain', () => {
+  it('lowercases the address before comparing, regardless of input case', () => {
+    expect(deriveInstituicaoFromDomain('X@MAIL.MEUBANCO.COM')).toBe('Meubanco');
+    expect(deriveInstituicaoFromDomain('x@Noreply.Bancoalfa.com.br')).toBe('Bancoalfa');
+  });
+});
 
 describe('resolverInstituicao', () => {
   it('matches by domain suffix, covering subdomains', () => {
@@ -40,6 +47,11 @@ describe('resolverInstituicao', () => {
 
   it('falls back to "Desconhecida" without an address', () => {
     expect(resolverInstituicao('Fulano', '').nome).toBe('Desconhecida');
+  });
+
+  it('tolerates a null/undefined subject without throwing', () => {
+    expect(resolverInstituicao('x@energiaxyz.com.br', undefined as any).tipoPadrao).toBe('OUTRO');
+    expect(() => resolverInstituicao('x@energiaxyz.com.br', null as any)).not.toThrow();
   });
 
   it.each([

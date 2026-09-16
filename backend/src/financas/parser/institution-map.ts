@@ -1,5 +1,5 @@
 import { dominio, extrairEndereco, rotulosDominio } from '../../common/email-address.util';
-import { wb } from '../../common/text-match.util';
+import { normalizar, wb } from '../../common/text-match.util';
 
 export type TipoPadrao = 'CARTAO' | 'OUTRO';
 export interface Instituicao {
@@ -80,7 +80,7 @@ const GENERIC_SUBDOMAIN_LABELS = new Set([
  *  de mailer ("mail", "e", "notificacoes", ...), chegando na marca registrável
  *  (`mail.meubanco.com` → "Meubanco", não "Mail"). */
 export function deriveInstituicaoFromDomain(endereco: string): string | null {
-  const labels = rotulosDominio(endereco);
+  const labels = rotulosDominio(endereco.toLowerCase());
   if (labels.length < 2) return null;
   const publicSuffixLength =
     labels.length > 2 && GENERIC_SECOND_LEVEL.has(labels[labels.length - 2]) ? 2 : 1;
@@ -98,7 +98,7 @@ export function resolverInstituicao(remetente: string, assunto: string): Institu
   if (entrada) return { nome: entrada.nome, tipoPadrao: entrada.tipoPadrao, mapeada: true };
 
   const utilidade =
-    rotulosDominio(endereco).some((l) => UTILIDADE_RE.test(l)) || CONTA_DE_RE.test(assunto.normalize('NFC'));
+    rotulosDominio(endereco).some((l) => UTILIDADE_RE.test(l)) || CONTA_DE_RE.test(normalizar(assunto));
   return {
     nome: deriveInstituicaoFromDomain(endereco) ?? 'Desconhecida',
     tipoPadrao: utilidade ? 'OUTRO' : undefined,

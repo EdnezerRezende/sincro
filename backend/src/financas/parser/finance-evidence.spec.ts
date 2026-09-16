@@ -22,6 +22,7 @@ describe('evidenciasDeCobranca', () => {
     expect(ev('Pix copia e cola\n\n\nR$ 89,90')).toEqual(new Set());
     expect(ev('Sua fatura da Starlink está anexada')).toEqual(new Set(['E5']));
     expect(ev('Olá', [{ filename: 'Fatura_082026.PDF' }])).toEqual(new Set(['E6']));
+    expect(ev('Olá', [{ filename: 'Cobrança_09-2026.pdf' }])).toEqual(new Set(['E6']));
   });
   it('ignores text past CABECA_EVIDENCIA', () => {
     expect(ev(`${'x'.repeat(1500)} Valor a pagar: R$ 10,00`)).toEqual(new Set());
@@ -56,5 +57,10 @@ describe('temEvidenciaNegativa', () => {
   });
   it('a pending invoice is not negative', () => {
     expect(temEvidenciaNegativa('Sua fatura já está fechada, vence no dia 15 de setembro', 'A fatura do seu cartão está fechada')).toBe(false);
+  });
+  it('checks isSettledPaymentSubject on the subject too, not just the first 3 body lines', () => {
+    expect(temEvidenciaNegativa('Valor a pagar: R$ 200,00', 'Pagamento da fatura confirmado')).toBe(true);
+    expect(temEvidenciaNegativa('Valor a pagar: R$ 200,00', 'Fatura quitada')).toBe(true);
+    expect(temEvidenciaNegativa('Valor a pagar: R$ 200,00', 'A fatura do seu cartão está fechada')).toBe(false);
   });
 });

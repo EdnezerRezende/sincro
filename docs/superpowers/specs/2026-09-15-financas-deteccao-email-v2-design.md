@@ -250,7 +250,7 @@ Evidências (E) e regra de suficiência:
 - (E3) código de barras / linha digitável (regex de 47/48 dígitos existente).
 - (E4) `pix copia e cola` / `chave pix` com uma moeda `R$ …,dd` **na mesma linha ou na linha seguinte**.
 - (E5) `\bsua (fatura|conta)\b.{0,30}\b(est[áa]|segue) (anexa|anexada|em anexo)\b`.
-- (E6) anexo cujo `filename` casa `fatura|invoice|boleto|cobranca`.
+- (E6) anexo cujo `filename` casa `fatura|invoice|boleto|cobran[çc]a`.
 
 Suficiência para `fraco`: **E1, E3, E4, E5 ou E6 sozinhas bastam**. **E2 sozinha** basta só se o
 assunto tem substantivo de cobrança de S6 (`fatura|boleto|mensalidade|cobrança|consórcio|parcela|

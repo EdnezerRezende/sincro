@@ -58,9 +58,23 @@ const NOISE_LABELS = new Set([
  *  Uma tag de verdade precisa ser seguida por `>`, `/>`, ou espaço+atributo — não basta `<` + nome
  *  de tag. A versão anterior (`\b` logo após o nome) dava falso positivo em prosa genuína: "O preço
  *  <p 10 reais", "De: Paulo <p@empresa.com>", "<br@empresa.com.br>" todas continham `<p\b` ou
- *  `<br\b` sem ser HTML nenhum. */
+ *  `<br\b` sem ser HTML nenhum.
+ *
+ *  Três alternativas, nessa ordem:
+ *  1. `<!doctype\s` — doctype legado (`<!DOCTYPE HTML PUBLIC "-//W3C//DTD ...">`, comum em e-mail
+ *     gerado por Word/Outlook) tratado à parte: seu conteúdo ("HTML PUBLIC ...") não é um atributo
+ *     `nome=valor` e não vale a pena tentar casar com a regra 3.
+ *  2. `<!--` — comentário, incluindo condicionais do Outlook (`<!--[if mso]>`) e preheaders
+ *     (`<!--Preheader-->`); sem exigir espaço depois dos hífens, ao contrário da versão anterior.
+ *  3. Tag conhecida seguida de fechamento imediato (`<br>`, `<br/>`) OU de uma lista de um ou mais
+ *     atributos (nomes com letra/dígito/`_`/`:`/`.`/`-` — `:` e `.` cobrem `xmlns:v=`,
+ *     `xmlns:o=`) terminando em `=` (`<table border cellpadding=0>`: "border" é atributo booleano
+ *     sem valor, só "cellpadding=" precisa fechar em `=`). De propósito, a lista de atributos SÓ
+ *     aceita terminar em `=`, nunca direto em `>` — isso é o que mantém "Se x<p então y > z" como
+ *     falso positivo evitado (senão "y > z", com espaço antes do `>`, colaria como se fosse o
+ *     fechamento de uma tag `<p ...>`). */
 const HTML_TAG_RE =
-  /<(!doctype|html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w-]+(?:=|\s*>))|<!--\s/i;
+  /<!doctype\s|<!--|<(html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w:.-]+(?:\s+[\w:.-]+)*\s*=)/i;
 
 @Injectable()
 export class GmailApiClient {
@@ -313,13 +327,16 @@ export class GmailApiClient {
   }
 
   /** Remetentes reais (Pefisa/Leroy) mandam HTML dentro da parte `text/plain` (MIME type errado,
-   *  conteúdo certo). Olha os 300 primeiros caracteres, depois de remover espaços do início —
-   *  a busca não é ancorada no início, então um preheader de texto puro antes de `<html>` não
-   *  engana a detecção. `trimStart()` já remove um BOM (U+FEFF) inicial sozinho — a especificação
+   *  conteúdo certo). Olha os 340 primeiros caracteres, depois de remover espaços do início — a
+   *  busca não é ancorada no início, então um preheader de texto puro antes de `<html>` não engana
+   *  a detecção. A janela é 340, não 300: uma tag que começa perto do limite de 300 (ex.: preheader
+   *  longo antes do doctype/`<html>`) ainda precisa de espaço, depois do `<`, para o nome da tag,
+   *  o(s) atributo(s) e o `>` de fechamento — cortar exatamente em 300 partiria a tag ao meio e
+   *  perderia a detecção. `trimStart()` já remove um BOM (U+FEFF) inicial sozinho — a especificação
    *  ECMA-262 lista `<ZWNBSP>` (U+FEFF) como `WhiteSpace`, então não é preciso um `.replace()`
-   *  separado para isso; um `.replace(/^﻿/, '')` explícito seria redundante aqui. */
+   *  separado para isso; um `.replace(/^\uFEFF/, '')` explícito seria redundante aqui. */
   static pareceHtml(texto: string): boolean {
-    return HTML_TAG_RE.test(texto.trimStart().slice(0, 300));
+    return HTML_TAG_RE.test(texto.trimStart().slice(0, 340));
   }
 
   /** Percorre a árvore MIME coletando metadado de todo anexo (qualquer parte com `filename` e

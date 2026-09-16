@@ -531,13 +531,24 @@ describe('GmailApiClient.pareceHtml', () => {
     '<html>',
     '<HTML>',
     '<html lang="pt-br">',
-    '﻿   <!doctype html>',
+    '\uFEFF   <!doctype html>',
     '<br>',
     '<br/>',
     '<div\nclass="x">',
     'Preheader de texto\n<html>',
     '<body>',
     '<!-- x -->',
+    // Word/Outlook: doctype legado (atributos "HTML PUBLIC ...", não nome=valor) seguido de
+    // xmlns com ':' no nome do atributo — ambos regrediram numa versão anterior do regex.
+    '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">\r\n' +
+      '<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">\r\n' +
+      '<head>',
+    '<!--[if mso]>', // comentário condicional do Outlook, sem espaço após os hífens
+    '<html xmlns:v="urn:schemas-microsoft-com:vml">',
+    '<table border cellpadding=0>', // atributo booleano ("border") antes de um atributo com '='
+    '<div class = "x">',
+    // janela de 340 chars: tag iniciando em 295 ainda cabe inteira (fecha bem antes de 340)
+    `${'x'.repeat(295)}<html>`,
   ])('detects %p as HTML', (t) => {
     expect(GmailApiClient.pareceHtml(t)).toBe(true);
   });
@@ -550,7 +561,8 @@ describe('GmailApiClient.pareceHtml', () => {
     'Olá, segue sua fatura.',
     JSON.stringify({ a: 1, b: 'texto' }),
     '# Título\n\nAlgum **markdown** com [link](http://x.com)',
-    `${'x'.repeat(301)}<html>`,
+    // janela de 340 chars: tag iniciando em 341 cai inteira fora da fatia examinada
+    `${'x'.repeat(341)}<html>`,
   ])('does NOT detect %p as HTML (genuine prose, not a real tag)', (t) => {
     expect(GmailApiClient.pareceHtml(t)).toBe(false);
   });

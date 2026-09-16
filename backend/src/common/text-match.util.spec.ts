@@ -2,8 +2,8 @@ import { normalizar, wb } from './text-match.util';
 
 describe('wb', () => {
   it('matches accented words as whole words (JS \\b would fail)', () => {
-    expect(wb('\\bcarn[êe]\\b').test('seu carnê chegou')).toBe(true);
-    expect(wb('\\bcarn[êe]\\b').test('carne de primeira')).toBe(false);
+    expect(wb('\\bcarnê\\b').test('seu carnê chegou')).toBe(true);
+    expect(wb('\\bcarnê\\b').test('carne de primeira')).toBe(false);
   });
   it('does not match inside a longer word', () => {
     expect(wb('\\b(sua|a)\\s+fatura\\b').test('parcelamento da fatura disponível')).toBe(false);

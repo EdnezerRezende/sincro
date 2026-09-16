@@ -191,7 +191,7 @@ Cartão PJ", "Fatura digital: saiba como aderir" (duro `como aderir`) → `'nao'
 
 **Sinais fortes** (→ `'forte'`; cria lançamento mesmo sem evidência no corpo):
 - S1. **Ciclo de fatura própria** (sem "conta" isolada):
-  `\b(sua|a|nova)\s+(fatura|cobran[çc]a|mensalidade|boleto|carn[êe])\b.{0,45}\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|vence|venceu|em atraso|pendente)\b`
+  `\b(sua|a|nova)\s+(fatura|cobran[çc]a|mensalidade|boleto|carnê)\b.{0,45}\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|vence|venceu|em atraso|pendente)\b`
   **ou** `\bfatura\s+(por e-?mail|digital|do m[êe]s|do cart[ãa]o)\b` seguida, em até 20 chars, de
   **período ou identificador**: `[-–|:]\s*(\w+\s*/\s*\d{4}|\d{5,}|(janeiro|…|dezembro))`.
   Positivos reais: "A fatura do seu cartão Nubank está fechada" (27 chars na janela), "A fatura
@@ -202,10 +202,10 @@ Cartão PJ", "Fatura digital: saiba como aderir" (duro `como aderir`) → `'nao'
   (veto e sem período), "Cadastre-se na fatura por e-mail" (veto), "Fatura do mês: prefira o
   débito automático" (veto; sem período → seria fraco).
 - S2. **Boleto/carnê com ciclo**: `\bboletos?\b.{0,45}\b(emitid|gerad|dispon[ií]vel|chegou|venc)` ou
-  `\bcarn[êe]\b.{0,45}\b(chegou|dispon[ií]vel|venc)`.
+  `\bcarnê\b.{0,45}\b(chegou|dispon[ií]vel|venc)`.
   Positivo real: "Novo boleto emitido no seu CPF". Negativos: "Boleto: como funciona?" (veto),
   "Agora você pode pagar boletos escaneando o código de barras" (veto `agora você pode`; sem
-  ciclo → seria fraco), "Carne de primeira toda semana" (`carne` ≠ `carnê`).
+  ciclo → seria fraco), "Carne de primeira toda semana" (`carnê` estrito; `carne` não casa).
 - S3. **Local-part inequivocamente de fatura**, no endereço extraído:
   `^(fatura|faturas|fatura_digital|faturaporemail|boleto|boletos|invoice|invoices|\w*consorcio)($|[._-])`.
   Positivos reais: `faturaporemail@santander.com.br`, `fatura_digital@cartaosamsclub.com.br`,

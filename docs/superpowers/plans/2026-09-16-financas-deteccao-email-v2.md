@@ -125,8 +125,8 @@ import { normalizar, wb } from './text-match.util';
 
 describe('wb', () => {
   it('matches accented words as whole words (JS \\b would fail)', () => {
-    expect(wb('\\bcarn[êe]\\b').test('seu carnê chegou')).toBe(true);
-    expect(wb('\\bcarn[êe]\\b').test('carne de primeira')).toBe(false);
+    expect(wb('\\bcarnê\\b').test('seu carnê chegou')).toBe(true);
+    expect(wb('\\bcarnê\\b').test('carne de primeira')).toBe(false);
   });
   it('does not match inside a longer word', () => {
     expect(wb('\\b(sua|a)\\s+fatura\\b').test('parcelamento da fatura disponível')).toBe(false);
@@ -657,13 +657,13 @@ const VETO_REMETENTE = /novidades\.|^news@|newsletter|^marketing@|promo|^ofertas
 
 // ---------- Sinais fortes ----------
 const S1A = wb(
-  '\\b(sua|a|nova)\\s+(fatura|cobran[çc]a|mensalidade|boleto|carn[êe])\\b.{0,45}\\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|vence|venceu|em atraso|pendente)\\b',
+  '\\b(sua|a|nova)\\s+(fatura|cobran[çc]a|mensalidade|boleto|carnê)\\b.{0,45}\\b(fechou|fechada|chegou|dispon[ií]vel|gerada|emitida|vence|venceu|em atraso|pendente)\\b',
 );
 const MESES = 'janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro';
 const S1B = wb(`\\bfatura\\s+(por e-?mail|digital|do m[êe]s|do cart[ãa]o)\\b.{0,20}[-–|:]\\s*(\\w+\\s*/\\s*\\d{4}|\\d{5,}|${MESES})`);
 const S2: RegExp[] = [
   wb('\\bboletos?\\b.{0,45}\\b(emitid|gerad|dispon[ií]vel|chegou|venc)'),
-  wb('\\bcarn[êe]\\b.{0,45}\\b(chegou|dispon[ií]vel|venc)'),
+  wb('\\bcarnê\\b.{0,45}\\b(chegou|dispon[ií]vel|venc)'),
 ];
 const S3 = /^(fatura|faturas|fatura_digital|faturaporemail|boleto|boletos|invoice|invoices|\w*consorcio)($|[._-])/i;
 const S8_VALOR = /R\$\s?(\d{1,3}(\.\d{3})*|\d+),\d{2}/;

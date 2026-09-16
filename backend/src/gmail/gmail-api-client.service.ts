@@ -43,8 +43,14 @@ const NOISE_LABELS = new Set([
 ]);
 
 /** Usado por `GmailApiClient.pareceHtml` para detectar HTML entregue como `text/plain` — ver o
- *  doc daquele método. */
-const HTML_TAG_RE = /<(!doctype|html|head|body|table|div|p|center|br|span|font)\b|<!--/i;
+ *  doc daquele método.
+ *
+ *  Uma tag de verdade precisa ser seguida por `>`, `/>`, ou espaço+atributo — não basta `<` + nome
+ *  de tag. A versão anterior (`\b` logo após o nome) dava falso positivo em prosa genuína: "O preço
+ *  <p 10 reais", "De: Paulo <p@empresa.com>", "<br@empresa.com.br>" todas continham `<p\b` ou
+ *  `<br\b` sem ser HTML nenhum. */
+const HTML_TAG_RE =
+  /<(!doctype|html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w-]+(?:=|\s*>))|<!--\s/i;
 
 @Injectable()
 export class GmailApiClient {
@@ -178,11 +184,27 @@ export class GmailApiClient {
    *  receipts, most personal mail sent from a webmail client) has NO `text/plain` part at all —
    *  only `text/html` — so falling back straight to `snippet` for those, as this used to do, meant
    *  the majority of e-mails were silently truncated to ~200 characters with no indication anything
-   *  was missing. When only HTML is available, it's converted to plain text (see
-   *  `htmlParaTextoLegivel`) instead of being dumped raw on screen or discarded. Only when NEITHER
-   *  part exists does this fall back to Gmail's own `snippet` — `ehPreview: true` tells callers
-   *  that what they got is a short preview, not the full message, so the UI can say so instead of
-   *  presenting it as complete. */
+   *  was missing.
+   *
+   *  A `text/plain` part that actually LOOKS like HTML (`pareceHtml`, e.g. Pefisa/Leroy sending the
+   *  wrong MIME type with the right content) is converted through `htmlParaTextoLegivel` before
+   *  being returned, instead of being dumped raw with visible tags. When there's no usable
+   *  `text/plain` at all, this falls back to the `text/html` part, also converted through
+   *  `htmlParaTextoLegivel` — but ONLY if that conversion yields non-empty text; an HTML part that
+   *  converts to an empty string (e.g. only images/tracking pixels, no readable text) is treated as
+   *  if it didn't exist, and the code falls through to the `snippet` below rather than returning an
+   *  empty `texto`. Only when NEITHER a usable `text/plain` NOR a non-empty converted `text/html`
+   *  exists does this fall back to Gmail's own `snippet` — `ehPreview: true` tells callers that what
+   *  they got is a short preview, not the full message, so the UI can say so instead of presenting
+   *  it as complete.
+   *
+   *  `anexos` is collected by `listarAnexos`, which walks the whole MIME tree (at any depth,
+   *  including nested `multipart/mixed` > `multipart/related` > ...) gathering metadata (filename,
+   *  mimeType, size, attachmentId) for every part that carries BOTH a `filename` and a
+   *  `body.attachmentId` — inline parts used only for HTML rendering (e.g. an embedded image
+   *  referenced by `Content-ID` with `filename: ''`) don't have a `filename` and are correctly left
+   *  out. Nothing is downloaded here; `body.size` is trusted as reported by Gmail, defaulting to `0`
+   *  when Gmail omits it. */
   async fetchFullBodyComAnexos(
     refreshToken: string,
     gmailMessageId: string,
@@ -222,11 +244,13 @@ export class GmailApiClient {
   }
 
   /** Remetentes reais (Pefisa/Leroy) mandam HTML dentro da parte `text/plain` (MIME type errado,
-   *  conteúdo certo). Olha os 300 primeiros caracteres, depois de remover BOM e espaços do início —
+   *  conteúdo certo). Olha os 300 primeiros caracteres, depois de remover espaços do início —
    *  a busca não é ancorada no início, então um preheader de texto puro antes de `<html>` não
-   *  engana a detecção. */
+   *  engana a detecção. `trimStart()` já remove um BOM (U+FEFF) inicial sozinho — a especificação
+   *  ECMA-262 lista `<ZWNBSP>` (U+FEFF) como `WhiteSpace`, então não é preciso um `.replace()`
+   *  separado para isso; um `.replace(/^﻿/, '')` explícito seria redundante aqui. */
   static pareceHtml(texto: string): boolean {
-    return HTML_TAG_RE.test(texto.replace(/^﻿/, '').trimStart().slice(0, 300));
+    return HTML_TAG_RE.test(texto.trimStart().slice(0, 300));
   }
 
   /** Percorre a árvore MIME coletando metadado de todo anexo (qualquer parte com `filename` e

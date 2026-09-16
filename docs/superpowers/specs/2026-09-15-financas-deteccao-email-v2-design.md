@@ -131,12 +131,24 @@ exatamente o estado "precisa reprocessar"). `LancamentoFinanceiro` não muda.
 `GmailApiClient.fetchFullBody` hoje devolve a parte `text/plain` crua quando existe. Remetentes
 reais (Pefisa/Leroy) entregam HTML dentro de `text/plain`. Regra nova, em
 `fetchFullBodyComAnexos` (que substitui `fetchFullBody` para os **três** consumidores —
-`email-summary.controller.ts`, `email-reply.controller.ts` e o parser): se os **primeiros 300 caracteres** do texto plano contêm
-`<(!doctype|html|head|body|table|div|p|center|br|span|font)\b` ou `<!--` (case-insensitive,
-após remover BOM e espaços), o texto passa por `htmlParaTextoLegivel`. Preheader de texto antes
-de `<html>` é coberto porque a busca não é ancorada no início. Texto plano genuíno (sem tag nos 300 primeiros chars) **não** passa pela conversão. Melhoria
-colateral para o leitor de e-mail do app; sem mudança de contrato para ele (`{ texto, ehPreview }` continua; `anexos`
-é campo adicional).
+`email-summary.controller.ts`, `email-reply.controller.ts` e o parser): se os **primeiros 300
+caracteres** do texto plano (após `trimStart()` — que já remove um BOM inicial sozinho, `﻿` é
+`WhiteSpace` pela spec ECMA-262, sem precisar de `.replace()` separado) casam com
+
+```
+/<(!doctype|html|head|body|table|div|p|center|br|span|font)(?:\s*\/?>|\s+[\w-]+(?:=|\s*>))|<!--\s/i
+```
+
+o texto passa por `htmlParaTextoLegivel`. Uma tag de verdade precisa ser seguida por `>`, `/>`, ou
+espaço+atributo — não basta `<` + nome de tag: isso evita falso positivo em prosa genuína como
+"O preço <p 10 reais", "De: Paulo <p@empresa.com>" ou "<br@empresa.com.br>", que a versão anterior
+(ancorada só em `\b`) detectava incorretamente como HTML. Preheader de texto antes de `<html>` é
+coberto porque a busca não é ancorada no início. Texto plano genuíno (sem tag real nos 300
+primeiros chars) **não** passa pela conversão. Quando não há `text/plain` utilizável, cai para a
+parte `text/html` (também via `htmlParaTextoLegivel`) — mas só se essa conversão gerar texto
+não-vazio; senão, cai no `snippet` com `ehPreview: true`, como antes. Melhoria colateral para o
+leitor de e-mail do app; sem mudança de contrato para ele (`{ texto, ehPreview }` continua;
+`anexos` é campo adicional, coletado recursivamente pela árvore MIME inteira sem baixar conteúdo).
 
 ## Detecção — genérica para qualquer instituição
 

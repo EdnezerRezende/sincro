@@ -523,16 +523,32 @@ describe('GmailApiClient.fetchFullBody — corpo completo do e-mail (item 2: HTM
 });
 
 describe('GmailApiClient.pareceHtml', () => {
-  it.each(['﻿<html>', 'Preheader de texto\n<html>', '<p>x</p>', '<body>', '<!-- x --><html>'])(
-    'detects %p as HTML',
-    (t) => {
-      expect(GmailApiClient.pareceHtml(t)).toBe(true);
-    },
-  );
+  it.each([
+    '<html>',
+    '<HTML>',
+    '<html lang="pt-br">',
+    '﻿   <!doctype html>',
+    '<br>',
+    '<br/>',
+    '<div\nclass="x">',
+    'Preheader de texto\n<html>',
+    '<body>',
+    '<!-- x -->',
+  ])('detects %p as HTML', (t) => {
+    expect(GmailApiClient.pareceHtml(t)).toBe(true);
+  });
 
-  it('does not convert genuine plain text nor a tag past 300 chars', () => {
-    expect(GmailApiClient.pareceHtml('Olá, segue sua fatura.')).toBe(false);
-    expect(GmailApiClient.pareceHtml(`${'x'.repeat(301)}<html>`)).toBe(false);
+  it.each([
+    'O preço <p 10 reais',
+    'Se x<p então y > z',
+    'De: Paulo <p@empresa.com>',
+    '<br@empresa.com.br>',
+    'Olá, segue sua fatura.',
+    JSON.stringify({ a: 1, b: 'texto' }),
+    '# Título\n\nAlgum **markdown** com [link](http://x.com)',
+    `${'x'.repeat(301)}<html>`,
+  ])('does NOT detect %p as HTML (genuine prose, not a real tag)', (t) => {
+    expect(GmailApiClient.pareceHtml(t)).toBe(false);
   });
 });
 
@@ -568,6 +584,47 @@ describe('GmailApiClient.fetchFullBodyComAnexos', () => {
     expect(r.anexos).toEqual([
       { filename: 'Fatura_082026.PDF', mimeType: 'application/octet-stream', size: 12345, attachmentId: 'att1' },
       { filename: 'logo.png', mimeType: 'image/png', size: 10, attachmentId: 'att2' },
+    ]);
+  });
+
+  it('percorre multipart/mixed > multipart/related aninhado: imagem inline (sem filename, com Content-Id) fica de fora, PDF em outro nível entra', async () => {
+    const payload = {
+      mimeType: 'multipart/mixed',
+      parts: [
+        {
+          mimeType: 'multipart/related',
+          parts: [
+            { mimeType: 'text/html', body: { data: base64url('<p>Corpo</p><img src="cid:logo">') } },
+            {
+              mimeType: 'image/png',
+              filename: '',
+              headers: [{ name: 'Content-ID', value: '<logo>' }],
+              body: { attachmentId: 'inline-att', size: 500 },
+            },
+          ],
+        },
+        { mimeType: 'application/pdf', filename: 'fatura.pdf', body: { attachmentId: 'att-pdf', size: 999 } },
+      ],
+    };
+
+    const r = await clientComPayload(payload).fetchFullBodyComAnexos('rt', 'm1');
+
+    expect(r.anexos).toEqual([{ filename: 'fatura.pdf', mimeType: 'application/pdf', size: 999, attachmentId: 'att-pdf' }]);
+  });
+
+  it('anexo sem body.size vira size 0, em vez de undefined', async () => {
+    const payload = {
+      mimeType: 'multipart/mixed',
+      parts: [
+        { mimeType: 'text/plain', body: { data: base64url('oi') } },
+        { mimeType: 'application/pdf', filename: 'sem-tamanho.pdf', body: { attachmentId: 'att-sem-size' } },
+      ],
+    };
+
+    const r = await clientComPayload(payload).fetchFullBodyComAnexos('rt', 'm1');
+
+    expect(r.anexos).toEqual([
+      { filename: 'sem-tamanho.pdf', mimeType: 'application/pdf', size: 0, attachmentId: 'att-sem-size' },
     ]);
   });
 

@@ -44,3 +44,26 @@ export function mapearErroGmail(error: unknown, mensagemNaoEncontrado?: string):
   }
   return new ServiceUnavailableException('Não foi possível falar com o Gmail agora. Tente novamente em instantes.');
 }
+
+export type ClasseErroGmail = 'transitorio-conta' | 'transitorio-mensagem' | 'permanente';
+
+const CODES_REDE = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE']);
+const NOMES_TIMEOUT = new Set(['AbortError', 'TimeoutError']);
+
+/** Decide o que o reprocessamento faz com uma falha. Lê a forma REAL do gaxios 7: um timeout chega com
+ *  `err.name === 'Error'` e `err.error.name === 'AbortError'`; erros de rede trazem `code` string; HTTP
+ *  traz `status` numérico. Exceção que não veio do gaxios (parser, Prisma) é nossa → permanente. */
+export function classificarErroGmail(error: unknown): ClasseErroGmail {
+  const err = (error ?? {}) as Record<string, any>;
+  const ehGaxios = typeof err === 'object' && ('config' in err || 'response' in err || err?.constructor?.name === 'GaxiosError');
+  if (!ehGaxios) return 'permanente';
+
+  const status = statusHttpDoErroGmail(error);
+  if (status === 401 || status === 403 || status === 429) return 'transitorio-conta';
+  const codes = [err.code, err.error?.code, err.cause?.code].filter((c) => typeof c === 'string') as string[];
+  const nomes = [err.name, err.error?.name, err.cause?.name].filter((n) => typeof n === 'string') as string[];
+  if (codes.some((c) => CODES_REDE.has(c)) || nomes.some((n) => NOMES_TIMEOUT.has(n))) return 'transitorio-conta';
+  if (status === undefined) return 'transitorio-conta';
+  if (status >= 500) return 'transitorio-mensagem';
+  return 'permanente';
+}

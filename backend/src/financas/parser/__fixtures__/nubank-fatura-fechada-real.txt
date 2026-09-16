@@ -1,0 +1,5 @@
+Sua fatura foi fechada
+Você pode pagar usando a sua conta do Nubank ou gerando um boleto diretamente no app.
+Olá, Fulano Sua fatura já está fechada, vence no dia 15 de setembro e você pode conferir todos os detalhes no PDF anexo aqui no e-mail. Pagar sua fatura é bem simples e você pode fazer isso direto no aplicativo usando o saldo da sua conta do Nubank ou gerando um boleto.
+Como pagar sua fatura
+Importante: não esqueça de fazer o pagamento da sua fatura até a data de vencimento que é dia 15 de setembro.

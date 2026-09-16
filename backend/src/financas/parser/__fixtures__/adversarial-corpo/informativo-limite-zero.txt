@@ -1,0 +1,3 @@
+Informativo de limite
+Total da fatura atual: R$ 0,00
+Vencimento: dia 10

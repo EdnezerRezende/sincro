@@ -18,9 +18,8 @@ function buildDeps() {
   const heuristicClassifier = { classify: jest.fn().mockResolvedValue({ categoria: 'PODE_ESPERAR', resumoCurto: 'ok' }) };
   const llmClassifier = { classify: jest.fn().mockResolvedValue({ categoria: 'PRECISA_ATENCAO', resumoCurto: 'llm ok' }) };
   const usersService = { getByFirebaseUidOrThrow: jest.fn().mockResolvedValue({ id: 'u1', firebaseUid: 'fb1' }) };
-  const financeParser = { matches: jest.fn().mockReturnValue(false), processEmail: jest.fn() };
 
-  return { prisma, gmailApiClient, connectionsService, sensoryProfileService, heuristicClassifier, llmClassifier, usersService, financeParser };
+  return { prisma, gmailApiClient, connectionsService, sensoryProfileService, heuristicClassifier, llmClassifier, usersService };
 }
 
 function buildService(deps: ReturnType<typeof buildDeps>) {
@@ -32,7 +31,6 @@ function buildService(deps: ReturnType<typeof buildDeps>) {
     deps.heuristicClassifier as any,
     deps.llmClassifier as any,
     deps.usersService as any,
-    deps.financeParser as any,
   );
 }
 
@@ -242,54 +240,6 @@ describe('EmailSyncService', () => {
         data: expect.objectContaining({ categoria: 'PODE_ESPERAR', resumoCurto: 'Assunto original' }),
       }),
     );
-  });
-
-  it('calls the finance parser for a matched email and fetches its full body first', async () => {
-    const deps = buildDeps();
-    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
-    deps.financeParser.matches.mockReturnValue(true);
-    deps.gmailApiClient.fetchFullBody.mockResolvedValue({ texto: 'corpo completo', ehPreview: false });
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
-      emails: [{ gmailMessageId: 'm1', remetente: 'x@nubank.com.br', assunto: 'Fatura', corpo: '', recebidoEm: new Date() }],
-      historyId: 'h1',
-    });
-    const service = buildService(deps);
-
-    await service.syncUser('u1');
-
-    expect(deps.gmailApiClient.fetchFullBody).toHaveBeenCalledWith('rt-123', 'm1');
-    expect(deps.financeParser.processEmail).toHaveBeenCalledWith('u1', expect.objectContaining({ gmailMessageId: 'm1' }), 'corpo completo');
-  });
-
-  it('never calls fetchFullBody for an unmatched email', async () => {
-    const deps = buildDeps();
-    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
-    deps.financeParser.matches.mockReturnValue(false);
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
-      emails: [{ gmailMessageId: 'm1', remetente: 'x@example.com', assunto: 'Assunto', corpo: '', recebidoEm: new Date() }],
-      historyId: 'h1',
-    });
-    const service = buildService(deps);
-
-    await service.syncUser('u1');
-
-    expect(deps.gmailApiClient.fetchFullBody).not.toHaveBeenCalled();
-    expect(deps.financeParser.processEmail).not.toHaveBeenCalled();
-  });
-
-  it('does not let a finance-parser failure break the classification loop', async () => {
-    const deps = buildDeps();
-    deps.prisma.gmailConnection.findUnique.mockResolvedValue({ userId: 'u1', lastHistoryId: null });
-    deps.financeParser.matches.mockReturnValue(true);
-    deps.gmailApiClient.fetchFullBody.mockRejectedValue(new Error('gmail down'));
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
-      emails: [{ gmailMessageId: 'm1', remetente: 'x@nubank.com.br', assunto: 'Fatura', corpo: '', recebidoEm: new Date() }],
-      historyId: 'h1',
-    });
-    const service = buildService(deps);
-
-    await expect(service.syncUser('u1')).resolves.toBeDefined();
-    expect(deps.prisma.emailSummary.create).toHaveBeenCalled();
   });
 
   it('lists summaries scoped to the resolved user, most recent first', async () => {

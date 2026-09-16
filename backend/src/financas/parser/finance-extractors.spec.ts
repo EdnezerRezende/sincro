@@ -29,6 +29,9 @@ describe('extrairValor', () => {
     expect(extrairValor('Valor total\nR$ 300,00').valor).toBe(300);
     expect(extrairValor('Valor total\nValor mínimo R$ 50,00').valor).toBeNull();
   });
+  it('does not fall through to the next line when the anchor line itself had a rejected (installment) currency', () => {
+    expect(extrairValor('Valor a pagar em 12x de R$ 110,00\nJuros de R$ 5,00 ao mês').valor).toBeNull();
+  });
   it('Subtotal: does not match total:', () => {
     expect(extrairValor('Subtotal: R$ 120,00\nFrete: R$ 10,00').anchored).toBe(false);
   });

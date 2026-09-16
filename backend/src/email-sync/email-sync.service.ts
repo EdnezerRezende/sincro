@@ -61,7 +61,7 @@ export class EmailSyncService {
         classification = { categoria: 'PODE_ESPERAR' as const, resumoCurto: email.assunto };
       }
 
-      // TODO Task 13: FinanceEmailProcessor
+      // TODO Task 13: FinanceEmailProcessor (plan Task 12 builds it, Task 13 wires it)
 
       try {
         await this.prisma.emailSummary.create({

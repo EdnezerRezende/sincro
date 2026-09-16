@@ -29,7 +29,7 @@ export interface ParseParams {
   anexos: AnexoMeta[];
 }
 
-const FATURA_LIFECYCLE_RE = wb('\\b(sua|a)\\s+faturas?\\s.{0,15}(fechou|fechada|dispon[ií]vel|gerada|emitida|vence em breve)');
+const FATURA_LIFECYCLE_RE = wb('\\b(sua|a)\\s+faturas?\\s.{0,15}(fechou|fechada|dispon[ií]vel|gerada|emitida|chegou|vence em breve)');
 const CARTAO_PERTO_DE_FATURA_RE = wb('\\bcart(ão|ao|[õo]es)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\bcart(ão|ao|[õo]es)\\b');
 const BANDEIRA_PERTO_DE_FATURA_RE = wb('\\b(visa|mastercard|master|amex|hipercard)\\b.{0,40}\\bfatura\\b|\\bfatura\\b.{0,40}\\b(visa|mastercard|master|amex|hipercard)\\b');
 

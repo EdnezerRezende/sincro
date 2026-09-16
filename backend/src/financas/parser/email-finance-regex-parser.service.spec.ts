@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { EmailFinanceRegexParserService, FINANCE_PARSER_VERSION } from './email-finance-regex-parser.service';
+import { CABECA_TIPO, EmailFinanceRegexParserService, FINANCE_PARSER_VERSION } from './email-finance-regex-parser.service';
 import { triagem } from './finance-email-detector';
 import type { AnexoMeta } from './finance-evidence';
 
@@ -48,6 +48,28 @@ describe('EmailFinanceRegexParserService.parse', () => {
       const rem = 'Nubank <todomundo@nubank.com.br>', ass = 'A fatura do seu cartão está fechada';
       expect(parse(rem, ass, fx('pagamento-recebido.txt'), new Date())).toBeNull();
       expect(parse(rem, ass, fx('pagamento-recebido.txt'), new Date(), [], true)).not.toBeNull();
+    });
+    it('Sam\'s Club "vence em breve", sem valor/data no corpo: FATURA_CARTAO, dataVencimento = recebidoEm', () => {
+      const recebidoEm = new Date('2026-09-16T10:00:00Z');
+      const r = parse(
+        'Sam\'s Club <cartaosamsclub@sams.cartaosamsclub.com.br>',
+        'A fatura do seu Cartão de Crédito Sam\'s Club vence em breve! Confira as formas de pagamento.',
+        fx('sams-vence-em-breve.txt'),
+        recebidoEm,
+      );
+      expect(r).toMatchObject({ tipo: 'FATURA_CARTAO', instituicao: "Sam's Club", valor: null, dataVencimento: recebidoEm, dataEncontrada: false });
+    });
+  });
+
+  describe('CABECA_TIPO / bandeira "elo"', () => {
+    it('"cartão" fora da cabeça (a partir do char 601) não muda o tipo para remetente desconhecido', () => {
+      const corpo = `${'x'.repeat(CABECA_TIPO)} fatura do seu cartão`;
+      const r = parse('X <contato@empresadesconhecida.com.br>', 'Seu boleto chegou', corpo, new Date('2026-09-01T00:00:00Z'));
+      expect(r?.tipo).toBe('DESPESA');
+    });
+    it('"elo" sozinho perto de "fatura" não vira FATURA_CARTAO (não é bandeira nem "cartão")', () => {
+      const r = parse('X <contato@lojaelo.com.br>', 'Sua fatura Elo chegou', 'Confira os detalhes no aplicativo.', new Date('2026-09-01T00:00:00Z'));
+      expect(r?.tipo).toBe('DESPESA');
     });
   });
 
@@ -97,6 +119,10 @@ describe('EmailFinanceRegexParserService.parse', () => {
     });
     it('conta de luz que anuncia "pague no cartão" continua DESPESA', () => {
       expect(parse('Vivo <faturas@vivo.com.br>', 'Sua fatura Vivo chegou: pague no cartão de crédito', 'Valor a pagar R$ 99,90 Vencimento 10/10/2026', recebidoEm)?.tipo).toBe('DESPESA');
+    });
+    it('"Sua fatura chegou" (lifecycle) de instituição CARTAO → FATURA_CARTAO', () => {
+      const r = parse('Itaú <fatura@itau.com.br>', 'Sua fatura chegou', 'Total da fatura: R$ 800,00\nVencimento: 10/10/2026', recebidoEm);
+      expect(r).toMatchObject({ tipo: 'FATURA_CARTAO', valor: 800, dataVencimento: utc(2026, 10, 10) });
     });
   });
 

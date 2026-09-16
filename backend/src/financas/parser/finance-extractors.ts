@@ -39,6 +39,10 @@ export function extrairValor(texto: string): { valor: number | null; anchored: b
       const linha = linhas[i];
       const matches = [...linha.matchAll(global)];
       if (matches.length === 0) continue;
+      // Se a própria linha da âncora tinha uma moeda mas ela foi rejeitada (parcela/mínimo), a
+      // linha já respondeu à âncora — não cai no fallback de "próxima linha", que pegaria uma
+      // moeda não relacionada (ex.: "Juros de R$ 5,00" depois de "12x de R$ 110,00" rejeitado).
+      let moedaRejeitadaNaLinha = false;
       for (const m of matches) {
         const depois = linha.slice((m.index ?? 0) + m[0].length);
         // Segmento até a primeira moeda: se houver parcelamento ou "após/mínimo" antes dela, o
@@ -46,10 +50,11 @@ export function extrairValor(texto: string): { valor: number | null; anchored: b
         const primeiraMoeda = depois.match(MOEDA_OPCIONAL_RE);
         if (!primeiraMoeda || primeiraMoeda.index === undefined) continue;
         const antesMoeda = depois.slice(0, primeiraMoeda.index);
-        if (APOS_MINIMO_INICIO_RE.test(antesMoeda)) continue;
-        if (PARCELAMENTO_RE.test(depois.slice(0, primeiraMoeda.index + primeiraMoeda[0].length))) continue;
+        if (APOS_MINIMO_INICIO_RE.test(antesMoeda)) { moedaRejeitadaNaLinha = true; continue; }
+        if (PARCELAMENTO_RE.test(depois.slice(0, primeiraMoeda.index + primeiraMoeda[0].length))) { moedaRejeitadaNaLinha = true; continue; }
         return { valor: zeroParaNull(parseBr(primeiraMoeda[1])), anchored: true, ancoraCobranca: ehCobranca };
       }
+      if (moedaRejeitadaNaLinha) continue;
       // Rótulo numa linha, valor na seguinte (HTML <div>label</div><div>valor</div>).
       const proxima = linhas[i + 1];
       if (proxima !== undefined && proxima.trim() !== '' && !PARCELAMENTO_RE.test(proxima)

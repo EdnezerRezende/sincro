@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'finance_providers.dart';
 import 'lancamento_financeiro.dart';
+import 'novo_lancamento_screen.dart';
 import '../calendar/calendar_providers.dart';
 
 final _currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -51,6 +52,16 @@ Future<void> showConfirmarLancamentoSheet(
               await repository.confirmar(lancamento.id, valor: lancamento.valor);
               invalidateAfterMudanca();
               if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              // DIRECIONA PARA EDIÇÃO: abre tela de edição do lançamento salvo
+              if (context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NovoLancamentoScreen(
+                      existente: lancamento,
+                    ),
+                  ),
+                );
+              }
             } catch (_) {
               if (sheetContext.mounted) {
                 setState(() => isSubmitting = false);

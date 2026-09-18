@@ -12,7 +12,7 @@ export interface AnexoMeta {
   size: number;
   attachmentId: string;
 }
-export type Evidencia = 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6';
+export type Evidencia = 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7';
 export const CABECA_EVIDENCIA = 1500;
 
 const PIX_RE = wb('\\bpix copia e cola\\b|\\bchave pix\\b');
@@ -47,6 +47,8 @@ export function evidenciasDeCobranca(
   }
   if (E5_RE.test(cabeca)) ev.add('E5');
   if (anexos.some((a) => E6_RE.test(a.filename.normalize('NFC')))) ev.add('E6');
+  // E7: CSV/XML anexos de instituição financeira (extrato/fatura) — Nubank/Santander etc.
+  if (anexos.some((a) => a.filename && /\.(csv|xml|xls|xlsx)$/i.test(a.filename))) ev.add('E7');
   return ev;
 }
 
@@ -54,7 +56,7 @@ export function evidenciaSuficiente(
   ev: Set<Evidencia>,
   assuntoTemSubstantivoCobranca: boolean,
 ): boolean {
-  if (['E1', 'E3', 'E4', 'E5', 'E6'].some((e) => ev.has(e as Evidencia)))
+  if (['E1', 'E3', 'E4', 'E5', 'E6', 'E7'].some((e) => ev.has(e as Evidencia)))
     return true;
   return ev.has('E2') && assuntoTemSubstantivoCobranca;
 }

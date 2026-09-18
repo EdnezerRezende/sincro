@@ -259,199 +259,437 @@ describe('GmailApiClient.sendReply', () => {
   });
 });
 
-describe('GmailApiClient — filtro de ruído (Promoções/Social/Atualizações/Fóruns/Spam)', () => {
-  beforeEach(() => {
-    const { __get, __list, __getProfile, __historyList } = mocks();
-    __get.mockReset();
-    __list.mockReset().mockResolvedValue({ data: { messages: [] } });
-    __getProfile
-      .mockReset()
-      .mockResolvedValue({ data: { historyId: 'h-new' } });
-    __historyList.mockReset().mockResolvedValue({ data: { history: [] } });
-  });
-
-  it('fetchInitialUnread busca com in:inbox (não category:primary, que depende do usuário ter as abas do Gmail ativadas)', async () => {
-    await buildClient().fetchInitialUnread('rt-123');
-
-    const { __list } = mocks();
-    expect(__list).toHaveBeenCalledWith(
-      expect.objectContaining({ q: expect.stringContaining('in:inbox') }),
-    );
-    expect(__list).toHaveBeenCalledWith(
-      expect.objectContaining({
-        q: expect.not.stringContaining('category:primary'),
+/** Encena `messages.list` devolvendo, em sequência, uma página por entrada de `paginas`
+ *  (`{ ids: quantidade, nextPageToken? }`) — cada id é globalmente único (`m1`, `m2`, ...) para dar
+ *  para contar quantas vezes `messages.get` foi chamado no total. `messages.get`, `getProfile` e
+ *  `history.list` ficam com um fallback neutro (mensagem sempre com `INBOX`, sem ruído) — os testes
+ *  de paginação não olham para dentro das mensagens, só para a paginação em si. */
+function clientComLista(paginas: { ids: number; nextPageToken?: string }[]) {
+  const { __list, __get, __getProfile, __historyList } = mocks();
+  let proximoId = 1;
+  __list.mockReset();
+  for (const pagina of paginas) {
+    const messages = Array.from({ length: pagina.ids }, () => ({
+      id: `m${proximoId++}`,
+    }));
+    __list.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: { messages, nextPageToken: pagina.nextPageToken },
       }),
     );
-  });
-
-  it('fetchInitialUnread exclui Promoções/Social/Atualizações/Fóruns já no `q`, para o cap de 50 do Gmail não ser gasto com ruído', async () => {
-    await buildClient().fetchInitialUnread('rt-123');
-
-    const { __list } = mocks();
-    const q = (__list.mock.calls[0][0] as { q: string }).q;
-    expect(q).toContain('-category:promotions');
-    expect(q).toContain('-category:social');
-    expect(q).toContain('-category:updates');
-    expect(q).toContain('-category:forums');
-  });
-
-  it('REGRESSÃO: com 50+ promoções não lidas e poucas mensagens reais, fetchInitialUnread ainda devolve as reais (o cap de 50 do Gmail é aplicado ANTES do filtro por labelIds do nosso lado)', async () => {
-    const { __list, __get } = mocks();
-
-    // Simula o comportamento real da API do Gmail: `messages.list` aplica o `q` (inclusive as
-    // exclusões negativas de categoria) NO SERVIDOR, antes de truncar em `maxResults`. Se o `q`
-    // enviado pelo código não excluir as categorias de ruído, esta simulação devolve as 50
-    // promoções e nenhuma mensagem real sobra — exatamente o sintoma da regressão relatada.
-    const contaCompleta: { id: string; categoria: string | null }[] = [
-      ...Array.from({ length: 55 }, (_, i) => ({
-        id: `promo-${i}`,
-        categoria: 'promotions',
-      })),
-      { id: 'real-1', categoria: null },
-      { id: 'real-2', categoria: null },
-      { id: 'real-3', categoria: null },
-    ];
-    __list.mockImplementation(({ q }: { q: string }) => {
-      const categoriasExcluidas = [...q.matchAll(/-category:(\w+)/g)].map(
-        (m) => m[1],
-      );
-      const combinam = contaCompleta.filter(
-        (m) =>
-          m.categoria === null || !categoriasExcluidas.includes(m.categoria),
-      );
-      return Promise.resolve({
-        data: { messages: combinam.slice(0, 50).map((m) => ({ id: m.id })) },
-      });
-    });
-    __get.mockImplementation(({ id }: { id: string }) => {
-      const labelIds = id.startsWith('promo-')
-        ? ['CATEGORY_PROMOTIONS', 'UNREAD', 'INBOX']
-        : ['UNREAD', 'INBOX'];
-      return Promise.resolve({
-        data: {
-          labelIds,
-          payload: {
-            headers: [
-              { name: 'From', value: 'x@example.com' },
-              { name: 'Subject', value: 'Assunto' },
-            ],
-          },
-          snippet: 'trecho',
-          internalDate: '1000',
-        },
-      });
-    });
-
-    const result = await buildClient().fetchInitialUnread('rt-123');
-
-    expect(result.emails.map((e) => e.gmailMessageId).sort()).toEqual([
-      'real-1',
-      'real-2',
-      'real-3',
-    ]);
-  });
-
-  it('fetchInitialUnread descarta Promoções/Social/Atualizações/Fóruns/Spam pelas labelIds — mesma lista negra do fetchIncremental', async () => {
-    const { __list, __get } = mocks();
-    __list.mockResolvedValue({
+  }
+  __get.mockReset().mockImplementation(({ id }: { id: string }) =>
+    Promise.resolve({
       data: {
-        messages: [{ id: 'promo-1' }, { id: 'spam-1' }, { id: 'principal-1' }],
-      },
-    });
-    __get.mockImplementation(({ id }: { id: string }) => {
-      const labelsByMessage: Record<string, string[]> = {
-        'promo-1': ['CATEGORY_PROMOTIONS', 'UNREAD', 'INBOX'],
-        'spam-1': ['SPAM', 'UNREAD'],
-        'principal-1': ['CATEGORY_PERSONAL', 'UNREAD', 'INBOX'],
-      };
-      return Promise.resolve({
-        data: {
-          labelIds: labelsByMessage[id],
-          payload: {
-            headers: [
-              { name: 'From', value: 'x@example.com' },
-              { name: 'Subject', value: 'Assunto' },
-            ],
-          },
-          snippet: 'trecho',
-          internalDate: '1000',
-        },
-      });
-    });
-
-    const result = await buildClient().fetchInitialUnread('rt-123');
-
-    expect(result.emails.map((e) => e.gmailMessageId)).toEqual(['principal-1']);
-    // Task 9: FetchedEmail carrega as labelIds da mensagem (não só serve para filtrar ruído).
-    expect(result.emails[0].labelIds).toEqual([
-      'CATEGORY_PERSONAL',
-      'UNREAD',
-      'INBOX',
-    ]);
-  });
-
-  it('fetchIncremental descarta mensagens de Promoções/Social/Atualizações/Fóruns pelas labelIds', async () => {
-    const { __historyList, __get } = mocks();
-    __historyList.mockResolvedValue({
-      data: {
-        historyId: 'h2',
-        history: [
-          { messagesAdded: [{ message: { id: 'promo-1' } }] },
-          { messagesAdded: [{ message: { id: 'social-1' } }] },
-          { messagesAdded: [{ message: { id: 'updates-1' } }] },
-          { messagesAdded: [{ message: { id: 'forums-1' } }] },
-          { messagesAdded: [{ message: { id: 'principal-1' } }] },
-        ],
-      },
-    });
-    __get.mockImplementation(({ id }: { id: string }) => {
-      const labelsByMessage: Record<string, string[]> = {
-        'promo-1': ['CATEGORY_PROMOTIONS', 'UNREAD'],
-        'social-1': ['CATEGORY_SOCIAL', 'UNREAD'],
-        'updates-1': ['CATEGORY_UPDATES', 'UNREAD'],
-        'forums-1': ['CATEGORY_FORUMS', 'UNREAD'],
-        'principal-1': ['CATEGORY_PERSONAL', 'UNREAD', 'INBOX'],
-      };
-      return Promise.resolve({
-        data: {
-          labelIds: labelsByMessage[id],
-          payload: {
-            headers: [
-              { name: 'From', value: 'x@example.com' },
-              { name: 'Subject', value: 'Assunto' },
-            ],
-          },
-          snippet: 'trecho',
-          internalDate: '1000',
-        },
-      });
-    });
-
-    const result = await buildClient().fetchIncremental('rt-123', 'h1');
-
-    expect(result.emails.map((e) => e.gmailMessageId)).toEqual(['principal-1']);
-  });
-
-  it('fetchIncremental também descarta SPAM pelas labelIds', async () => {
-    const { __historyList, __get } = mocks();
-    __historyList.mockResolvedValue({
-      data: {
-        historyId: 'h2',
-        history: [{ messagesAdded: [{ message: { id: 'spam-1' } }] }],
-      },
-    });
-    __get.mockResolvedValue({
-      data: {
-        labelIds: ['SPAM'],
+        id,
+        labelIds: ['INBOX'],
         payload: { headers: [] },
         snippet: '',
-        internalDate: '1000',
+        internalDate: '1',
+      },
+    }),
+  );
+  __getProfile
+    .mockReset()
+    .mockResolvedValue({ data: { historyId: 'h-profile' } });
+  __historyList.mockReset().mockResolvedValue({ data: { history: [] } });
+  return { client: buildClient(), mocks: { list: __list, get: __get } };
+}
+
+/** Uma única mensagem `m1`, com `labelIds` fixas, disponível tanto para `messages.list` +
+ *  `messages.get` (caminho `fetchInitial`) quanto para `history.list` (caminho `fetchIncremental`)
+ *  — usado pela tabela de `fetchMessages — filtros`, que roda os dois caminhos sobre a mesma
+ *  combinação de labels. */
+function clientComMensagem(msg: { labelIds: string[] }) {
+  const { __list, __get, __getProfile, __historyList } = mocks();
+  __list.mockReset().mockResolvedValue({ data: { messages: [{ id: 'm1' }] } });
+  __get.mockReset().mockResolvedValue({
+    data: {
+      id: 'm1',
+      labelIds: msg.labelIds,
+      payload: { headers: [] },
+      snippet: '',
+      internalDate: '1',
+    },
+  });
+  __getProfile
+    .mockReset()
+    .mockResolvedValue({ data: { historyId: 'h-profile' } });
+  __historyList.mockReset().mockResolvedValue({
+    data: {
+      history: [{ messagesAdded: [{ message: { id: 'm1' } }] }],
+      historyId: 'h1',
+    },
+  });
+  return { client: buildClient() };
+}
+
+/** Encena `history.list` devolvendo, em sequência, uma página por entrada de `paginas`
+ *  (`{ messagesAdded, historyId, nextPageToken? }`). `messages.get` devolve sempre uma mensagem
+ *  limpa (`INBOX`, sem ruído) — estes testes olham só para a paginação e o `historyId` devolvido. */
+function clientComHistory(
+  paginas: {
+    messagesAdded: string[];
+    historyId: string;
+    nextPageToken?: string;
+  }[],
+) {
+  const { __historyList, __get } = mocks();
+  __historyList.mockReset();
+  for (const pagina of paginas) {
+    __historyList.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: {
+          history: [
+            {
+              messagesAdded: pagina.messagesAdded.map((id) => ({
+                message: { id },
+              })),
+            },
+          ],
+          historyId: pagina.historyId,
+          nextPageToken: pagina.nextPageToken,
+        },
+      }),
+    );
+  }
+  __get.mockReset().mockImplementation(({ id }: { id: string }) =>
+    Promise.resolve({
+      data: {
+        id,
+        labelIds: ['INBOX'],
+        payload: { headers: [] },
+        snippet: '',
+        internalDate: '1',
+      },
+    }),
+  );
+  return { client: buildClient(), mocks: { historyList: __historyList } };
+}
+
+describe('fetchInitial', () => {
+  it('busca 30 dias, lidas e não lidas, sem excluir Atualizações, e pagina até 200 ids', async () => {
+    const { client, mocks: m } = clientComLista([
+      { ids: 100, nextPageToken: 'p2' },
+      { ids: 100 },
+    ]);
+
+    const r = await client.fetchInitial('rt');
+
+    const q = m.list.mock.calls[0][0].q as string;
+    expect(q).toContain('in:inbox');
+    expect(q).not.toContain('is:unread');
+    expect(q).not.toContain('category:primary');
+    expect(q).not.toContain('-category:updates');
+    expect(q).toContain(
+      '-category:promotions -category:social -category:forums',
+    );
+    expect(m.list.mock.calls[0][0].maxResults).toBe(100);
+    expect(m.list.mock.calls[1][0].pageToken).toBe('p2');
+    expect(m.get).toHaveBeenCalledTimes(200);
+    expect(r.historyId).toBe('h-profile');
+  });
+
+  it('para em 200 mesmo com mais páginas', async () => {
+    const { client, mocks: m } = clientComLista([
+      { ids: 100, nextPageToken: 'p2' },
+      { ids: 100, nextPageToken: 'p3' },
+      { ids: 100 },
+    ]);
+
+    await client.fetchInitial('rt');
+
+    expect(m.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('after cobre 30 dias', async () => {
+    const antes = Math.floor((Date.now() - 30 * 24 * 3600 * 1000) / 1000);
+    const { client, mocks: m } = clientComLista([{ ids: 1 }]);
+
+    await client.fetchInitial('rt');
+
+    const match = (m.list.mock.calls[0][0].q as string).match(/after:(\d+)/);
+    expect(Number(match![1])).toBeGreaterThanOrEqual(antes - 5);
+  });
+});
+
+describe('fetchMessages — filtros (Promoções/Social/Fóruns/Spam e INBOX obrigatório)', () => {
+  it.each([
+    [['INBOX', 'CATEGORY_UPDATES'], true],
+    [['INBOX', 'CATEGORY_PROMOTIONS'], false],
+    [['INBOX', 'CATEGORY_SOCIAL'], false],
+    [['INBOX', 'CATEGORY_FORUMS'], false],
+    [['INBOX', 'SPAM'], false],
+    [['SENT'], false],
+    [['CATEGORY_UPDATES'], false],
+    [['INBOX'], true],
+  ])(
+    'labelIds %p → mantida=%p (fetchInitial e fetchIncremental)',
+    async (labels, mantida) => {
+      const { client } = clientComMensagem({ labelIds: labels });
+
+      const ini = await client.fetchInitial('rt');
+      const inc = await client.fetchIncremental('rt', 'h0');
+
+      expect(ini.emails).toHaveLength(mantida ? 1 : 0);
+      expect(inc.emails).toHaveLength(mantida ? 1 : 0);
+    },
+  );
+});
+
+describe('fetchMessages — tolera falha pontual por id (item 2)', () => {
+  it('404 em 1 de 3 ids em fetchInitial: descarta só aquele id, mantém os outros dois, e ainda grava o historyId (getProfile chamado)', async () => {
+    const { client, mocks: m } = clientComLista([{ ids: 3 }]);
+    m.get.mockReset().mockImplementation(({ id }: { id: string }) => {
+      if (id === 'm2') {
+        return Promise.reject(Object.assign(new Error('gone'), { code: 404 }));
+      }
+      return Promise.resolve({
+        data: {
+          id,
+          labelIds: ['INBOX'],
+          payload: { headers: [] },
+          snippet: '',
+          internalDate: '1',
+        },
+      });
+    });
+
+    const r = await client.fetchInitial('rt');
+
+    expect(r.emails.map((e) => e.gmailMessageId)).toEqual(['m1', 'm3']);
+    expect(mocks().__getProfile).toHaveBeenCalled();
+  });
+
+  it('401 em 1 id propaga (autenticação/quota não é tratada como mensagem apagada)', async () => {
+    const { client, mocks: m } = clientComLista([{ ids: 2 }]);
+    m.get.mockReset().mockImplementation(({ id }: { id: string }) => {
+      if (id === 'm1') {
+        return Promise.reject(
+          Object.assign(new Error('unauthorized'), { code: 401 }),
+        );
+      }
+      return Promise.resolve({
+        data: {
+          id,
+          labelIds: ['INBOX'],
+          payload: { headers: [] },
+          snippet: '',
+          internalDate: '1',
+        },
+      });
+    });
+
+    await expect(client.fetchInitial('rt')).rejects.toMatchObject({
+      code: 401,
+    });
+  });
+});
+
+describe('fetchIncremental — paginação', () => {
+  it('segue nextPageToken e devolve o historyId da última página', async () => {
+    const { client, mocks: m } = clientComHistory([
+      { messagesAdded: ['m1'], historyId: 'h1', nextPageToken: 'p2' },
+      { messagesAdded: ['m2'], historyId: 'h2' },
+    ]);
+
+    const r = await client.fetchIncremental('rt', 'h0');
+
+    expect(r.emails.map((e) => e.gmailMessageId)).toEqual(['m1', 'm2']);
+    expect(r.historyId).toBe('h2');
+    expect(m.historyList.mock.calls[1][0].pageToken).toBe('p2');
+  });
+
+  it('404 continua virando historyExpired', async () => {
+    const { __historyList } = mocks();
+    __historyList
+      .mockReset()
+      .mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
+
+    const r = await buildClient().fetchIncremental('rt', 'h0');
+
+    expect(r).toEqual({ emails: [], historyId: null, historyExpired: true });
+  });
+});
+
+describe('fetchIncremental — um 404 pontual de messages.get NÃO é historyExpired (item 1)', () => {
+  it('history.list ok com 2 ids; get do 1º rejeita 404 → mantém o 2º e-mail, historyExpired false, historyId da página', async () => {
+    const { __historyList, __get } = mocks();
+    __historyList.mockReset().mockResolvedValue({
+      data: {
+        history: [
+          {
+            messagesAdded: [
+              { message: { id: 'm1' } },
+              { message: { id: 'm2' } },
+            ],
+          },
+        ],
+        historyId: 'h-pagina',
+      },
+    });
+    __get.mockReset().mockImplementation(({ id }: { id: string }) => {
+      if (id === 'm1') {
+        return Promise.reject(
+          Object.assign(new Error('not found'), { code: 404 }),
+        );
+      }
+      return Promise.resolve({
+        data: {
+          id,
+          labelIds: ['INBOX'],
+          payload: { headers: [] },
+          snippet: '',
+          internalDate: '1',
+        },
+      });
+    });
+
+    const r = await buildClient().fetchIncremental('rt', 'h0');
+
+    expect(r.emails.map((e) => e.gmailMessageId)).toEqual(['m2']);
+    expect(r.historyExpired).toBe(false);
+    expect(r.historyId).toBe('h-pagina');
+  });
+});
+
+describe('fetchIncremental — teto de páginas (item 3)', () => {
+  it('para em INCREMENTAL_MAX_PAGINAS (20) páginas mesmo havendo mais, devolvendo o historyId da última lida', async () => {
+    const totalPaginasDisponiveis = 21;
+    const paginas = Array.from({ length: totalPaginasDisponiveis }, (_, i) => ({
+      messagesAdded: [`m${i + 1}`],
+      historyId: `h${i + 1}`,
+      nextPageToken: i + 1 < totalPaginasDisponiveis ? `p${i + 2}` : undefined,
+    }));
+    const { client, mocks: m } = clientComHistory(paginas);
+
+    const r = await client.fetchIncremental('rt', 'h0');
+
+    expect(m.historyList).toHaveBeenCalledTimes(20);
+    expect(r.historyId).toBe('h20');
+    expect(r.historyExpired).toBe(false);
+  });
+});
+
+describe('fetchIncremental — dedupe, labelIds e página inicial vazia (item 4)', () => {
+  it('deduplica ids repetidos entre páginas de history.list: um único messages.get por id', async () => {
+    const { client } = clientComHistory([
+      { messagesAdded: ['m1'], historyId: 'h1', nextPageToken: 'p2' },
+      { messagesAdded: ['m1', 'm2'], historyId: 'h2' },
+    ]);
+
+    await client.fetchIncremental('rt', 'h0');
+
+    const idsChamados = (mocks().__get.mock.calls as [{ id: string }][]).map(
+      ([{ id }]) => id,
+    );
+    expect(idsChamados.sort()).toEqual(['m1', 'm2']);
+  });
+
+  it('copia labelIds da mensagem para FetchedEmail', async () => {
+    const { __historyList, __get } = mocks();
+    __historyList.mockReset().mockResolvedValue({
+      data: {
+        history: [{ messagesAdded: [{ message: { id: 'm1' } }] }],
+        historyId: 'h1',
+      },
+    });
+    __get.mockReset().mockResolvedValue({
+      data: {
+        id: 'm1',
+        labelIds: ['INBOX', 'CATEGORY_UPDATES', 'IMPORTANT'],
+        payload: { headers: [] },
+        snippet: '',
+        internalDate: '1',
       },
     });
 
-    const result = await buildClient().fetchIncremental('rt-123', 'h1');
+    const r = await buildClient().fetchIncremental('rt', 'h0');
 
-    expect(result.emails).toEqual([]);
+    expect(r.emails[0].labelIds).toEqual([
+      'INBOX',
+      'CATEGORY_UPDATES',
+      'IMPORTANT',
+    ]);
+  });
+
+  it('labelIds ausente na resposta do get: descarta a mensagem sem crashar', async () => {
+    const { __historyList, __get } = mocks();
+    __historyList.mockReset().mockResolvedValue({
+      data: {
+        history: [{ messagesAdded: [{ message: { id: 'm1' } }] }],
+        historyId: 'h1',
+      },
+    });
+    __get.mockReset().mockResolvedValue({
+      data: {
+        id: 'm1',
+        payload: { headers: [] },
+        snippet: '',
+        internalDate: '1',
+      },
+    });
+
+    const r = await buildClient().fetchIncremental('rt', 'h0');
+
+    expect(r.emails).toEqual([]);
+  });
+
+  it('1ª página sem "history" mas com nextPageToken continua para a 2ª', async () => {
+    const { __historyList, __get } = mocks();
+    __historyList
+      .mockReset()
+      .mockImplementationOnce(() =>
+        Promise.resolve({ data: { nextPageToken: 'p2', historyId: 'h1' } }),
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          data: {
+            history: [{ messagesAdded: [{ message: { id: 'm1' } }] }],
+            historyId: 'h2',
+          },
+        }),
+      );
+    __get.mockReset().mockResolvedValue({
+      data: {
+        id: 'm1',
+        labelIds: ['INBOX'],
+        payload: { headers: [] },
+        snippet: '',
+        internalDate: '1',
+      },
+    });
+
+    const r = await buildClient().fetchIncremental('rt', 'h0');
+
+    expect(__historyList).toHaveBeenCalledTimes(2);
+    expect(r.emails.map((e) => e.gmailMessageId)).toEqual(['m1']);
+    expect(r.historyId).toBe('h2');
+  });
+});
+
+describe('fetchInitial — regressão "servidor já filtrou promoções" (item 4)', () => {
+  it('200 ids trazidos, todos com label de ruído: 0 e-mails, e messages.list não é chamado uma 3ª vez', async () => {
+    const { client, mocks: m } = clientComLista([
+      { ids: 100, nextPageToken: 'p2' },
+      { ids: 100 },
+    ]);
+    m.get.mockReset().mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve({
+        data: {
+          id,
+          labelIds: ['CATEGORY_PROMOTIONS'],
+          payload: { headers: [] },
+          snippet: '',
+          internalDate: '1',
+        },
+      }),
+    );
+
+    const r = await client.fetchInitial('rt');
+
+    expect(r.emails).toHaveLength(0);
+    expect(m.list).toHaveBeenCalledTimes(2);
   });
 });
 

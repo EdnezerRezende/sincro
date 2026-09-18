@@ -1,21 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/revalidation.dart';
 import '../../core/widgets/app_input.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
 import 'calendar_providers.dart';
 import 'calendar_event.dart';
 import 'calendar_repository.dart';
-
-/// Intervalo mínimo entre revalidações automáticas ao retomar o app (ver
-/// `didChangeAppLifecycleState` em [_CalendarScreenState]). Cobre o caso relatado — usuário cria
-/// ou edita um evento no calendário nativo do aparelho e volta ao Sincro — sem refazer as duas
-/// chamadas de rede a cada troca trivial de app (notificação, teclado, um app diferente por
-/// alguns segundos). 30s é curto o bastante para o usuário nunca perceber os dados como
-/// desatualizados no fluxo relatado (sair do Sincro, abrir o calendário do aparelho, criar/editar
-/// um evento, voltar — isso raramente leva menos de 30s) e longo o bastante para não gerar uma
-/// rajada de requisições em quem alterna de app repetidamente em poucos segundos.
-const Duration _kRevalidationMinInterval = Duration(seconds: 30);
 
 // Idle border: ≥2.5:1 contra scaffold #FAF8F5 (light) / #1A1F23 (dark).
 // Mesmos tokens já aprovados em AppInput, AppChip e HomeScreen.
@@ -36,7 +27,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
 
   // `null` só antes da primeira revalidação; inicializado em [initState] porque a tela já busca
   // dados frescos ao ser criada — não há motivo para revalidar de novo se o app for retomado
-  // (`resumed`) menos de [_kRevalidationMinInterval] depois da tela ter acabado de abrir.
+  // (`resumed`) menos de [kRevalidationMinInterval] depois da tela ter acabado de abrir.
   DateTime? _lastRevalidatedAt;
 
   @override
@@ -65,7 +56,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final agora = DateTime.now();
     final ultima = _lastRevalidatedAt;
     if (ultima != null &&
-        agora.difference(ultima) < _kRevalidationMinInterval) {
+        agora.difference(ultima) < kRevalidationMinInterval) {
       return;
     }
     _lastRevalidatedAt = agora;

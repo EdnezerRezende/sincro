@@ -15,7 +15,7 @@ export function buildFakeGmailApiClient(
 ) {
   const corpo = opts.corpo ?? 'Corpo completo de teste do e-mail original.';
   return {
-    fetchInitialUnread: async () => ({
+    fetchInitial: async () => ({
       emails: [
         {
           gmailMessageId: 'msg-urgente',

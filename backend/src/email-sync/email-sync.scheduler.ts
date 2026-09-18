@@ -1,45 +1,58 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, Interval } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailSyncService } from './email-sync.service';
+import { EmailSyncLockService } from './email-sync-lock.service';
 import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class EmailSyncScheduler {
   private readonly logger = new Logger(EmailSyncScheduler.name);
 
-  // In-instance re-entrancy guard: a sync cycle can outrun the 20-minute cron interval once
-  // there are enough connected users (fetchMessages fetches sequentially), which would otherwise
-  // let two cron firings process the same user concurrently and race on the emailSummary dedup.
-  private running = false;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailSyncService: EmailSyncService,
+    private readonly lockService: EmailSyncLockService,
     private readonly notificationService: NotificationService,
   ) {}
 
-  @Cron('*/20 * * * *')
-  async syncAllConnectedUsers(): Promise<void> {
-    if (this.running) {
-      this.logger.warn('syncAllConnectedUsers is already running; skipping this cron firing to avoid overlap');
-      return;
-    }
-    this.running = true;
-    try {
-      const connections = await this.prisma.gmailConnection.findMany({ select: { userId: true } });
-      for (const { userId } of connections) {
+  /** a cada 2 minutos — sincronização rápida (spec aprovado, opção B + itens comuns) */
+  @Cron('*/2 * * * *')
+  async syncRapid(): Promise<void> {
+    const connections = await this.prisma.gmailConnection.findMany({
+      select: { userId: true },
+    });
+    for (const { userId } of connections) {
+      const result = await this.lockService.executar(userId, async () => {
         try {
-          const { novosPrecisamAtencao } = await this.emailSyncService.syncUser(userId);
-          if (novosPrecisamAtencao > 0) {
-            await this.notificationService.notifyNewEmailsNeedAttention(userId, novosPrecisamAtencao);
+          const res = await this.emailSyncService.syncUser(userId);
+          if (res.novosPrecisamAtencao > 0) {
+            await this.notificationService.notifyNewEmailsNeedAttention(
+              userId,
+              res.novosPrecisamAtencao,
+            );
           }
-        } catch (error) {
-          this.logger.error(`Failed to sync Gmail for user ${userId}`, error as Error);
+          return res;
+        } catch (e) {
+          this.logger.error(`Rapid sync failed for ${userId}`, e as Error);
+          return { novos: 0, novosPrecisamAtencao: 0 };
         }
+      });
+      if (result === null) {
+        this.logger.debug(`Skip ${userId}: already syncing`);
       }
-    } finally {
-      this.running = false;
+    }
+  }
+
+  @OnEvent('gmail.conectado')
+  async onGmailConnected(payload: { userId: string }): Promise<void> {
+    this.logger.log(`Event gmail.conectado for ${payload.userId}`);
+    const result = await this.lockService.executar(payload.userId, async () => {
+      return this.emailSyncService.syncUser(payload.userId);
+    });
+    if (result) {
+      this.logger.log(`Initial sync done for ${payload.userId}: ${result.novos} new`);
     }
   }
 }

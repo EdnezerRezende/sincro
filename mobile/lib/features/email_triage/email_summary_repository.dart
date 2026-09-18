@@ -2,15 +2,77 @@ import 'package:dio/dio.dart';
 import 'email_body.dart';
 import 'email_summary.dart';
 
+/// Uma página de resumos de e-mail. `proximoCursor` é `null` quando não há mais páginas —
+/// a tela usa isso para decidir se mostra "Carregar mais".
+class PaginaResumos {
+  const PaginaResumos({required this.itens, this.proximoCursor});
+
+  final List<EmailSummary> itens;
+  final String? proximoCursor;
+}
+
 class EmailSummaryRepository {
   EmailSummaryRepository(this._dio);
 
   final Dio _dio;
 
-  Future<List<EmailSummary>> list() async {
-    final response = await _dio.get('/resumos-email');
-    final data = response.data as List<dynamic>;
-    return data.map((json) => EmailSummary.fromJson(json as Map<String, dynamic>)).toList();
+  /// Busca uma página de resumos. Sem `cursor`, começa do mais recente; o backend mantém
+  /// compatibilidade com o formato antigo (array puro) quando nenhum parâmetro de paginação é
+  /// enviado, mas este método sempre manda `limite` e por isso sempre recebe `{itens, proximoCursor}`.
+  Future<PaginaResumos> listar({String? cursor, int limite = 50}) async {
+    final response = await _dio.get('/resumos-email', queryParameters: {
+      'limite': '$limite',
+      if (cursor != null) 'cursor': cursor,
+    });
+    final body = response.data;
+    // Um app já distribuído pode falar com um backend ainda não atualizado com o deploy mais
+    // recente (`./deploy.sh` não é atômico com a publicação da build mobile) — nesse cenário o
+    // backend antigo devolve o array puro de antes da paginação existir. Tratamos isso como uma
+    // única página completa (sem próximo cursor) em vez de deixar o cast abaixo estourar um
+    // TypeError opaco para quem chamou.
+    if (body is List) {
+      return PaginaResumos(
+        itens: body
+            .map((json) => EmailSummary.fromJson(json as Map<String, dynamic>))
+            .toList(),
+        proximoCursor: null,
+      );
+    }
+    final data = body as Map<String, dynamic>;
+    final itens = data['itens'];
+    if (itens is! List) {
+      throw FormatException(
+        'Resposta inesperada de GET /resumos-email: campo "itens" ausente ou não é uma lista '
+        '(recebido: ${itens.runtimeType}).',
+      );
+    }
+    final proximoCursor = data['proximoCursor'];
+    return PaginaResumos(
+      itens: itens.map((json) => EmailSummary.fromJson(json as Map<String, dynamic>)).toList(),
+      // Se o backend mandar algo que não seja String (ex.: número por bug de serialização),
+      // tratamos como se não houvesse próxima página em vez de propagar um cast inválido —
+      // a pior consequência é esconder uma página real, nunca travar a lista.
+      proximoCursor: proximoCursor is String ? proximoCursor : null,
+    );
+  }
+
+  /// Mantido para compatibilidade com chamadores/telas que só precisam da primeira página;
+  /// devolve só os itens, descartando o cursor de paginação.
+  Future<List<EmailSummary>> list() async => (await listar()).itens;
+
+  /// Pede ao backend para sincronizar a caixa agora, fora do ciclo do cron. Qualquer 2xx é sucesso
+  /// (inclusive 202, que o backend usa tanto para "sincronização recente demais, ignorada" quanto
+  /// para "já há uma sincronização em andamento"); 403 (Gmail não conectado) e outros erros
+  /// propagam como [DioException] — a tela decide o que mostrar.
+  Future<void> sincronizar() async {
+    await _dio.post(
+      '/resumos-email/sincronizar',
+      // O receiveTimeout global do ApiClient é 30s, pensado para chamadas pontuais a um LLM. A
+      // primeira sincronização de uma conta pode varrer ~200 mensagens e classificar cada uma —
+      // facilmente ultrapassa isso. Damos mais fôlego só aqui, sem mexer no timeout global (que
+      // continua correto para as outras chamadas deste repositório).
+      options: Options(receiveTimeout: const Duration(seconds: 120)),
+    );
   }
 
   /// Full body for READING the e-mail — never touches an LLM, so it can't fail because a

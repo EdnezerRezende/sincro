@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/revalidation.dart';
 import '../../core/theme.dart';
 import 'email_detail_screen.dart';
 import 'email_summary.dart';
@@ -17,12 +20,131 @@ const Color _kBorderDark = Color(0xFF7C7672);
 /// Ações disponíveis no menu de "mais ações" de cada e-mail da caixa de entrada.
 enum _AcaoEmailTile { arquivar, excluir }
 
-class InboxScreen extends ConsumerWidget {
+class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InboxScreen> createState() => _InboxScreenState();
+}
+
+class _InboxScreenState extends ConsumerState<InboxScreen> with WidgetsBindingObserver {
+  // Intervalo e limite de tentativas do indicador "Sincronizando sua caixa…": relê a cada 5 s por
+  // até 60 s (12 tentativas) enquanto a primeira sincronização (cron de 2 min ou evento ao
+  // conectar) ainda não gravou nenhum e-mail. Depois disso, para de tentar mesmo com a caixa
+  // vazia — o cron continua rodando sozinho e a próxima abertura da tela (ou o push de dados
+  // `inbox_atualizada`) resolve.
+  static const _intervaloSincronizando = Duration(seconds: 5);
+  static const _tentativasMaximasSincronizando = 12;
+
+  // `null` só antes da primeira revalidação; inicializado em [initState] porque a tela já busca
+  // dados frescos ao ser criada — não há motivo para revalidar de novo se o app for retomado
+  // (`resumed`) menos de [kRevalidationMinInterval] depois de a tela ter acabado de abrir.
+  DateTime? _lastRevalidatedAt;
+  Timer? _sincronizandoTimer;
+  int _tentativasSincronizando = 0;
+  bool _tempoEsgotadoSincronizando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastRevalidatedAt = DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pararTimerSincronizando();
+    super.dispose();
+  }
+
+  // Cobre o mesmo sintoma do calendário (`calendar_screen.dart`): um e-mail chega no Gmail
+  // enquanto o app está em segundo plano e a pessoa só percebe ao voltar. Sem isso, o provider
+  // `autoDispose` só refaz a busca quando a tela é recriada do zero.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed) return;
+    final agora = DateTime.now();
+    final ultima = _lastRevalidatedAt;
+    if (ultima != null && agora.difference(ultima) < kRevalidationMinInterval) {
+      return;
+    }
+    _lastRevalidatedAt = agora;
+    unawaited(ref.read(emailSummariesProvider.notifier).recarregar());
+  }
+
+  void _pararTimerSincronizando() {
+    _sincronizandoTimer?.cancel();
+    _sincronizandoTimer = null;
+  }
+
+  // Chamado a partir do `build` sempre que a caixa está vazia e a conexão ainda não registrou
+  // nenhuma sincronização. Idempotente (`_sincronizandoTimer != null` já em andamento não recria
+  // o timer) — dispara tentativas de releitura a cada 5 s; ao chegar em 60 s sem novidade,
+  // desiste e o próximo `build` cai no estado vazio comum.
+  void _garantirTimerSincronizando() {
+    if (_sincronizandoTimer != null) return;
+    _tentativasSincronizando = 0;
+    _sincronizandoTimer = Timer.periodic(_intervaloSincronizando, (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _tentativasSincronizando++;
+      ref.invalidate(gmailConnectionStatusProvider);
+      unawaited(ref.read(emailSummariesProvider.notifier).recarregar());
+      if (_tentativasSincronizando >= _tentativasMaximasSincronizando) {
+        timer.cancel();
+        _sincronizandoTimer = null;
+        setState(() => _tempoEsgotadoSincronizando = true);
+      }
+    });
+  }
+
+  // Usado tanto pelo `RefreshIndicator` (puxar para atualizar) quanto, futuramente, por qualquer
+  // botão de atualização manual. Sincroniza com o Gmail primeiro (o próprio backend aplica o
+  // debounce de 30 s e devolve 2xx mesmo quando pula — nunca lança nesse caso) e só então relê a
+  // lista local, para que o puxão realmente traga e-mails novos em vez de só reexibir o cache.
+  Future<void> _onRefresh() async {
+    final repo = ref.read(emailSummaryRepositoryProvider);
+    final notifier = ref.read(emailSummariesProvider.notifier);
+    try {
+      await repo.sincronizar();
+    } on DioException catch (e) {
+      // 403 = Gmail não conectado (não é falta do escopo `gmail.modify`, que é tratado à parte em
+      // arquivar/excluir): mostra o caminho de reconexão em vez de falhar em silêncio. Qualquer
+      // outro erro (rede, 5xx) é ignorado aqui de propósito — o `recarregar()` do `finally` já
+      // relê a lista local, que é o melhor que dá para mostrar sem a sincronização.
+      if (e.response?.statusCode == 403) {
+        _mostrarReconectar('Reconecte o Gmail para atualizar a caixa.');
+      }
+    } finally {
+      await notifier.recarregar();
+    }
+  }
+
+  // Mesmo padrão de `_EmailTileState._mostrarReconectar`, com a cópia específica do refresh da
+  // caixa. `avisarSucesso: false` porque este 403 é de conta desconectada (não falta de escopo):
+  // reconectar já repovoa a caixa (zera `lastHistoryId` no backend) e `reconectarGmailEAvisar`
+  // invalida a lista sozinho — não há necessidade de um SnackBar de sucesso adicional aqui.
+  void _mostrarReconectar(String mensagem) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        action: SnackBarAction(
+          label: 'Reconectar',
+          onPressed: () => reconectarGmailEAvisar(context, ref, avisarSucesso: false),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final summariesAsync = ref.watch(emailSummariesProvider);
+    final statusAsync = ref.watch(gmailConnectionStatusProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -34,16 +156,29 @@ class InboxScreen extends ConsumerWidget {
         actions: const [_GmailConnectionMenu()],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(emailSummariesProvider),
+        onRefresh: _onRefresh,
         child: summariesAsync.when(
-          data: (summaries) {
-            if (summaries.isEmpty) {
+          data: (estado) {
+            final itens = estado.itens;
+            if (itens.isEmpty) {
+              final status = statusAsync.value;
+              final aindaSincronizando = !_tempoEsgotadoSincronizando &&
+                  status != null &&
+                  status.connected &&
+                  status.ultimaSincronizacao == null;
+              if (aindaSincronizando) {
+                _garantirTimerSincronizando();
+                return const _SincronizandoState();
+              }
+              _pararTimerSincronizando();
               return const _EmptyState();
             }
-            final precisamAtencao = summaries
+            _pararTimerSincronizando();
+
+            final precisamAtencao = itens
                 .where((s) => s.precisaAtencao)
                 .toList();
-            final podemEsperar = summaries
+            final podemEsperar = itens
                 .where((s) => !s.precisaAtencao)
                 .toList();
 
@@ -66,14 +201,22 @@ class InboxScreen extends ConsumerWidget {
               ],
             ];
 
+            final mostrarCarregarMais = estado.proximoCursor != null;
+
             // Cap content width on large screens so text lines stay readable instead of
             // stretching edge-to-edge; harmless on phone widths where 720 never binds.
             return Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 720),
                 child: ListView.builder(
-                  itemCount: items.length,
+                  itemCount: items.length + (mostrarCarregarMais ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index >= items.length) {
+                      return _CarregarMaisTile(
+                        carregando: estado.carregandoMais,
+                        onTap: () => ref.read(emailSummariesProvider.notifier).carregarMais(),
+                      );
+                    }
                     final item = items[index];
                     return item.isHeader
                         ? _SectionHeader(
@@ -266,6 +409,72 @@ class _EmptyState extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Estado exibido enquanto a primeira sincronização (cron de 2 min ou o evento disparado ao
+/// conectar o Gmail) ainda não gravou nenhum e-mail. A tela relê a cada 5 s (ver
+/// `_InboxScreenState._garantirTimerSincronizando`) por até 60 s; esgotado esse prazo sem
+/// novidade, cai de volta no [_EmptyState] comum — a cópia deste widget nunca é confundida com
+/// "caixa vazia de verdade" porque some assim que o primeiro e-mail chega.
+class _SincronizandoState extends StatelessWidget {
+  const _SincronizandoState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 48),
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Sincronizando sua caixa… isso leva alguns segundos.',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Linha final da lista quando há mais páginas (`proximoCursor != null`): um botão "Carregar
+/// mais" que vira um indicador de progresso enquanto a próxima página está sendo buscada — nunca
+/// os dois ao mesmo tempo, para não convidar a um segundo toque durante a busca em andamento.
+class _CarregarMaisTile extends StatelessWidget {
+  const _CarregarMaisTile({required this.carregando, required this.onTap});
+
+  final bool carregando;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: carregando
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : TextButton(onPressed: onTap, child: const Text('Carregar mais')),
+      ),
     );
   }
 }

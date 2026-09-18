@@ -31,7 +31,7 @@ export class GmailConnectionsService {
 
     return this.prisma.gmailConnection.upsert({
       where: { userId: user.id },
-      update: { refreshTokenCriptografado, gmailEmail, temEscopoEnvio, temEscopoAgenda, temEscopoModificacao },
+      update: { refreshTokenCriptografado, gmailEmail, temEscopoEnvio, temEscopoAgenda, temEscopoModificacao, lastHistoryId: null, ultimaSincronizacao: null },
       create: {
         userId: user.id,
         refreshTokenCriptografado,
@@ -52,6 +52,7 @@ export class GmailConnectionsService {
       temEscopoEnvio: connection?.temEscopoEnvio ?? false,
       temEscopoAgenda: connection?.temEscopoAgenda ?? false,
       temEscopoModificacao: connection?.temEscopoModificacao ?? false,
+      ultimaSincronizacao: connection?.ultimaSincronizacao ?? null,
     };
   }
 

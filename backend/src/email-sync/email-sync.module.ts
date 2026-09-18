@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { FinancasModule } from '../financas/financas.module';
 import { EmailSyncService } from './email-sync.service';
 import { EmailSyncScheduler } from './email-sync.scheduler';
+import { EmailSyncLockService } from './email-sync-lock.service';
 import { EmailSummaryController } from './email-summary.controller';
 
 @Module({
@@ -20,8 +21,8 @@ import { EmailSummaryController } from './email-summary.controller';
     NotificationsModule,
     FinancasModule,
   ],
-  providers: [EmailSyncService, EmailSyncScheduler],
+  providers: [EmailSyncService, EmailSyncScheduler, EmailSyncLockService],
   controllers: [EmailSummaryController],
-  exports: [EmailSyncService],
+  exports: [EmailSyncService, EmailSyncLockService],
 })
 export class EmailSyncModule {}

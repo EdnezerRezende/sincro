@@ -3,30 +3,71 @@
 // before deleting (moves to Trash, still recoverable there for ~30 days), refreshes the visible
 // list on success, and — when the account hasn't granted `gmail.modify` yet — surfaces a
 // reconnect path instead of failing silently.
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sincro_mobile/core/theme.dart';
 import 'package:sincro_mobile/features/email_triage/email_summary.dart';
-import 'package:sincro_mobile/features/email_triage/email_summary_repository.dart';
+import 'package:sincro_mobile/features/email_triage/email_summary_repository.dart'
+    show EmailSummaryRepository, PaginaResumos;
 import 'package:sincro_mobile/features/email_triage/email_triage_providers.dart';
 import 'package:sincro_mobile/features/email_triage/gmail_connection_repository.dart';
 import 'package:sincro_mobile/features/email_triage/inbox_screen.dart';
 
 class _FakeEmailSummaryRepository extends EmailSummaryRepository {
-  _FakeEmailSummaryRepository(List<EmailSummary> summaries, {this.arquivarError, this.excluirError})
-    : _summaries = summaries,
-      super(Dio());
+  _FakeEmailSummaryRepository(
+    List<EmailSummary> summaries, {
+    this.arquivarError,
+    this.excluirError,
+    this.sincronizarError,
+    this.proximoCursor,
+    this.paginaCarregarMais,
+  }) : _summaries = summaries,
+       super(Dio());
 
   List<EmailSummary> _summaries;
   final Object? arquivarError;
   final Object? excluirError;
+  final Object? sincronizarError;
+  // Cursor devolvido pela primeira página (sem `cursor`) — controla se a tela mostra
+  // "Carregar mais". `null` (padrão) = página única, sem botão.
+  String? proximoCursor;
+  // Página devolvida quando `listar` é chamado COM cursor, ou seja, por `carregarMais`.
+  PaginaResumos? paginaCarregarMais;
+
   int chamadasArquivar = 0;
   int chamadasExcluir = 0;
+  int chamadasSincronizar = 0;
+  int chamadasListar = 0;
+  int chamadasCarregarMais = 0;
+  // Registro na ordem em que `sincronizar`/`listar` foram chamados — prova que o pull-to-refresh
+  // sincroniza com o backend ANTES de reler a lista local, nunca o contrário.
+  final List<String> ordemChamadas = [];
 
   @override
   Future<List<EmailSummary>> list() async => List.of(_summaries);
+
+  @override
+  Future<PaginaResumos> listar({String? cursor, int limite = 50}) async {
+    ordemChamadas.add('listar');
+    chamadasListar++;
+    if (cursor != null) {
+      chamadasCarregarMais++;
+      return paginaCarregarMais ?? const PaginaResumos(itens: [], proximoCursor: null);
+    }
+    return PaginaResumos(itens: List.of(_summaries), proximoCursor: proximoCursor);
+  }
+
+  @override
+  Future<void> sincronizar() async {
+    ordemChamadas.add('sincronizar');
+    chamadasSincronizar++;
+    final erro = sincronizarError;
+    if (erro != null) throw erro;
+  }
 
   @override
   Future<void> arquivar(String emailId) async {
@@ -92,6 +133,15 @@ final _email2 = EmailSummary(
   recebidoEm: DateTime.now().subtract(const Duration(hours: 2)),
 );
 
+final _email3 = EmailSummary(
+  id: 'email-3',
+  remetente: 'Academia <academia@example.com>',
+  assunto: 'Mensalidade renovada',
+  resumoCurto: 'Sua mensalidade foi renovada',
+  categoria: 'PODE_ESPERAR',
+  recebidoEm: DateTime.now().subtract(const Duration(hours: 3)),
+);
+
 Widget _app(
   EmailSummaryRepository summaryRepository, {
   GmailConnectionRepository? connectionRepository,
@@ -114,7 +164,16 @@ Widget _app(
         (ref) async =>
             statusBuilder?.call() ??
             status ??
-            const GmailConnectionStatus(connected: true, temEscopoModificacao: true),
+            // `ultimaSincronizacao` não-nula por padrão: a maioria dos testes deste arquivo
+            // simula uma conta já sincronizada há tempos, não o momento exato da primeira
+            // sincronização — sem isso, qualquer cenário em que a lista fique momentaneamente
+            // vazia cairia sem querer no estado "Sincronizando…" e deixaria um `Timer.periodic`
+            // pendente ao final do teste.
+            GmailConnectionStatus(
+              connected: true,
+              temEscopoModificacao: true,
+              ultimaSincronizacao: DateTime(2026, 1, 1),
+            ),
       ),
     ],
     child: MaterialApp(theme: sincroLightTheme, home: const InboxScreen()),
@@ -405,6 +464,243 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(connectionRepo.chamadasConnect, 1);
+    });
+  });
+
+  group('Puxar para atualizar (sincronizar)', () {
+    testWidgets('sincroniza com o backend ANTES de reler a lista local', (tester) async {
+      final repo = _FakeEmailSummaryRepository([_email1, _email2]);
+
+      await tester.pumpWidget(_app(repo));
+      await tester.pumpAndSettle();
+      expect(repo.ordemChamadas, ['listar']);
+
+      final refreshState = tester.state<RefreshIndicatorState>(
+        find.byType(RefreshIndicator),
+      );
+      unawaited(refreshState.show());
+      await tester.pumpAndSettle();
+
+      expect(repo.ordemChamadas, ['listar', 'sincronizar', 'listar']);
+      expect(repo.chamadasSincronizar, 1);
+      expect(repo.chamadasListar, 2);
+    });
+
+    testWidgets(
+      '202 do backend (sincronização recente ou já em andamento) não é tratado como erro',
+      (tester) async {
+        // `sincronizar()` nunca lança para 2xx — inclusive 202 — então este teste apenas garante
+        // que o refresh completa normalmente (relendo a lista) quando o repositório não lança.
+        final repo = _FakeEmailSummaryRepository([_email1]);
+
+        await tester.pumpWidget(_app(repo));
+        await tester.pumpAndSettle();
+
+        final refreshState = tester.state<RefreshIndicatorState>(
+          find.byType(RefreshIndicator),
+        );
+        unawaited(refreshState.show());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Não foi possível carregar seus e-mails.'), findsNothing);
+        expect(repo.chamadasListar, 2);
+      },
+    );
+
+    testWidgets(
+      '403 ao sincronizar (Gmail não conectado) mostra o CTA de reconexão com a cópia da caixa',
+      (tester) async {
+        final repo = _FakeEmailSummaryRepository(
+          [_email1],
+          sincronizarError: _forbidden('/resumos-email/sincronizar'),
+        );
+        final connectionRepo = _FakeGmailConnectionRepository();
+
+        await tester.pumpWidget(_app(repo, connectionRepository: connectionRepo));
+        await tester.pumpAndSettle();
+
+        final refreshState = tester.state<RefreshIndicatorState>(
+          find.byType(RefreshIndicator),
+        );
+        unawaited(refreshState.show());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Reconecte o Gmail para atualizar a caixa.'), findsOneWidget);
+        expect(find.widgetWithText(SnackBarAction, 'Reconectar'), findsOneWidget);
+        // A falha na sincronização não impede a releitura da lista local no `finally`.
+        expect(repo.chamadasListar, 2);
+
+        await tester.tap(find.widgetWithText(SnackBarAction, 'Reconectar'));
+        await tester.pumpAndSettle();
+
+        expect(connectionRepo.chamadasConnect, 1);
+      },
+    );
+  });
+
+  group('Carregar mais', () {
+    testWidgets('aparece só quando há próxima página e busca a página seguinte ao ser tocado', (
+      tester,
+    ) async {
+      final repo = _FakeEmailSummaryRepository(
+        [_email1, _email2],
+        proximoCursor: 'c1',
+        paginaCarregarMais: PaginaResumos(itens: [_email3], proximoCursor: null),
+      );
+
+      await tester.pumpWidget(_app(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Carregar mais'), findsOneWidget);
+      expect(find.text('Mensalidade renovada'), findsNothing);
+
+      await tester.tap(find.text('Carregar mais'));
+      await tester.pumpAndSettle();
+
+      expect(repo.chamadasCarregarMais, 1);
+      expect(find.text('Mensalidade renovada'), findsOneWidget);
+      // A página seguinte não tem `proximoCursor` — o botão some.
+      expect(find.text('Carregar mais'), findsNothing);
+    });
+
+    testWidgets('não aparece quando a primeira página não tem próximo cursor', (tester) async {
+      final repo = _FakeEmailSummaryRepository([_email1, _email2]);
+
+      await tester.pumpWidget(_app(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Carregar mais'), findsNothing);
+    });
+  });
+
+  group('Revalidação ao retomar o app', () {
+    testWidgets('AppLifecycleState.resumed dentro do intervalo mínimo NÃO revalida', (
+      tester,
+    ) async {
+      final repo = _FakeEmailSummaryRepository([_email1]);
+
+      await tester.pumpWidget(_app(repo));
+      await tester.pumpAndSettle();
+      expect(repo.chamadasListar, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(
+        repo.chamadasListar,
+        1,
+        reason: 'Retomar o app dentro do intervalo mínimo não deveria revalidar',
+      );
+    });
+
+    // Único teste "lento" do arquivo (mesmo padrão de `calendar/revalidation_test.dart`): usa
+    // `tester.runAsync` para deixar ~31s de tempo REAL decorrerem, porque
+    // `didChangeAppLifecycleState` compara `DateTime.now()` (relógio real) contra
+    // `kRevalidationMinInterval` — não há seam de injeção de relógio no widget.
+    testWidgets(
+      'AppLifecycleState.resumed após o intervalo mínimo já ter decorrido revalida',
+      (tester) async {
+        final repo = _FakeEmailSummaryRepository([_email1]);
+
+        await tester.pumpWidget(_app(repo));
+        await tester.pumpAndSettle();
+        expect(repo.chamadasListar, 1);
+
+        await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 31)));
+
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpAndSettle();
+
+        expect(
+          repo.chamadasListar,
+          2,
+          reason: 'Retomar o app depois do intervalo mínimo deveria revalidar a caixa',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
+  });
+
+  group('Estado "Sincronizando sua caixa…"', () {
+    const textoSincronizando = 'Sincronizando sua caixa… isso leva alguns segundos.';
+    const textoVazio = 'Nenhum e-mail novo por aqui.';
+
+    testWidgets(
+      'conectado sem ultimaSincronizacao mostra o indicador e relê a cada 5s; esgotados 60s cai no vazio padrão',
+      (tester) async {
+        final repo = _FakeEmailSummaryRepository([]);
+
+        await tester.pumpWidget(
+          _app(
+            repo,
+            status: const GmailConnectionStatus(
+              connected: true,
+              temEscopoModificacao: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(textoSincronizando), findsOneWidget);
+        expect(find.text(textoVazio), findsNothing);
+
+        // 11 tentativas (55s): ainda dentro do prazo, continua tentando.
+        for (var i = 0; i < 11; i++) {
+          await tester.pump(const Duration(seconds: 5));
+        }
+        expect(find.text(textoSincronizando), findsOneWidget);
+        expect(repo.chamadasListar, greaterThanOrEqualTo(11));
+
+        // 12ª tentativa (60s): esgota o prazo e cai no estado vazio comum.
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+
+        expect(find.text(textoSincronizando), findsNothing);
+        expect(find.text(textoVazio), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'conectado com ultimaSincronizacao já preenchida e caixa vazia mostra o vazio padrão direto',
+      (tester) async {
+        final repo = _FakeEmailSummaryRepository([]);
+
+        await tester.pumpWidget(
+          _app(
+            repo,
+            status: GmailConnectionStatus(
+              connected: true,
+              temEscopoModificacao: true,
+              ultimaSincronizacao: DateTime(2026, 1, 1),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(textoSincronizando), findsNothing);
+        expect(find.text(textoVazio), findsOneWidget);
+      },
+    );
+
+    testWidgets('o timer é cancelado ao a tela ser removida da árvore', (tester) async {
+      final repo = _FakeEmailSummaryRepository([]);
+
+      await tester.pumpWidget(
+        _app(
+          repo,
+          status: const GmailConnectionStatus(connected: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(textoSincronizando), findsOneWidget);
+
+      // Substitui a árvore inteira: dispõe o `InboxScreen`. Se o `Timer.periodic` não tivesse
+      // sido cancelado no `dispose`, o `pumpAndSettle` abaixo (ou o fim do teste) lançaria "A
+      // Timer is still pending" pela binding de teste.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
     });
   });
 }

@@ -19,7 +19,9 @@ export class EmailSummaryController {
 
   @Get()
   async list(@CurrentFirebaseUid() firebaseUid: string) {
-    return this.emailSyncService.list(firebaseUid);
+    // Task 6 troca este método por GET paginado (cursor/limite); aqui só o suficiente para
+    // compilar contra o novo contrato de EmailSyncService (listarLegado === list() de antes).
+    return this.emailSyncService.listarLegado(firebaseUid);
   }
 
   /** Full body for READING the e-mail — no LLM involved, so it never fails because a third-party

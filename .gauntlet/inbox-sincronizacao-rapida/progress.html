@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Gauntlet — inbox sincronização rápida</title>
+<style>body{font:14px system-ui;margin:24px;max-width:960px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 8px;text-align:left}.ok{background:#e6f4ea}.run{background:#fff4e5}.wait{color:#888}</style>
+<h1>Caixa de Entrada — sincronização rápida com o Gmail</h1>
+<p><b>BAR:</b> implementação completa da spec aprovada (backend + mobile) com suítes verdes e cada peça aprovada por crítico cego.</p>
+<p>Plano: <code>docs/superpowers/plans/2026-09-16-inbox-sincronizacao-rapida.md</code> · Spec: <code>docs/superpowers/specs/2026-09-16-inbox-sincronizacao-rapida-design.md</code></p>
+<table><tr><th>Task</th><th>Peça</th><th>Grupo</th><th>Build</th><th>Crítico</th><th>Commit</th></tr>
+<tr class="ok"><td>T1</td><td>EmailSyncLockService</td><td>A</td><td>ok (47 testes)</td><td>r1 APPROVED — 29 asserções ad hoc, mutação, boot Nest</td><td>1e22bd6</td></tr>
+<tr class="run"><td>T2</td><td>GmailApiClient filtros/paginação</td><td>A</td><td>r2 ok (80 testes no spec; 176 em gmail+email-sync)</td><td>r1 REJECTED · r2 em crítica</td><td>—</td></tr>
+<tr class="run"><td>T3</td><td>syncUser novos; listarLegado/listarPagina; índice</td><td>B</td><td>r2 ok (63 testes; DROP INDEX + CREATE INDEX confirmados via migrate diff)</td><td>r1 REJECTED · r2 em crítica</td><td>—</td></tr>
+<tr class="run"><td>T4</td><td>notifyInboxAtualizada</td><td>A</td><td>r3 ok (18 testes)</td><td>r1 REJECTED (findUnique fora do try) · r2 REJECTED (sem teste messaging() síncrono; [object Object]; undefined) · r3 em crítica</td><td>—</td></tr>
+<tr class="run"><td>T7</td><td>Mobile: revalidation.dart, ultimaSincronizacao, repositório</td><td>A</td><td>r2 ok (26 testes)</td><td>r1 REJECTED · r2 em crítica</td><td>—</td></tr>
+<tr class="run"><td>T8</td><td>Mobile: EmailSummariesNotifier + InboxScreen</td><td>B</td><td>em andamento</td><td>—</td><td>—</td></tr>
+<tr class="wait"><td>T5</td><td>Scheduler 2 min + lock + evento; controller emite; conexão</td><td>C</td><td>aguarda T1,T3,T4</td><td>—</td><td>—</td></tr>
+<tr class="wait"><td>T6</td><td>GET compat/paginado; POST sincronizar</td><td>D</td><td>aguarda T3,T5</td><td>—</td><td>—</td></tr>
+<tr class="wait"><td>T9</td><td>Mobile: conectarGmail(ref) 4 sítios; main.dart</td><td>C</td><td>aguarda T8</td><td>—</td><td>—</td></tr>
+<tr class="wait"><td>T10</td><td>Verificação final</td><td>E</td><td>aguarda todos</td><td>—</td><td>—</td></tr>
+</table>
+<h2>Log</h2><ul id="log"><li>Plano commitado ff181c4; Grupo A disparado.</li><li>T1/T2/T7 construídos; críticos disparados. T4 REJECTED (rodada 1) → rebuild autorizado. T7 builder travou após revalidation.dart e foi retomado. Grupo B (T3, T8) disparado.</li><li>T1 APPROVED e commitado. T4 r2 REJECTED → r3 construída, em crítica. T7 r1 REJECTED → r2 em build (repositórios apenas; T8 segue em paralelo em providers/inbox_screen). T3 construído, em crítica.</li><li>T2 r1 REJECTED → r2 em build (só arquivos gmail). T7 r2 builder travou de novo e foi retomado.</li><li>T3 r1 REJECTED → r2 em build. T7 r2 construída (adapter falso, tryParse, receiveTimeout 120 s) → em crítica.</li><li>Travamentos de agentes (watchdog 600 s): builder T3 r2 (2×, retomado — itens 1–2 já aplicados, 3–5 em curso), builder T8 (retomado na fase de testes), crítico T4 r3 (2×, substituído por instância nova). Nenhum artefato perdido.</li><li>T2 r2 construída (fetchMessages fora do try; tolerância por id 404/410; teto 20 páginas; 14 testes novos) → em crítica.</li><li>T3 r2 construída (roundtrip do cursor, clamp corrigido, @@index([userId]) de EmailSummary removido, prettier) → em crítica.</li></ul>

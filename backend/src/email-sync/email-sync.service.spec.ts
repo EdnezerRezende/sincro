@@ -1,4 +1,4 @@
-import { EmailSyncService } from './email-sync.service';
+import { EmailSyncService, codificarCursor } from './email-sync.service';
 
 function buildDeps() {
   const prisma = {
@@ -20,7 +20,7 @@ function buildDeps() {
     $executeRaw: jest.fn(),
   };
   const gmailApiClient = {
-    fetchInitialUnread: jest.fn(),
+    fetchInitial: jest.fn(),
     fetchIncremental: jest.fn(),
     fetchFullBody: jest.fn(),
     listarIdsComMarcador: jest
@@ -86,8 +86,23 @@ describe('EmailSyncService', () => {
 
     const result = await service.syncUser('u1');
 
-    expect(result).toEqual({ novosPrecisamAtencao: 0 });
-    expect(deps.gmailApiClient.fetchInitialUnread).not.toHaveBeenCalled();
+    expect(result).toEqual({ novos: 0, novosPrecisamAtencao: 0 });
+    expect(deps.gmailApiClient.fetchInitial).not.toHaveBeenCalled();
+  });
+
+  it('returns zero and does nothing when the stored refresh token cannot be decrypted', async () => {
+    const deps = buildDeps();
+    deps.prisma.gmailConnection.findUnique.mockResolvedValue({
+      userId: 'u1',
+      lastHistoryId: null,
+    });
+    deps.connectionsService.getDecryptedRefreshToken.mockResolvedValue(null);
+    const service = buildService(deps);
+
+    const result = await service.syncUser('u1');
+
+    expect(result).toEqual({ novos: 0, novosPrecisamAtencao: 0 });
+    expect(deps.gmailApiClient.fetchInitial).not.toHaveBeenCalled();
   });
 
   it('performs a full initial sync when there is no lastHistoryId yet', async () => {
@@ -96,7 +111,7 @@ describe('EmailSyncService', () => {
       userId: 'u1',
       lastHistoryId: null,
     });
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'm1',
@@ -112,9 +127,7 @@ describe('EmailSyncService', () => {
 
     const result = await service.syncUser('u1');
 
-    expect(deps.gmailApiClient.fetchInitialUnread).toHaveBeenCalledWith(
-      'rt-123',
-    );
+    expect(deps.gmailApiClient.fetchInitial).toHaveBeenCalledWith('rt-123');
     expect(deps.heuristicClassifier.classify).toHaveBeenCalled();
     expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -155,7 +168,7 @@ describe('EmailSyncService', () => {
       'rt-123',
       'h1',
     );
-    expect(deps.gmailApiClient.fetchInitialUnread).not.toHaveBeenCalled();
+    expect(deps.gmailApiClient.fetchInitial).not.toHaveBeenCalled();
   });
 
   it('falls back to a full sync when the stored historyId has expired', async () => {
@@ -169,7 +182,7 @@ describe('EmailSyncService', () => {
       historyId: null,
       historyExpired: true,
     });
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [],
       historyId: 'h-fresh',
     });
@@ -177,9 +190,7 @@ describe('EmailSyncService', () => {
 
     await service.syncUser('u1');
 
-    expect(deps.gmailApiClient.fetchInitialUnread).toHaveBeenCalledWith(
-      'rt-123',
-    );
+    expect(deps.gmailApiClient.fetchInitial).toHaveBeenCalledWith('rt-123');
   });
 
   it('skips messages that were already synced (deduplication)', async () => {
@@ -189,7 +200,7 @@ describe('EmailSyncService', () => {
       lastHistoryId: null,
     });
     deps.prisma.emailSummary.findUnique.mockResolvedValue({ id: 'existing' });
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'already-there',
@@ -220,7 +231,7 @@ describe('EmailSyncService', () => {
     deps.prisma.emailSummary.create.mockRejectedValue(
       Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
     );
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'raced',
@@ -253,7 +264,7 @@ describe('EmailSyncService', () => {
     deps.prisma.emailSummary.create.mockRejectedValue(
       new Error('connection reset'),
     );
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'm1',
@@ -359,7 +370,7 @@ describe('EmailSyncService', () => {
       userId: 'u1',
       lastHistoryId: null,
     });
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'm1',
@@ -387,7 +398,7 @@ describe('EmailSyncService', () => {
       lastHistoryId: null,
     });
     deps.heuristicClassifier.classify.mockRejectedValue(new Error('boom'));
-    deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+    deps.gmailApiClient.fetchInitial.mockResolvedValue({
       emails: [
         {
           gmailMessageId: 'm1',
@@ -413,12 +424,12 @@ describe('EmailSyncService', () => {
     );
   });
 
-  it('lists summaries scoped to the resolved user, most recent first', async () => {
+  it('lists summaries scoped to the resolved user, most recent first (listarLegado)', async () => {
     const deps = buildDeps();
     deps.prisma.emailSummary.findMany.mockResolvedValue([]);
     const service = buildService(deps);
 
-    await service.list('fb1');
+    await service.listarLegado('fb1');
 
     expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith({
       where: { userId: 'u1' },
@@ -433,6 +444,226 @@ describe('EmailSyncService', () => {
         categoria: true,
         recebidoEm: true,
       },
+    });
+  });
+
+  describe('syncUser — novos', () => {
+    const email = (id: string) => ({
+      gmailMessageId: id,
+      remetente: 'x@example.com',
+      assunto: 'A',
+      corpo: '',
+      recebidoEm: new Date(),
+    });
+
+    it('conta só os create bem-sucedidos (um P2002 no meio não conta)', async () => {
+      const deps = buildDeps();
+      deps.prisma.gmailConnection.findUnique.mockResolvedValue({
+        userId: 'u1',
+        lastHistoryId: null,
+      });
+      deps.gmailApiClient.fetchInitial.mockResolvedValue({
+        emails: [email('m1'), email('m2'), email('m3')],
+        historyId: 'h1',
+      });
+      deps.prisma.emailSummary.create
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(
+          Object.assign(new Error('dup'), { code: 'P2002' }),
+        )
+        .mockResolvedValueOnce({});
+      const r = await buildService(deps).syncUser('u1');
+      expect(r.novos).toBe(2);
+    });
+  });
+
+  describe('listarLegado / listarPagina', () => {
+    const linhas = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `id${String(9 - i).padStart(2, '0')}`,
+        gmailMessageId: `g${i}`,
+        remetente: 'r',
+        assunto: 'a',
+        resumoCurto: 's',
+        categoria: 'PODE_ESPERAR',
+        recebidoEm: new Date(Date.UTC(2026, 8, 1, 12, 0, 0)),
+      }));
+
+    it('listarLegado mantém o contrato atual (array, take 100, select fixo)', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue(linhas(2));
+      const r = await buildService(deps).listarLegado('fb1');
+      expect(Array.isArray(r)).toBe(true);
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 100, orderBy: { recebidoEm: 'desc' } }),
+      );
+    });
+
+    it('listarPagina devolve limite itens e cursor do último quando há mais', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue(linhas(3)); // take = 2+1
+      const r = await buildService(deps).listarPagina('fb1', { limite: 2 });
+      expect(r.itens).toHaveLength(2);
+      expect(r.proximoCursor).toBe(
+        codificarCursor(r.itens[1].recebidoEm, r.itens[1].id),
+      );
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          take: 3,
+          orderBy: [{ recebidoEm: 'desc' }, { id: 'desc' }],
+          select: expect.objectContaining({
+            id: true,
+            gmailMessageId: true,
+            remetente: true,
+            assunto: true,
+            resumoCurto: true,
+            categoria: true,
+            recebidoEm: true,
+          }),
+        }),
+      );
+    });
+
+    it('proximoCursor é null na última página', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue(linhas(2));
+      const r = await buildService(deps).listarPagina('fb1', { limite: 2 });
+      expect(r.proximoCursor).toBeNull();
+    });
+
+    it('cursor aplica o filtro (recebidoEm, id) com recebidoEm igual', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      const rec = new Date(Date.UTC(2026, 8, 1, 12));
+      await buildService(deps).listarPagina('fb1', {
+        limite: 50,
+        cursor: codificarCursor(rec, 'id05'),
+      });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            userId: 'u1',
+            OR: [
+              { recebidoEm: { lt: rec } },
+              { recebidoEm: rec, id: { lt: 'id05' } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('limite acima de 100 vira 100; abaixo de 1 vira 1', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      await buildService(deps).listarPagina('fb1', { limite: 500 });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 101 }),
+      );
+
+      deps.prisma.emailSummary.findMany.mockClear();
+      await buildService(deps).listarPagina('fb1', { limite: -3 });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 2 }),
+      );
+    });
+
+    it('cursor malformado → 400 Cursor inválido.', async () => {
+      await expect(
+        buildService(buildDeps()).listarPagina('fb1', {
+          limite: 50,
+          cursor: '###',
+        }),
+      ).rejects.toThrow('Cursor inválido.');
+    });
+
+    it('cursor íntegro (roundtrip) continua funcionando', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      const rec = new Date(Date.UTC(2026, 8, 1, 12));
+      const cursor = codificarCursor(rec, 'id05a');
+      await expect(
+        buildService(deps).listarPagina('fb1', { limite: 50, cursor }),
+      ).resolves.toBeDefined();
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            userId: 'u1',
+            OR: [
+              { recebidoEm: { lt: rec } },
+              { recebidoEm: rec, id: { lt: 'id05a' } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('cursor truncado em 1 char → 400 (não pode fazer a página pular um id vizinho)', async () => {
+      const rec = new Date(Date.UTC(2026, 8, 1, 12));
+      const cursor = codificarCursor(rec, 'id05a');
+      const truncado = cursor.slice(0, -1);
+      await expect(
+        buildService(buildDeps()).listarPagina('fb1', {
+          limite: 50,
+          cursor: truncado,
+        }),
+      ).rejects.toThrow('Cursor inválido.');
+    });
+
+    it('cursor com lixo concatenado → 400', async () => {
+      const rec = new Date(Date.UTC(2026, 8, 1, 12));
+      const cursor = codificarCursor(rec, 'id05a');
+      await expect(
+        buildService(buildDeps()).listarPagina('fb1', {
+          limite: 50,
+          cursor: `${cursor}!!!`,
+        }),
+      ).rejects.toThrow('Cursor inválido.');
+    });
+
+    it('cursor com data não canônica (ano|lixo) → 400', async () => {
+      const cursor = Buffer.from('2026|abc', 'utf8').toString('base64url');
+      await expect(
+        buildService(buildDeps()).listarPagina('fb1', {
+          limite: 50,
+          cursor,
+        }),
+      ).rejects.toThrow('Cursor inválido.');
+    });
+
+    it('limite: 0 vira 1 (take: 2)', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      await buildService(deps).listarPagina('fb1', { limite: 0 });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 2 }),
+      );
+    });
+
+    it('limite: 0.5 vira 1 (take: 2)', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      await buildService(deps).listarPagina('fb1', { limite: 0.5 });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 2 }),
+      );
+    });
+
+    it('limite: NaN vira o default 50 (take: 51)', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      await buildService(deps).listarPagina('fb1', { limite: NaN });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 51 }),
+      );
+    });
+
+    it('limite: Infinity vira o teto 100 (take: 101)', async () => {
+      const deps = buildDeps();
+      deps.prisma.emailSummary.findMany.mockResolvedValue([]);
+      await buildService(deps).listarPagina('fb1', { limite: Infinity });
+      expect(deps.prisma.emailSummary.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 101 }),
+      );
     });
   });
 
@@ -493,7 +724,7 @@ describe('EmailSyncService', () => {
         userId: 'u1',
         lastHistoryId: null,
       });
-      deps.gmailApiClient.fetchInitialUnread.mockResolvedValue({
+      deps.gmailApiClient.fetchInitial.mockResolvedValue({
         emails: [email],
         historyId: 'h1',
       });

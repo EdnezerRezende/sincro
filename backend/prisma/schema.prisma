@@ -86,8 +86,13 @@ model EmailSummary {
   parserFinancasTentativas Int      @default(0) @map("parser_financas_tentativas")
 
   @@unique([userId, gmailMessageId])
-  @@index([userId])
   @@index([userId, parserFinancasVersao, parserFinancasTentativas])
+  // Suporta a paginação por cursor de `listarPagina` — mesma ordem do `orderBy` da query
+  // (recebidoEm desc, id desc como desempate), evita sort em memória em páginas fundas. O
+  // `@@index([userId])` solto foi removido: era prefixo estrito deste índice composto (qualquer
+  // query que filtrava só por userId continua igualmente servida por este), então mantê-lo só
+  // custava escrita sem ganho de leitura.
+  @@index([userId, recebidoEm(sort: Desc), id(sort: Desc)])
   @@map("resumos_email")
 }
 

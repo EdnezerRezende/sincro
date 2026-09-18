@@ -8,6 +8,7 @@ class GmailConnectionStatus {
     this.temEscopoEnvio = false,
     this.temEscopoAgenda = false,
     this.temEscopoModificacao = false,
+    this.ultimaSincronizacao,
   });
 
   final bool connected;
@@ -17,6 +18,9 @@ class GmailConnectionStatus {
   // gmail.modify: precisa ser concedido para arquivar/excluir e-mails pelo app. Contas que
   // conectaram o Gmail antes desse escopo existir vêm com este campo em `false` até reconectar.
   final bool temEscopoModificacao;
+  // `null` antes da primeira sincronização (ou em backend antigo que ainda não manda o campo) —
+  // usado pela caixa de entrada para saber se deve mostrar o indicador "Sincronizando…".
+  final DateTime? ultimaSincronizacao;
 
   factory GmailConnectionStatus.fromJson(Map<String, dynamic> json) {
     return GmailConnectionStatus(
@@ -25,6 +29,14 @@ class GmailConnectionStatus {
       temEscopoEnvio: json['temEscopoEnvio'] as bool? ?? false,
       temEscopoAgenda: json['temEscopoAgenda'] as bool? ?? false,
       temEscopoModificacao: json['temEscopoModificacao'] as bool? ?? false,
+      // `tryParse` em vez de `parse`: este campo só alimenta um indicador informativo
+      // ("Sincronizando…") e o CTA de reconexão na caixa de entrada. Um valor malformado vindo do
+      // backend (string vazia, texto livre, número serializado como string) não pode derrubar a
+      // tela inteira de conexão — melhor cair para `null` (equivalente a "nunca sincronizado")
+      // do que lançar uma exceção não tratada.
+      ultimaSincronizacao: json['ultimaSincronizacao'] is String
+          ? DateTime.tryParse(json['ultimaSincronizacao'] as String)
+          : null,
     );
   }
 }

@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailApiClient } from '../gmail/gmail-api-client.service';
 import { GmailConnectionsService } from '../gmail/gmail-connections.service';
@@ -15,6 +20,58 @@ import { MARCADOR_NOME } from '../gmail/gmail-api-client.service';
 /** Tamanho do lote de reprocessamento (passo B) por usuário por ciclo — ver spec "Reprocessamento
  *  e escrita idempotente": com cron de 20 min, 500 summaries legados zeram em ~3h. */
 const LOTE_REPROCESSAMENTO = 50;
+
+/** Projeção usada nos dois métodos de listagem (`listarLegado` e `listarPagina`): só o que o
+ *  cliente mobile realmente lê (EmailSummary.fromJson), mais gmailMessageId (usado pelo e2e para
+ *  identidade cross-tenant). Nunca vaza campos internos como userId, lidoNoApp, criadoEm etc. */
+const SELECT_RESUMO = {
+  id: true,
+  gmailMessageId: true,
+  remetente: true,
+  assunto: true,
+  resumoCurto: true,
+  categoria: true,
+  recebidoEm: true,
+} as const;
+
+/** Teto do `limite` de `listarPagina` — protege o banco de páginas gigantes pedidas por um
+ *  cliente malicioso ou com bug; abaixo de 1 é normalizado para 1 (nunca devolve página vazia por
+ *  engano de quem chamou com `limite: 0`). */
+const LIMITE_MAX = 100;
+
+/** Cursor opaco de paginação: base64url de `${recebidoEm.toISOString()}|${id}`. Opaco de propósito
+ *  — o cliente nunca deve interpretar nem construir esse valor, só devolvê-lo como veio. */
+export function codificarCursor(recebidoEm: Date, id: string): string {
+  return Buffer.from(`${recebidoEm.toISOString()}|${id}`, 'utf8').toString(
+    'base64url',
+  );
+}
+
+/** Decodifica o cursor de `codificarCursor`. Qualquer formato inesperado (base64 inválido, sem
+ *  separador, data ou id vazios, truncamento, lixo concatenado, data não canônica) vira 400 —
+ *  nunca deixa passar um filtro `where` malformado para o Prisma/Postgres. A validação é por
+ *  roundtrip: só aceita o cursor se re-codificar `(recebidoEm, id)` devolve exatamente a mesma
+ *  string recebida. Isso exige `recebidoEm.toISOString()` canônico (rejeita datas "frouxas" tipo
+ *  `2026|abc` → 2026-01-01 ou `Dec 1, 2026|abc` no fuso local) e barra qualquer adulteração
+ *  (truncar 1 char, concatenar lixo) que por acidente ainda produza um `Date` e um `id` não
+ *  vazios. */
+export function decodificarCursor(cursor: string): {
+  recebidoEm: Date;
+  id: string;
+} {
+  const texto = Buffer.from(cursor, 'base64url').toString('utf8');
+  const sep = texto.indexOf('|');
+  const recebidoEm = sep > 0 ? new Date(texto.slice(0, sep)) : new Date(NaN);
+  const id = sep > 0 ? texto.slice(sep + 1) : '';
+  if (
+    Number.isNaN(recebidoEm.getTime()) ||
+    !id ||
+    codificarCursor(recebidoEm, id) !== cursor
+  ) {
+    throw new BadRequestException('Cursor inválido.');
+  }
+  return { recebidoEm, id };
+}
 
 interface Marcador {
   labelId: string | null;
@@ -39,15 +96,17 @@ export class EmailSyncService {
     private readonly financeProcessor: FinanceEmailProcessor,
   ) {}
 
-  async syncUser(userId: string): Promise<{ novosPrecisamAtencao: number }> {
+  async syncUser(
+    userId: string,
+  ): Promise<{ novos: number; novosPrecisamAtencao: number }> {
     const connection = await this.prisma.gmailConnection.findUnique({
       where: { userId },
     });
-    if (!connection) return { novosPrecisamAtencao: 0 };
+    if (!connection) return { novos: 0, novosPrecisamAtencao: 0 };
 
     const refreshToken =
       await this.connectionsService.getDecryptedRefreshToken(userId);
-    if (!refreshToken) return { novosPrecisamAtencao: 0 };
+    if (!refreshToken) return { novos: 0, novosPrecisamAtencao: 0 };
 
     const marcador = await this.resolverMarcador(userId, refreshToken);
 
@@ -68,6 +127,7 @@ export class EmailSyncService {
       sensoryProfile?.dados as { tomPreferido?: string } | undefined
     )?.tomPreferido;
 
+    let novos = 0;
     let novosPrecisamAtencao = 0;
     let hasUnrecoverableFailure = false;
     for (const email of emails) {
@@ -158,6 +218,9 @@ export class EmailSyncService {
         continue;
       }
 
+      // Só chega aqui quando o create() acima realmente persistiu a linha — dedup por P2002 ou
+      // qualquer outra falha caem no `continue` do catch e não contam como "novo".
+      novos++;
       if (classification.categoria === 'PRECISA_ATENCAO')
         novosPrecisamAtencao++;
     }
@@ -190,7 +253,7 @@ export class EmailSyncService {
       });
     }
 
-    return { novosPrecisamAtencao };
+    return { novos, novosPrecisamAtencao };
   }
 
   /** Detects Prisma's unique-constraint violation (P2002) without importing the Prisma error class,
@@ -304,7 +367,7 @@ export class EmailSyncService {
     lastHistoryId: string | null,
   ) {
     if (!lastHistoryId) {
-      return this.gmailApiClient.fetchInitialUnread(refreshToken);
+      return this.gmailApiClient.fetchInitial(refreshToken);
     }
 
     const incremental = await this.gmailApiClient.fetchIncremental(
@@ -316,29 +379,57 @@ export class EmailSyncService {
     }
 
     this.logger.warn(`historyId expired, falling back to a full sync`);
-    return this.gmailApiClient.fetchInitialUnread(refreshToken);
+    return this.gmailApiClient.fetchInitial(refreshToken);
   }
 
-  async list(firebaseUid: string) {
+  /** Contrato antigo: array dos 100 mais recentes. Usado quando o cliente não manda cursor/limite
+   *  (app 1.0.12 (5) em campo e os e2e `email-triage-flow`/`email-reply-flow` continuam válidos
+   *  sem alteração). */
+  async listarLegado(firebaseUid: string) {
     const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
     return this.prisma.emailSummary.findMany({
       where: { userId: user.id },
       orderBy: { recebidoEm: 'desc' },
       take: 100,
-      // Project only what the mobile client actually reads (EmailSummary.fromJson), plus
-      // gmailMessageId (kept for the e2e test's cross-tenant identity assertions and as a
-      // natural key clients may want later) — never internal fields like userId, lidoNoApp,
-      // criadoEm, or anything else beyond this list.
-      select: {
-        id: true,
-        gmailMessageId: true,
-        remetente: true,
-        assunto: true,
-        resumoCurto: true,
-        categoria: true,
-        recebidoEm: true,
-      },
+      select: SELECT_RESUMO,
     });
+  }
+
+  /** Listagem paginada por cursor `(recebidoEm, id)` — substitui o corte fixo em 100 do contrato
+   *  antigo. Busca `limite + 1` linhas para saber, sem uma segunda query, se existe próxima página;
+   *  a linha extra nunca é devolvida ao cliente, só usada para calcular `proximoCursor`. */
+  async listarPagina(
+    firebaseUid: string,
+    opts: { cursor?: string; limite: number },
+  ) {
+    const user = await this.usersService.getByFirebaseUidOrThrow(firebaseUid);
+    const n = Math.trunc(opts.limite);
+    const bruto = Math.min(Math.max(n, 1), LIMITE_MAX);
+    const limite = Number.isFinite(bruto) ? bruto : 50;
+    const cursor = opts.cursor ? decodificarCursor(opts.cursor) : null;
+    const linhas = await this.prisma.emailSummary.findMany({
+      where: cursor
+        ? {
+            userId: user.id,
+            OR: [
+              { recebidoEm: { lt: cursor.recebidoEm } },
+              { recebidoEm: cursor.recebidoEm, id: { lt: cursor.id } },
+            ],
+          }
+        : { userId: user.id },
+      orderBy: [{ recebidoEm: 'desc' }, { id: 'desc' }],
+      take: limite + 1,
+      select: SELECT_RESUMO,
+    });
+    const itens = linhas.slice(0, limite);
+    const ultimo = itens[itens.length - 1];
+    return {
+      itens,
+      proximoCursor:
+        linhas.length > limite && ultimo
+          ? codificarCursor(ultimo.recebidoEm, ultimo.id)
+          : null,
+    };
   }
 
   async getOwned(firebaseUid: string, id: string) {

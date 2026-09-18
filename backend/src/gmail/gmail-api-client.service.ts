@@ -42,26 +42,52 @@ export interface CorpoComAnexos {
   anexos: AnexoMeta[];
 }
 
-/** Categorias/labels do Gmail que não são a caixa "Principal". `fetchInitialUnread` já exclui a
- *  maior parte disso na própria busca (`-category:promotions` etc. no `q`, ver o comentário lá),
- *  mas esta lista continua sendo aplicada nos DOIS caminhos de sincronização, depois da busca:
+/** Categorias/labels do Gmail tratados como ruído. `CATEGORY_UPDATES` (aba "Atualizações") **não**
+ *  entra mais nesta lista: é ali que bancos e operadoras de cartão colocam fatura/cobrança —
+ *  exatamente o tipo de e-mail que a triagem financeira precisa enxergar — então deixá-la de fora
+ *  do ruído passou a ser necessário para esses e-mails chegarem ao app. Promoções, Social e Fóruns
+ *  continuam de fora por serem ruído de verdade (marketing, redes sociais, listas de discussão).
+ *  `fetchInitial` já exclui a maior parte disso na própria busca (`-category:promotions` etc. no
+ *  `q`, ver o comentário lá), mas esta lista continua sendo aplicada nos DOIS caminhos de
+ *  sincronização, depois da busca:
  *  1. `fetchIncremental` usa `history.list`, que não aceita `q` — ali este é o ÚNICO filtro
  *     possível, aplicado olhando as `labelIds` de cada mensagem já buscada (ver `fetchMessages`).
- *  2. `fetchInitialUnread` também passa por aqui como segunda camada de defesa: a documentação
+ *  2. `fetchInitial` também passa por aqui como segunda camada de defesa: a documentação
  *     oficial do Gmail não garante que `-category:promotions` etc. excluam mensagens quando o
  *     usuário desligou as abas da caixa de entrada (as categorias continuam existindo como labels
  *     internos mesmo com as abas ocultas, mas isso não é documentado explicitamente) — então, se a
  *     exclusão no `q` falhar por algum motivo, este segundo filtro ainda descarta pelo label.
  *  SPAM já fica de fora por padrão em ambos os caminhos (`includeSpamTrash` nunca é setado como
  *  `true`), mas é listado aqui também como terceira camada de defesa caso apareça em algum retorno
- *  inesperado. */
+ *  inesperado.
+ *
+ *  `fetchMessages` também descarta, à parte desta lista, qualquer mensagem SEM `INBOX` em
+ *  `labelIds` (enviada, arquivada por filtro, rascunho) — necessário agora que Atualizações libera
+ *  mensagens que antes eram todas barradas por categoria: sem esse corte, e-mails fora da caixa de
+ *  entrada passariam a entrar silenciosamente e, com o push de dados novo, cada um dispararia um
+ *  `inbox_atualizada` indevido. */
 const NOISE_LABELS = new Set([
   'CATEGORY_PROMOTIONS',
   'CATEGORY_SOCIAL',
-  'CATEGORY_UPDATES',
   'CATEGORY_FORUMS',
   'SPAM',
 ]);
+
+/** Janela de dias, teto de mensagens e tamanho de página usados por `fetchInitial` — primeira
+ *  sincronização de uma conta recém-conectada e fallback quando o `historyId` guardado expira. */
+const INITIAL_DIAS = 30;
+const INITIAL_MAX = 200;
+const INITIAL_PAGE = 100;
+
+/** Teto de páginas de `history.list` lidas por ciclo de `fetchIncremental`. Sem este teto, uma
+ *  conta com um backlog gigante de histórico (token ficou muito tempo sem sincronizar, mas ainda
+ *  dentro da janela de retenção do Gmail — por isso nem cai em `historyExpired`) poderia gerar
+ *  centenas de chamadas de API num único ciclo de sincronização, todas bloqueando esse mesmo
+ *  ciclo. Ao atingir o teto, o loop simplesmente para de pedir novas páginas — a paginação continua
+ *  de onde parou porque o `historyId` devolvido é sempre o da ÚLTIMA página efetivamente lida (não
+ *  o `sinceHistoryId` original), então o próximo ciclo de sincronização retoma dali e processa o
+ *  restante do backlog em fatias, em vez de tentar tudo de uma vez. */
+const INCREMENTAL_MAX_PAGINAS = 20;
 
 /** Usado por `GmailApiClient.pareceHtml` para detectar HTML entregue como `text/plain` — ver o
  *  doc daquele método.
@@ -98,50 +124,72 @@ export class GmailApiClient {
     return google.gmail({ version: 'v1', auth });
   }
 
-  /** First sync for a newly connected account: unread messages from the last 7 days, capped at 50.
+  /** Primeira sincronização de uma conta recém-conectada e fallback quando o `historyId` guardado
+   *  expira (`historyExpired`): caixa de entrada inteira dos últimos `INITIAL_DIAS` dias, **lidas e
+   *  não lidas** (sem `is:unread` — antes só trazia não lidas, e uma mensagem já lida ao conectar
+   *  nunca aparecia), até `INITIAL_MAX` mensagens, paginando `messages.list` em blocos de
+   *  `INITIAL_PAGE` via `nextPageToken`. Mais recentes primeiro (ordem padrão do Gmail).
    *
-   *  Uses `in:inbox` (not `category:primary`) as the base filter: `category:primary` depends on
-   *  the user having Gmail's tabbed inbox enabled — someone who turned tabs off gets an EMPTY
-   *  "Principal" category and this search would silently return nothing, even though their inbox
-   *  is full of unread mail. `in:inbox` matches regardless of tab configuration.
+   *  Usa `in:inbox` (não `category:primary`) como filtro base: `category:primary` depende do
+   *  usuário ter as abas da caixa de entrada do Gmail ativadas — quem desligou as abas tem uma
+   *  categoria "Principal" VAZIA e esta busca voltaria nada silenciosamente, mesmo com a caixa
+   *  cheia. `in:inbox` funciona independente da configuração de abas.
    *
-   *  The Promoções/Social/Atualizações/Fóruns noise ALSO has to be excluded right here, in the
-   *  `q` sent to `messages.list`, not only afterwards in `fetchMessages` — `maxResults: 50` is
-   *  applied by Gmail's API before any filtering this app does. If the account has 50+ unread
-   *  promotional e-mails, `messages.list` returns those 50 promos, `fetchMessages` discards every
-   *  one of them by label, and the user gets back an EMPTY inbox on first sync despite having real
-   *  unread mail. Excluding `-category:promotions -category:social -category:updates
-   *  -category:forums` in the query itself means the 50-message cap is spent on messages that can
-   *  actually survive the label filter. `fetchMessages` still re-checks `labelIds` below as a
-   *  second barrier (see `NOISE_LABELS` above) in case the negative `category:` filter doesn't
-   *  fully apply when the user has the tabbed inbox turned off — the Gmail search-operator
-   *  documentation doesn't explicitly guarantee that behavior, so the label check stays as a
-   *  safety net instead of being trusted alone. */
-  async fetchInitialUnread(
+   *  O ruído de Promoções/Social/Fóruns TAMBÉM precisa ser excluído aqui, no `q` enviado a
+   *  `messages.list`, e não só depois em `fetchMessages` — `maxResults`/o teto de `INITIAL_MAX` são
+   *  aplicados pela API do Gmail antes de qualquer filtro deste app. Se a conta tiver muitas
+   *  promoções no período, `messages.list` devolveria página após página de promoções,
+   *  `fetchMessages` descartaria cada uma por label, e o teto de 200 seria gasto inteiro sem sobrar
+   *  mensagem real nenhuma. Excluir `-category:promotions -category:social -category:forums` na
+   *  própria query garante que o teto seja gasto com mensagens que sobrevivem ao filtro por label.
+   *  `CATEGORY_UPDATES` **não** é excluída aqui — decisão 5 da spec: é onde bancos/faturas caem.
+   *  `fetchMessages` reaplica `NOISE_LABELS` como segunda camada de defesa (ver o comentário lá). */
+  async fetchInitial(
     refreshToken: string,
   ): Promise<{ emails: FetchedEmail[]; historyId: string | null }> {
     const gmail = this.gmailFor(refreshToken);
-    const sevenDaysAgoUnixSeconds = Math.floor(
-      (Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000,
+    const after = Math.floor(
+      (Date.now() - INITIAL_DIAS * 24 * 60 * 60 * 1000) / 1000,
     );
-    const list = await gmail.users.messages.list({
-      userId: 'me',
-      q: `is:unread after:${sevenDaysAgoUnixSeconds} in:inbox -category:promotions -category:social -category:updates -category:forums`,
-      maxResults: 50,
-    });
-    const messageIds = (list.data.messages ?? [])
-      .map((m) => m.id)
-      .filter((id): id is string => typeof id === 'string');
-    const emails = await this.fetchMessages(gmail, messageIds);
+    const ids: string[] = [];
+    let pageToken: string | undefined;
+    do {
+      const list = await gmail.users.messages.list({
+        userId: 'me',
+        q: `in:inbox after:${after} -category:promotions -category:social -category:forums`,
+        maxResults: INITIAL_PAGE,
+        pageToken,
+      });
+      for (const m of list.data.messages ?? []) {
+        if (typeof m.id === 'string') ids.push(m.id);
+      }
+      pageToken = list.data.nextPageToken ?? undefined;
+    } while (pageToken && ids.length < INITIAL_MAX);
+    const emails = await this.fetchMessages(gmail, ids.slice(0, INITIAL_MAX));
     const profile = await gmail.users.getProfile({ userId: 'me' });
     return { emails, historyId: profile.data.historyId ?? null };
   }
 
   /** Incremental sync using a previously stored historyId. `history.list` has no `q` parameter, so
-   *  the Promoções/Social/Atualizações/Fóruns filter is applied here by `fetchMessages`, which
-   *  discards a message by its `labelIds` right after fetching it — before classification or
-   *  persistence ever see it. `fetchInitialUnread` above uses the very same blacklist, so both
-   *  sync paths agree regardless of whether the user has Gmail's tabbed inbox on or off. */
+   *  the Promoções/Social/Fóruns filter (plus a mandatory `INBOX` check) is applied here by
+   *  `fetchMessages`, which discards a message by its `labelIds` right after fetching it — before
+   *  classification or persistence ever see it. `fetchInitial` above uses the very same blacklist,
+   *  so both sync paths agree regardless of whether the user has Gmail's tabbed inbox on or off.
+   *
+   *  Paginates through `history.list`'s `nextPageToken` pages, até `INCREMENTAL_MAX_PAGINAS`,
+   *  before returning — reading a single page and advancing the stored cursor to that page's
+   *  `historyId` used to silently drop whatever changes lived on the pages that followed. The
+   *  `historyId` returned is always the one from the LAST page read (seja porque `nextPageToken`
+   *  acabou, seja porque o teto foi atingido), so the next incremental sync resumes exactly where
+   *  this one stopped.
+   *
+   *  O `try/catch` de `historyExpired` (404 = `startHistoryId` fora da janela de retenção do
+   *  Gmail) cobre SÓ este loop de paginação de `history.list` — de propósito NÃO envolve a chamada
+   *  a `fetchMessages` logo abaixo. Um 404 de `messages.get` dentro de `fetchMessages` (mensagem
+   *  apagada de verdade entre o `history.list` e o `get` — evento comum, não uma falha do cursor de
+   *  histórico) não pode descartar o lote inteiro e forçar um `fetchInitial` de 30 dias a cada
+   *  ciclo com um log de "historyId expirado" enganoso; isso é tratado por mensagem, dentro do
+   *  próprio `fetchMessages`. */
   async fetchIncremental(
     refreshToken: string,
     sinceHistoryId: string,
@@ -151,24 +199,27 @@ export class GmailApiClient {
     historyExpired: boolean;
   }> {
     const gmail = this.gmailFor(refreshToken);
+    const messageIds = new Set<string>();
+    let ultimoHistoryId: string | null | undefined;
+    let pageToken: string | undefined;
+    let paginasLidas = 0;
     try {
-      const history = await gmail.users.history.list({
-        userId: 'me',
-        startHistoryId: sinceHistoryId,
-        historyTypes: ['messageAdded'],
-      });
-      const messageIds = new Set<string>();
-      for (const record of history.data.history ?? []) {
-        for (const added of record.messagesAdded ?? []) {
-          if (added.message?.id) messageIds.add(added.message.id);
+      do {
+        const history = await gmail.users.history.list({
+          userId: 'me',
+          startHistoryId: sinceHistoryId,
+          historyTypes: ['messageAdded'],
+          pageToken,
+        });
+        for (const record of history.data.history ?? []) {
+          for (const added of record.messagesAdded ?? []) {
+            if (added.message?.id) messageIds.add(added.message.id);
+          }
         }
-      }
-      const emails = await this.fetchMessages(gmail, Array.from(messageIds));
-      return {
-        emails,
-        historyId: history.data.historyId ?? sinceHistoryId,
-        historyExpired: false,
-      };
+        ultimoHistoryId = history.data.historyId ?? ultimoHistoryId;
+        pageToken = history.data.nextPageToken ?? undefined;
+        paginasLidas++;
+      } while (pageToken && paginasLidas < INCREMENTAL_MAX_PAGINAS);
     } catch (error: unknown) {
       // Gmail returns 404 when the stored historyId is too old (beyond Gmail's retention window).
       const status = (error as { code?: number })?.code;
@@ -177,37 +228,85 @@ export class GmailApiClient {
       }
       throw error;
     }
+    const emails = await this.fetchMessages(gmail, Array.from(messageIds));
+    return {
+      emails,
+      historyId: ultimoHistoryId ?? sinceHistoryId,
+      historyExpired: false,
+    };
   }
 
+  /** Busca os detalhes (`format: 'metadata'`) de cada id, um a um, tolerando a falha pontual de UM
+   *  id sem derrubar o lote inteiro: 404 (apagada) e 410 (removida definitivamente — "Gone") viram
+   *  um `logger.warn` + `continue`, pulando só aquela mensagem — comum o suficiente (mensagem some
+   *  entre a listagem e este `get`) para não valer a pena tratar como falha de sincronização.
+   *  Qualquer outro erro (401/403/429, `invalid_grant` do Google, timeout de rede, etc.) PROPAGA:
+   *  são falhas de infraestrutura/autenticação que afetariam igualmente todo id seguinte, não algo
+   *  específico desta mensagem — o chamador (`email-sync`) precisa vê-los para classificar e agir
+   *  (ex.: marcar a conta para reconexão). */
   private async fetchMessages(
     gmail: gmail_v1.Gmail,
     ids: string[],
   ): Promise<FetchedEmail[]> {
     const emails: FetchedEmail[] = [];
     for (const id of ids) {
-      const message = await gmail.users.messages.get({
-        userId: 'me',
-        id,
-        format: 'metadata',
-        metadataHeaders: ['From', 'Subject'],
-      });
-      // Discard Promoções/Social/Atualizações/Fóruns/Spam by label. Both `fetchInitialUnread` and
-      // `fetchIncremental` funnel through here, so the same blacklist applies to both sync paths.
-      const labelIds = message.data.labelIds ?? [];
-      if (labelIds.some((label) => NOISE_LABELS.has(label))) continue;
-      const headers = message.data.payload?.headers ?? [];
+      const data = await this.getMessageMetadataOrNull(gmail, id);
+      if (data === null) continue;
+      // Discard Promoções/Social/Fóruns/Spam by label, AND anything without INBOX (sent, archived
+      // by filter, drafts) — see the class doc on NOISE_LABELS for why INBOX became mandatory once
+      // Atualizações was let in. Both `fetchInitial` and `fetchIncremental` funnel through here, so
+      // the same rule applies to both sync paths.
+      const labelIds = data.labelIds ?? [];
+      if (
+        !labelIds.includes('INBOX') ||
+        labelIds.some((label) => NOISE_LABELS.has(label))
+      ) {
+        continue;
+      }
+      const headers = data.payload?.headers ?? [];
       const getHeader = (name: string) =>
         headers.find((h) => h.name === name)?.value ?? '';
       emails.push({
         gmailMessageId: id,
         remetente: getHeader('From'),
         assunto: getHeader('Subject'),
-        corpo: message.data.snippet ?? '',
-        recebidoEm: new Date(Number(message.data.internalDate ?? Date.now())),
+        corpo: data.snippet ?? '',
+        recebidoEm: new Date(Number(data.internalDate ?? Date.now())),
         labelIds,
       });
     }
     return emails;
+  }
+
+  /** Isola o `try/catch` por id de `fetchMessages` numa função à parte só para dar um tipo de
+   *  retorno concreto (`Schema$Message | null`) ao resultado — declarar a variável do `try` com
+   *  `Awaited<ReturnType<typeof gmail.users.messages.get>>` resolve para `void` porque esse método
+   *  do cliente gerado pela `googleapis` é sobrecarregado (a última assinatura é a variante
+   *  `callback`, que não devolve nada), então o TypeScript pegava a sobrecarga errada. `null`
+   *  sinaliza 404/410 (mensagem apagada/removida entre a listagem e este `get` — ver o doc de
+   *  `fetchMessages`); qualquer outro erro (401/403/429, `invalid_grant`, rede) propaga. */
+  private async getMessageMetadataOrNull(
+    gmail: gmail_v1.Gmail,
+    id: string,
+  ): Promise<gmail_v1.Schema$Message | null> {
+    try {
+      const message = await gmail.users.messages.get({
+        userId: 'me',
+        id,
+        format: 'metadata',
+        metadataHeaders: ['From', 'Subject'],
+      });
+      return message.data;
+    } catch (error: unknown) {
+      const status = (error as { code?: number })?.code;
+      if (status === 404 || status === 410) {
+        this.logger.warn(
+          `Mensagem ${id} não encontrada ao buscar detalhes (código ${status}) — pulando.`,
+        );
+        return null;
+      }
+      throw error;
+    }
   }
 
   /** Removes the message from the inbox WITHOUT deleting it: only the `INBOX` label is dropped, so
@@ -228,7 +327,7 @@ export class GmailApiClient {
     await gmail.users.messages.trash({ userId: 'me', id: gmailMessageId });
   }
 
-  /** Full readable body for reading the e-mail / drafting a reply — `fetchInitialUnread`/
+  /** Full readable body for reading the e-mail / drafting a reply — `fetchInitial`/
    *  `fetchIncremental` above only ever read the short `snippet` via `format: 'metadata'`;
    *  generating a coherent draft (or showing the actual message, not a ~200-character stub) needs
    *  the real text.

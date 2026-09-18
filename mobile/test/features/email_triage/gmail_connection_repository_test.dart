@@ -126,6 +126,48 @@ void main() {
     },
   );
 
+  test('fromJson lê ultimaSincronizacao ISO como UTC e tolera ausente/null', () {
+    final comData = GmailConnectionStatus.fromJson({
+      'connected': true,
+      'ultimaSincronizacao': '2026-09-16T20:00:00.000Z',
+    });
+    // Compara com um DateTime construído independentemente (não com um re-parse da mesma string)
+    // para não mascarar um bug de parsing que afetasse os dois lados igualmente.
+    expect(comData.ultimaSincronizacao, DateTime.utc(2026, 9, 16, 20));
+    expect(comData.ultimaSincronizacao!.isUtc, isTrue);
+
+    final semCampo = GmailConnectionStatus.fromJson({'connected': true});
+    expect(semCampo.ultimaSincronizacao, isNull);
+
+    final comNull = GmailConnectionStatus.fromJson({
+      'connected': true,
+      'ultimaSincronizacao': null,
+    });
+    expect(comNull.ultimaSincronizacao, isNull);
+  });
+
+  test(
+    'fromJson cai para null quando ultimaSincronizacao vem malformado — campo informativo não pode '
+    'derrubar o status de conexão que alimenta o CTA de reconexão',
+    () {
+      expect(
+        GmailConnectionStatus.fromJson({'connected': true, 'ultimaSincronizacao': ''})
+            .ultimaSincronizacao,
+        isNull,
+      );
+      expect(
+        GmailConnectionStatus.fromJson({'connected': true, 'ultimaSincronizacao': 'ontem'})
+            .ultimaSincronizacao,
+        isNull,
+      );
+      expect(
+        GmailConnectionStatus.fromJson({'connected': true, 'ultimaSincronizacao': 1758052800})
+            .ultimaSincronizacao,
+        isNull,
+      );
+    },
+  );
+
   test('disconnect calls the delete endpoint and signs out of Google', () async {
     final mockGoogleSignIn = MockGoogleSignIn();
     when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async => null);

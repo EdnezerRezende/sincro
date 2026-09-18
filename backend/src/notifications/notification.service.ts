@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { FIREBASE_ADMIN } from '../auth/firebase-admin.provider';
 import type { FirebaseAdmin } from '../auth/firebase-admin.provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { SensoryProfileService } from '../sensory-profile/sensory-profile.servic
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(
     @Inject(FIREBASE_ADMIN) private readonly firebaseAdmin: FirebaseAdmin,
     private readonly prisma: PrismaService,
@@ -52,5 +54,51 @@ export class NotificationService {
       },
       data: { tipo: 'finance_alert' },
     });
+  }
+
+  /** Push SÓ DE DADOS: não aparece na bandeja de notificações do aparelho (sem campo
+   *  `notification`), então não é uma interrupção sensorial e não passa pela tolerância de
+   *  notificação da anamnese (`sensoryProfileService`) — diferente de `notifyNewEmailsNeedAttention`
+   *  e `notifyContasVencendo`, que são visíveis e por isso respeitam essa preferência. O app, ao
+   *  recebê-lo em segundo ou primeiro plano, apenas relê a caixa de entrada. */
+  async notifyInboxAtualizada(userId: string): Promise<void> {
+    // Corpo inteiro dentro do try — inclusive o findUnique e o early return sem fcmToken —
+    // porque o método promete nunca lançar: uma rejeição do Prisma (ex.: timeout de pool)
+    // não pode propagar e derrubar o ciclo do scheduler que dispara notificações visíveis.
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user?.fcmToken) return;
+
+      await this.firebaseAdmin.messaging().send({
+        token: user.fcmToken,
+        data: { tipo: 'inbox_atualizada' },
+        android: { priority: 'high' },
+        apns: {
+          headers: { 'apns-push-type': 'background', 'apns-priority': '5' },
+          payload: { aps: { contentAvailable: true } },
+        },
+      });
+    } catch (error) {
+      this.logger.warn(`FCM inbox_atualizada falhou para ${userId}: ${this.descreverErro(error)}`);
+    }
+  }
+
+  /** Normaliza um erro capturado em texto legível para log, cobrindo os formatos que o SDK
+   *  do Firebase Admin e o Prisma costumam lançar/rejeitar (instância de `Error`, objeto com
+   *  `code`/`message`, ou valores crus sem estrutura nenhuma). */
+  private descreverErro(error: unknown): string {
+    if (error instanceof Error) return error.message;
+
+    if (error == null) return 'erro desconhecido';
+
+    if (typeof error === 'object') {
+      const { code, message } = error as { code?: unknown; message?: unknown };
+      if (code !== undefined || message !== undefined) {
+        const partes = [code, message].filter((parte) => parte !== undefined);
+        return partes.join(': ');
+      }
+    }
+
+    return String(error);
   }
 }

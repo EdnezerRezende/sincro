@@ -186,3 +186,31 @@ DTO, sem endpoint de backend.
   HealthKit/Health Connect, e o estado mudando de fato ao longo de vários dias de uso — documentado
   como verificação manual necessária em dispositivo real, com histórico acumulado ao longo de pelo
   menos uma semana, antes de considerar a fase pronta.
+
+## Adendo 2026-09-21 — leituras fiéis ao relógio, linha de base imediata e série do dia
+
+Revisão do comportamento após a constatação de que a tela ficava presa em "Coletando dados
+(0 de 7 dias)" e mostrava números diferentes dos do relógio. Onde este adendo divergir das seções
+acima, vale o adendo.
+
+- **VFC opcional no histórico.** `DiaRepouso.mediaVfcRepouso` passa a ser nulo quando o dia não
+  teve variabilidade em repouso; a entrada do dia é gravada só com a FC. A parte de VFC da linha
+  de base só existe quando pelo menos 7 dias anteriores têm VFC.
+- **Detecção só pela FC.** Quando a VFC não entra na conta (linha de base sem VFC ou dia sem VFC),
+  o estado é `elevado` se `mediaFcRepousoHoje >= μ_fc + 2,0·σ_fc` (margem maior para compensar a
+  perda do segundo sinal); com VFC vale a regra original de 1,5σ nas duas métricas. O resumo grava
+  `usaVfc` e a faixa desenhada na tela usa a mesma margem que decidiu o estado.
+- **Preenchimento retroativo.** Na sincronização, os 13 dias anteriores que faltam no histórico são
+  lidos da plataforma em lote (uma leitura por tipo), no máximo uma vez por dia-calendário, de forma
+  best-effort. 13 + hoje = a janela de 14 entradas.
+- **Filtro de repouso por intervalo.** Amostras de passos são intervalos (`HealthReading.fim`); os
+  passos são atribuídos à janela de 5 min proporcionalmente à sobreposição. Amostras com mais de
+  1 h de duração são ignoradas (não informam *quando* a pessoa andou).
+- **Leituras fiéis.** O app lê `RESTING_HEART_RATE` (FC em repouso calculada pela plataforma, a
+  mesma do relógio, últimas 48 h) e mostra a última leitura com horário, mínimo e máximo do dia.
+  A permissão desse tipo é pedida (versão 3) mas não é obrigatória para a tela funcionar.
+- **Série do dia.** As leituras de FC de hoje são agregadas em blocos de 5 min (média, mín, máx,
+  em repouso) — no máximo 288 pontos — e guardadas no cache para o gráfico intradiário.
+- **Aritmética de datas** sempre por calendário (`DateTime(ano, mês, dia ± n)`), nunca por
+  `Duration(days: n)`, por causa do horário de verão.
+

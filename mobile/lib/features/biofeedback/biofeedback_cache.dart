@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'biofeedback_summary.dart';
 import 'dia_repouso.dart';
+import 'serie_dia.dart';
 
 const _chaveAtivo = 'biofeedback_ativo';
 const _chaveFrequenciaMinutos = 'biofeedback_frequencia_minutos';
@@ -10,7 +11,12 @@ const _chaveFrequenciaMinutos = 'biofeedback_frequencia_minutos';
 // gravado pela versão antiga do app ser tratado como ausente (`getResumo` volta `null`) em vez de
 // ser lido e exibido sob o rótulo novo com o valor antigo — que seria exatamente a incoerência que
 // essa mudança existe para eliminar.
-const _chaveResumo = 'biofeedback_resumo_v2';
+// v3: novos campos (última leitura com horário, FC em repouso nativa, mín/máx, linha de base). Os
+// campos são opcionais no JSON, mas a chave sobe mesmo assim para que o resumo v2 não seja mostrado
+// com os novos tiles vazios até a próxima sincronização.
+const _chaveResumo = 'biofeedback_resumo_v3';
+const _chaveSerieDia = 'biofeedback_serie_dia';
+const _chaveUltimoPreenchimento = 'biofeedback_historico_preenchido_em';
 const _chaveHistoricoRepouso = 'biofeedback_historico_repouso';
 const _chavePermissoesVersao = 'biofeedback_permissoes_versao';
 const _chaveAlertasAtivos = 'biofeedback_alertas_ativos';
@@ -21,10 +27,11 @@ class BiofeedbackCache {
   ///
   /// 1 = Fase 1 (frequência cardíaca + variabilidade).
   /// 2 = Fase 2 (as duas acima + passos + treinos, usadas para filtrar leituras fora de repouso).
+  /// 3 = frequência cardíaca em repouso calculada pela plataforma (a mesma que o relógio mostra).
   ///
   /// A permissão só é pedida na ativação do Biofeedback, então quem ativou na Fase 1 nunca seria
   /// perguntado de novo. Guardar a versão concedida permite pedir a diferença uma única vez.
-  static const versaoPermissoesAtual = 2;
+  static const versaoPermissoesAtual = 3;
 
   /// `SharedPreferencesAsync` — e não a API legada `SharedPreferences.getInstance()` — porque a
   /// sincronização em background roda em um isolate separado. A API legada mantém um cache em
@@ -71,6 +78,35 @@ class BiofeedbackCache {
     return _prefs.setString(_chaveHistoricoRepouso, jsonEncode(lista));
   }
 
+  /// Valor ilegível (cache corrompido ou de outra versão) vale como "sem série": um gráfico vazio
+  /// até a próxima sincronização é bem melhor do que derrubar a tela ou a sincronização inteira.
+  Future<SerieDia?> getSerieDia() async {
+    final raw = await _prefs.getString(_chaveSerieDia);
+    if (raw == null) return null;
+    try {
+      return SerieDia.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setSerieDia(SerieDia serie) {
+    return _prefs.setString(_chaveSerieDia, jsonEncode(serie.toJson()));
+  }
+
+  /// Instante do último preenchimento retroativo do histórico a partir da plataforma de saúde
+  /// (ver `BiofeedbackSyncService`). `null` quando nunca rodou.
+  Future<DateTime?> getUltimoPreenchimento() async {
+    final raw = await _prefs.getString(_chaveUltimoPreenchimento);
+    // Valor ilegível vale como "nunca rodou" — o preenchimento é refeito, nunca a sincronização
+    // inteira derrubada por uma preferência corrompida.
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  Future<void> setUltimoPreenchimento(DateTime quando) {
+    return _prefs.setString(_chaveUltimoPreenchimento, quando.toIso8601String());
+  }
+
   /// `0` quando nada foi gravado: é o caso de quem ativou o Biofeedback na Fase 1, antes de esta
   /// chave existir, e por isso concedeu apenas as permissões daquela versão.
   Future<int> getPermissoesVersao() async {
@@ -96,5 +132,7 @@ class BiofeedbackCache {
     await _prefs.remove(_chaveHistoricoRepouso);
     await _prefs.remove(_chavePermissoesVersao);
     await _prefs.remove(_chaveAlertasAtivos);
+    await _prefs.remove(_chaveSerieDia);
+    await _prefs.remove(_chaveUltimoPreenchimento);
   }
 }

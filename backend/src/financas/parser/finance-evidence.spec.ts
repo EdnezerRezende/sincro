@@ -45,6 +45,28 @@ describe('evidenciasDeCobranca', () => {
       new Set(['E6']),
     );
   });
+  it('E7 attachment is a CSV/XLS(X) sheet, regardless of its name; never XML', () => {
+    expect(ev('Olá', [{ filename: 'nubank-2026-09-15.csv' }])).toEqual(
+      new Set(['E7']),
+    );
+    expect(ev('Olá', [{ filename: 'lancamentos.XLSX' }])).toEqual(
+      new Set(['E7']),
+    );
+    expect(ev('Olá', [{ filename: 'relatorio.csv ' }])).toEqual(
+      new Set(['E7']),
+    );
+    // planilha nunca é E6 (só E7): o nome não pode furar a trava de documento/tema
+    expect(ev('Olá', [{ filename: 'Fatura.csv' }])).toEqual(new Set(['E7']));
+    expect(ev('Olá', [{ filename: 'fatura-2025.xlsx' }])).toEqual(
+      new Set(['E7']),
+    );
+    expect(ev('Olá', [{ filename: 'Fatura_082026.pdf' }])).toEqual(
+      new Set(['E6']),
+    );
+    expect(ev('Olá', [{ filename: 'foto.csv.png' }])).toEqual(new Set());
+    expect(ev('Olá', [{ filename: 'nfe-123.xml' }])).toEqual(new Set());
+    expect(ev('Olá', [{ filename: 'convite.xml' }])).toEqual(new Set());
+  });
   it('ignores text past CABECA_EVIDENCIA', () => {
     expect(ev(`${'x'.repeat(1500)} Valor a pagar: R$ 10,00`)).toEqual(
       new Set(),
@@ -53,9 +75,20 @@ describe('evidenciasDeCobranca', () => {
 });
 
 describe('evidenciaSuficiente', () => {
-  it('E1/E3/E4/E5/E6 alone suffice; E2 alone only with a cobrança noun in the subject', () => {
+  it('E1/E3/E4/E5/E6 alone suffice; E2 needs a cobrança noun and E7 a cobrança document in the subject', () => {
     expect(evidenciaSuficiente(new Set(['E1']), false)).toBe(true);
     expect(evidenciaSuficiente(new Set(['E6']), false)).toBe(true);
+    // planilha anexa só conta quando o assunto nomeia o DOCUMENTO de cobrança: "Relatório anual
+    // do seu consórcio" + cotas.xlsx tem substantivo genérico (consórcio) mas não documento
+    expect(evidenciaSuficiente(new Set(['E7']), false)).toBe(false);
+    expect(evidenciaSuficiente(new Set(['E7']), true)).toBe(false);
+    expect(evidenciaSuficiente(new Set(['E7']), true, true)).toBe(true);
+    // tema fiscal: nome de anexo (E6 pdf / E7) e data nunca bastam; só cobrança explícita no corpo
+    expect(evidenciaSuficiente(new Set(['E6']), true, false, true)).toBe(false);
+    expect(evidenciaSuficiente(new Set(['E2', 'E7']), true, false, true)).toBe(
+      false,
+    );
+    expect(evidenciaSuficiente(new Set(['E1']), true, false, true)).toBe(true);
     expect(evidenciaSuficiente(new Set(['E2']), true)).toBe(true);
     expect(evidenciaSuficiente(new Set(['E2']), false)).toBe(false);
     expect(evidenciaSuficiente(new Set(), true)).toBe(false);
@@ -63,6 +96,40 @@ describe('evidenciaSuficiente', () => {
 });
 
 describe('temEvidenciaNegativa', () => {
+  it.each([
+    'Fatura anterior paga. Fatura de outubro disponível',
+    'Fatura anterior paga: a atual vence dia 10',
+    'Pagamento confirmado. Sua próxima fatura chegou',
+    'Sua fatura foi paga; fatura de novembro disponível',
+    'Fatura quitada. Boleto de outubro emitido',
+    'Fatura, já paga, e a próxima em aberto',
+  ])(
+    'liquidação numa oração não é negativa se outra traz cobrança vigente: %s',
+    (assunto) => {
+      expect(temEvidenciaNegativa('Valor a pagar: R$ 120,00', assunto)).toBe(
+        false,
+      );
+    },
+  );
+  it('a mesma regra por oração vale numa LINHA do corpo', () => {
+    expect(
+      temEvidenciaNegativa(
+        'Recebemos o pagamento da sua fatura anterior. A fatura de outubro já está disponível.\nValor a pagar: R$ 120,00',
+        'A fatura do seu cartão Nubank está fechada',
+      ),
+    ).toBe(false);
+    expect(
+      temEvidenciaNegativa(
+        'Recebemos o pagamento da sua fatura. Obrigado!',
+        'Sua fatura',
+      ),
+    ).toBe(true);
+  });
+  it('liquidação sem cobrança vigente continua negativa', () => {
+    expect(
+      temEvidenciaNegativa('Obrigado!', 'Sua fatura foi paga. Obrigado'),
+    ).toBe(true);
+  });
   it.each([
     ['Recebemos seu pagamento. Obrigado!', ''],
     ['Pesquisa de satisfação: avalie seu atendimento', ''],

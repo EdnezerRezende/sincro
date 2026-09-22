@@ -65,6 +65,28 @@ LancamentoFinanceiro _pendente({required String descricao, double? valor}) {
   );
 }
 
+/// Lançamento já confirmado, como os que aparecem em "Lançamentos do mês" de verdade —
+/// diferente de `_pendente()`, cujo status PENDENTE_REVISAO faria `NovoLancamentoScreen`
+/// tratá-lo como uma revisão pendente (título "Revisar lançamento" em vez de "Editar
+/// lançamento") ao abrir para edição.
+LancamentoFinanceiro _confirmado({required String descricao, double? valor}) {
+  return LancamentoFinanceiro(
+    id: 'l-$descricao',
+    tipo: TipoLancamento.despesa,
+    descricao: descricao,
+    instituicao: 'Nubank',
+    valor: valor,
+    dataVencimento: DateTime.utc(2026, 9, 20),
+    dataCompetencia: DateTime.utc(2026, 9, 20),
+    status: StatusLancamento.confirmado,
+    origem: OrigemLancamento.emailParser,
+    isPago: false,
+    codigoBarras: null,
+    cartaoId: null,
+    contaId: null,
+  );
+}
+
 /// Factory genérica para os testes de filtro/ordenação/badges — permite controlar
 /// `id` (desempate determinístico), `tipo`, `valor` e `dataVencimento` livremente.
 LancamentoFinanceiro _lancamento({
@@ -105,7 +127,13 @@ Future<void> _selecionarOrdenacao(WidgetTester tester, String label) async {
 /// e mesclagem corretos entre cards, badges e legendas (regressão do bug em que cards
 /// adjacentes colapsavam num único nó e o badge de tipo virava nó irmão solto).
 List<String> _semanticsLabels(WidgetTester tester) {
-  final root = tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!;
+  final root = tester
+      .binding
+      .renderViews
+      .first
+      .owner!
+      .semanticsOwner!
+      .rootSemanticsNode!;
   final labels = <String>[];
   void visit(SemanticsNode node) {
     if (node.label.isNotEmpty) labels.add(node.label);
@@ -114,6 +142,7 @@ List<String> _semanticsLabels(WidgetTester tester) {
       return true;
     });
   }
+
   visit(root);
   return labels;
 }
@@ -129,7 +158,8 @@ Widget _app({
         _FakeFinanceSummaryRepository(_summaryVazio),
       ),
       lancamentosRepositoryProvider.overrideWithValue(
-        repository ?? _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
+        repository ??
+            _FakeLancamentosRepository(pendentes: pendentes, doMes: doMes),
       ),
     ],
     child: MaterialApp(theme: sincroLightTheme, home: const FinancasScreen()),
@@ -137,7 +167,9 @@ Widget _app({
 }
 
 void main() {
-  testWidgets('tapping the + action opens NovoLancamentoScreen', (tester) async {
+  testWidgets('tapping the + action opens NovoLancamentoScreen', (
+    tester,
+  ) async {
     await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
     await tester.pumpAndSettle();
 
@@ -154,7 +186,9 @@ void main() {
     expect(find.textContaining('1.000,00'), findsOneWidget);
   });
 
-  testWidgets('defaults to the "Lançamentos do mês" tab, not Pendentes', (tester) async {
+  testWidgets('defaults to the "Lançamentos do mês" tab, not Pendentes', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(
         pendentes: [_pendente(descricao: 'Pendente A')],
@@ -167,46 +201,53 @@ void main() {
     expect(find.text('Pendente A'), findsNothing);
   });
 
-  testWidgets('the Pendentes chip shows the pending count, 0 when there are none', (tester) async {
-    await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'the Pendentes chip shows the pending count, 0 when there are none',
+    (tester) async {
+      await tester.pumpWidget(_app(pendentes: const [], doMes: const []));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Pendentes de revisão (0)'), findsOneWidget);
-  });
+      expect(find.text('Pendentes de revisão (0)'), findsOneWidget);
+    },
+  );
 
-  testWidgets('the Pendentes chip shows the pending count when there are pendências', (tester) async {
-    await tester.pumpWidget(
-      _app(
-        pendentes: [
-          _pendente(descricao: 'A'),
-          _pendente(descricao: 'B'),
-          _pendente(descricao: 'C'),
-        ],
-        doMes: const [],
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'the Pendentes chip shows the pending count when there are pendências',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          pendentes: [
+            _pendente(descricao: 'A'),
+            _pendente(descricao: 'B'),
+            _pendente(descricao: 'C'),
+          ],
+          doMes: const [],
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Pendentes de revisão (3)'), findsOneWidget);
-  });
+      expect(find.text('Pendentes de revisão (3)'), findsOneWidget);
+    },
+  );
 
-  testWidgets('switching to "Pendentes de revisão" shows pending lançamentos instead', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(
-        pendentes: [_pendente(descricao: 'Pendente A')],
-        doMes: [_pendente(descricao: 'Confirmado B')],
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'switching to "Pendentes de revisão" shows pending lançamentos instead',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          pendentes: [_pendente(descricao: 'Pendente A')],
+          doMes: [_pendente(descricao: 'Confirmado B')],
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.textContaining('Pendentes de revisão'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Pendentes de revisão'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Pendente A'), findsOneWidget);
-    expect(find.text('Confirmado B'), findsNothing);
-  });
+      expect(find.text('Pendente A'), findsOneWidget);
+      expect(find.text('Confirmado B'), findsNothing);
+    },
+  );
 
   testWidgets('shows "informar valor" instead of a value when valor is null', (
     tester,
@@ -255,30 +296,38 @@ void main() {
     await tester.tap(find.text('Revisar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Confirmar lançamento'), findsOneWidget);
+    expect(find.text('Lançamento detectado'), findsOneWidget);
   });
 
-  testWidgets('tapping the edit icon on a "do mês" card opens it pre-filled for editing', (
+  testWidgets(
+    'tapping the edit icon on a "do mês" card opens it pre-filled for editing',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          pendentes: const [],
+          doMes: [_confirmado(descricao: 'Aluguel', valor: 1450)],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar lançamento'), findsOneWidget);
+      expect(find.text('Aluguel'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tapping the delete icon and confirming removes the lançamento', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _app(pendentes: const [], doMes: [_pendente(descricao: 'Aluguel', valor: 1450)]),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.edit_outlined));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Editar lançamento'), findsOneWidget);
-    expect(find.text('Aluguel'), findsOneWidget);
-  });
-
-  testWidgets('tapping the delete icon and confirming removes the lançamento', (tester) async {
     final repository = _FakeLancamentosRepository(
       pendentes: const [],
-      doMes: [_pendente(descricao: 'Aluguel', valor: 1450)],
+      doMes: [_confirmado(descricao: 'Aluguel', valor: 1450)],
     );
-    await tester.pumpWidget(_app(pendentes: const [], doMes: const [], repository: repository));
+    await tester.pumpWidget(
+      _app(pendentes: const [], doMes: const [], repository: repository),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.delete_outline));
@@ -290,13 +339,23 @@ void main() {
   });
 
   group('filtro de tipo', () {
-    testWidgets('Todas/Entradas/Despesas funciona em "Lançamentos do mês"', (tester) async {
+    testWidgets('Todas/Entradas/Despesas funciona em "Lançamentos do mês"', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _app(
           pendentes: const [],
           doMes: [
-            _lancamento(id: 'd1', descricao: 'Aluguel', tipo: TipoLancamento.despesa),
-            _lancamento(id: 'r1', descricao: 'Salário', tipo: TipoLancamento.receita),
+            _lancamento(
+              id: 'd1',
+              descricao: 'Aluguel',
+              tipo: TipoLancamento.despesa,
+            ),
+            _lancamento(
+              id: 'r1',
+              descricao: 'Salário',
+              tipo: TipoLancamento.receita,
+            ),
           ],
         ),
       );
@@ -322,12 +381,22 @@ void main() {
       expect(find.text('Salário'), findsOneWidget);
     });
 
-    testWidgets('Todas/Entradas/Despesas funciona em "Pendentes de revisão"', (tester) async {
+    testWidgets('Todas/Entradas/Despesas funciona em "Pendentes de revisão"', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _app(
           pendentes: [
-            _lancamento(id: 'd1', descricao: 'Fatura Nubank', tipo: TipoLancamento.despesa),
-            _lancamento(id: 'r1', descricao: 'Reembolso', tipo: TipoLancamento.receita),
+            _lancamento(
+              id: 'd1',
+              descricao: 'Fatura Nubank',
+              tipo: TipoLancamento.despesa,
+            ),
+            _lancamento(
+              id: 'r1',
+              descricao: 'Reembolso',
+              tipo: TipoLancamento.receita,
+            ),
           ],
           doMes: const [],
         ),
@@ -357,9 +426,21 @@ void main() {
           _app(
             pendentes: const [],
             doMes: [
-              _lancamento(id: 'r1', descricao: 'Salário', tipo: TipoLancamento.receita),
-              _lancamento(id: 'd1', descricao: 'Aluguel', tipo: TipoLancamento.despesa),
-              _lancamento(id: 'f1', descricao: 'Fatura Cartão', tipo: TipoLancamento.faturaCartao),
+              _lancamento(
+                id: 'r1',
+                descricao: 'Salário',
+                tipo: TipoLancamento.receita,
+              ),
+              _lancamento(
+                id: 'd1',
+                descricao: 'Aluguel',
+                tipo: TipoLancamento.despesa,
+              ),
+              _lancamento(
+                id: 'f1',
+                descricao: 'Fatura Cartão',
+                tipo: TipoLancamento.faturaCartao,
+              ),
             ],
           ),
         );
@@ -431,7 +512,9 @@ void main() {
       expect(yMedio, lessThan(yBaixo));
     });
 
-    testWidgets('"Tipo" agrupa receitas antes de despesas/faturas', (tester) async {
+    testWidgets('"Tipo" agrupa receitas antes de despesas/faturas', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _app(
           pendentes: const [],
@@ -520,14 +603,19 @@ void main() {
         );
         final ordemCrescente = List<LancamentoFinanceiro>.from(base);
         final ordemDecrescente = List<LancamentoFinanceiro>.from(base.reversed);
-        final ordemEmbaralhada = List<LancamentoFinanceiro>.from(base)..shuffle(Random(7));
+        final ordemEmbaralhada = List<LancamentoFinanceiro>.from(base)
+          ..shuffle(Random(7));
 
-        Future<List<String>> ordemRenderizada(List<LancamentoFinanceiro> entrada) async {
+        Future<List<String>> ordemRenderizada(
+          List<LancamentoFinanceiro> entrada,
+        ) async {
           await tester.pumpWidget(_app(pendentes: const [], doMes: entrada));
           await tester.pumpAndSettle();
           final posicoes = <String, double>{};
           for (final item in base) {
-            posicoes[item.descricao] = tester.getTopLeft(find.text(item.descricao)).dy;
+            posicoes[item.descricao] = tester
+                .getTopLeft(find.text(item.descricao))
+                .dy;
           }
           final ordenados = posicoes.keys.toList()
             ..sort((a, b) => posicoes[a]!.compareTo(posicoes[b]!));
@@ -544,91 +632,114 @@ void main() {
         expect(resultadoB, equals(resultadoA));
         expect(resultadoC, equals(resultadoA));
         // E a ordem é a esperada: por `id` ascendente (id-000, id-001, ...).
-        expect(
-          resultadoA,
-          equals(base.map((l) => l.descricao).toList()),
-        );
+        expect(resultadoA, equals(base.map((l) => l.descricao).toList()));
       },
     );
   });
 
   group('badge de tipo', () {
-    testWidgets('mostra seta para cima em receitas e para baixo em despesas ("do mês")', (
-      tester,
-    ) async {
-      final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(
-        _app(
-          pendentes: const [],
-          doMes: [
-            _lancamento(id: 'r', descricao: 'Salário', tipo: TipoLancamento.receita),
-            _lancamento(id: 'd', descricao: 'Aluguel', tipo: TipoLancamento.despesa),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'mostra seta para cima em receitas e para baixo em despesas ("do mês")',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(
+          _app(
+            pendentes: const [],
+            doMes: [
+              _lancamento(
+                id: 'r',
+                descricao: 'Salário',
+                tipo: TipoLancamento.receita,
+              ),
+              _lancamento(
+                id: 'd',
+                descricao: 'Aluguel',
+                tipo: TipoLancamento.despesa,
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
 
-      // O badge não é mais um nó de semântica isolado (isso o deixava "solto", sem
-      // vínculo com o lançamento) — seu label agora se mescla no nó do card ancestral.
-      // Por isso não usamos mais `find.bySemanticsLabel('Receita')` com igualdade
-      // exata: verificamos que o rótulo está CONTIDO no nó do card correspondente.
-      final labels = _semanticsLabels(tester);
-      final nodeReceita = labels.firstWhere(
-        (l) => l.contains('Salário'),
-        orElse: () => '',
-      );
-      final nodeDespesa = labels.firstWhere(
-        (l) => l.contains('Aluguel'),
-        orElse: () => '',
-      );
-      expect(nodeReceita, isNotEmpty, reason: 'nó de semântica do card "Salário" deve existir');
-      expect(nodeDespesa, isNotEmpty, reason: 'nó de semântica do card "Aluguel" deve existir');
-      expect(nodeReceita, contains('Receita'));
-      expect(nodeDespesa, contains('Despesa'));
-      semantics.dispose();
-    });
+        // O badge não é mais um nó de semântica isolado (isso o deixava "solto", sem
+        // vínculo com o lançamento) — seu label agora se mescla no nó do card ancestral.
+        // Por isso não usamos mais `find.bySemanticsLabel('Receita')` com igualdade
+        // exata: verificamos que o rótulo está CONTIDO no nó do card correspondente.
+        final labels = _semanticsLabels(tester);
+        final nodeReceita = labels.firstWhere(
+          (l) => l.contains('Salário'),
+          orElse: () => '',
+        );
+        final nodeDespesa = labels.firstWhere(
+          (l) => l.contains('Aluguel'),
+          orElse: () => '',
+        );
+        expect(
+          nodeReceita,
+          isNotEmpty,
+          reason: 'nó de semântica do card "Salário" deve existir',
+        );
+        expect(
+          nodeDespesa,
+          isNotEmpty,
+          reason: 'nó de semântica do card "Aluguel" deve existir',
+        );
+        expect(nodeReceita, contains('Receita'));
+        expect(nodeDespesa, contains('Despesa'));
+        semantics.dispose();
+      },
+    );
 
-    testWidgets('mostra seta para cima em receitas e para baixo em despesas (pendentes)', (
-      tester,
-    ) async {
-      final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(
-        _app(
-          pendentes: [
-            _lancamento(id: 'r', descricao: 'Reembolso', tipo: TipoLancamento.receita),
-            _lancamento(id: 'd', descricao: 'Fatura', tipo: TipoLancamento.despesa),
-          ],
-          doMes: const [],
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Pendentes de revisão'));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'mostra seta para cima em receitas e para baixo em despesas (pendentes)',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(
+          _app(
+            pendentes: [
+              _lancamento(
+                id: 'r',
+                descricao: 'Reembolso',
+                tipo: TipoLancamento.receita,
+              ),
+              _lancamento(
+                id: 'd',
+                descricao: 'Fatura',
+                tipo: TipoLancamento.despesa,
+              ),
+            ],
+            doMes: const [],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Pendentes de revisão'));
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
 
-      // Gap 7(d): o badge semântico também precisa ser verificado na aba Pendentes, não
-      // só em "Lançamentos do mês" — o card dessa aba (`_LancamentoPendenteCard`) é uma
-      // classe diferente, com seu próprio `Semantics(container: true)`.
-      final labels = _semanticsLabels(tester);
-      final nodeReceita = labels.firstWhere(
-        (l) => l.contains('Reembolso'),
-        orElse: () => '',
-      );
-      final nodeDespesa = labels.firstWhere(
-        (l) => l.contains('Fatura'),
-        orElse: () => '',
-      );
-      expect(nodeReceita, isNotEmpty);
-      expect(nodeDespesa, isNotEmpty);
-      expect(nodeReceita, contains('Receita'));
-      expect(nodeDespesa, contains('Despesa'));
-      semantics.dispose();
-    });
+        // Gap 7(d): o badge semântico também precisa ser verificado na aba Pendentes, não
+        // só em "Lançamentos do mês" — o card dessa aba (`_LancamentoPendenteCard`) é uma
+        // classe diferente, com seu próprio `Semantics(container: true)`.
+        final labels = _semanticsLabels(tester);
+        final nodeReceita = labels.firstWhere(
+          (l) => l.contains('Reembolso'),
+          orElse: () => '',
+        );
+        final nodeDespesa = labels.firstWhere(
+          (l) => l.contains('Fatura'),
+          orElse: () => '',
+        );
+        expect(nodeReceita, isNotEmpty);
+        expect(nodeDespesa, isNotEmpty);
+        expect(nodeReceita, contains('Receita'));
+        expect(nodeDespesa, contains('Despesa'));
+        semantics.dispose();
+      },
+    );
   });
 
   group('semântica dos cards (regressão: cards colapsando num nó compartilhado)', () {
@@ -640,8 +751,18 @@ void main() {
           _app(
             pendentes: const [],
             doMes: [
-              _lancamento(id: 'a1', descricao: 'Aluguel', tipo: TipoLancamento.despesa, valor: 1450),
-              _lancamento(id: 's1', descricao: 'Salario', tipo: TipoLancamento.receita, valor: 5000),
+              _lancamento(
+                id: 'a1',
+                descricao: 'Aluguel',
+                tipo: TipoLancamento.despesa,
+                valor: 1450,
+              ),
+              _lancamento(
+                id: 's1',
+                descricao: 'Salario',
+                tipo: TipoLancamento.receita,
+                valor: 5000,
+              ),
             ],
           ),
         );
@@ -654,8 +775,14 @@ void main() {
         expect(find.bySemanticsLabel(RegExp('Salario')), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp('Aluguel')), findsOneWidget);
 
-        final nodeSalario = labels.firstWhere((l) => l.contains('Salario'), orElse: () => '');
-        final nodeAluguel = labels.firstWhere((l) => l.contains('Aluguel'), orElse: () => '');
+        final nodeSalario = labels.firstWhere(
+          (l) => l.contains('Salario'),
+          orElse: () => '',
+        );
+        final nodeAluguel = labels.firstWhere(
+          (l) => l.contains('Aluguel'),
+          orElse: () => '',
+        );
         expect(nodeSalario, isNotEmpty);
         expect(nodeAluguel, isNotEmpty);
 
@@ -714,7 +841,9 @@ void main() {
     // larguras de celular comuns (320 = iPhone SE 1ª/2ª geração, 360 = Android médio,
     // 390 = iPhone 12/13/14) que nenhum dos três valores possíveis do dropdown trunca.
     for (final width in [320.0, 360.0, 390.0]) {
-      testWidgets('nenhum valor do dropdown trunca em largura $width', (tester) async {
+      testWidgets('nenhum valor do dropdown trunca em largura $width', (
+        tester,
+      ) async {
         tester.view.physicalSize = Size(width, 800);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
@@ -753,47 +882,61 @@ void main() {
   });
 
   group('estado vazio', () {
-    testWidgets('aparece quando o filtro não retorna nada e permite limpar o filtro', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _app(
-          pendentes: const [],
-          doMes: [_lancamento(id: 'd', descricao: 'Aluguel', tipo: TipoLancamento.despesa)],
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'aparece quando o filtro não retorna nada e permite limpar o filtro',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            pendentes: const [],
+            doMes: [
+              _lancamento(
+                id: 'd',
+                descricao: 'Aluguel',
+                tipo: TipoLancamento.despesa,
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Entradas'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Entradas'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Nenhum lançamento encontrado'), findsOneWidget);
-      expect(find.text('Aluguel'), findsNothing);
+        expect(find.text('Nenhum lançamento encontrado'), findsOneWidget);
+        expect(find.text('Aluguel'), findsNothing);
 
-      await tester.tap(find.text('Limpar filtro'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Limpar filtro'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Nenhum lançamento encontrado'), findsNothing);
-      expect(find.text('Aluguel'), findsOneWidget);
-    });
+        expect(find.text('Nenhum lançamento encontrado'), findsNothing);
+        expect(find.text('Aluguel'), findsOneWidget);
+      },
+    );
 
-    testWidgets('aparece em "Pendentes de revisão" quando o filtro não retorna nada', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _app(
-          pendentes: [_lancamento(id: 'r', descricao: 'Reembolso', tipo: TipoLancamento.receita)],
-          doMes: const [],
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Pendentes de revisão'));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'aparece em "Pendentes de revisão" quando o filtro não retorna nada',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            pendentes: [
+              _lancamento(
+                id: 'r',
+                descricao: 'Reembolso',
+                tipo: TipoLancamento.receita,
+              ),
+            ],
+            doMes: const [],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Pendentes de revisão'));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Despesas'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Despesas'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Nenhum lançamento encontrado'), findsOneWidget);
-    });
+        expect(find.text('Nenhum lançamento encontrado'), findsOneWidget);
+      },
+    );
   });
 }

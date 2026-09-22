@@ -7,17 +7,14 @@ import 'package:sincro_mobile/features/financas/confirmar_lancamento_sheet.dart'
 import 'package:sincro_mobile/features/financas/finance_providers.dart';
 import 'package:sincro_mobile/features/financas/lancamento_financeiro.dart';
 import 'package:sincro_mobile/features/financas/lancamentos_repository.dart';
+import 'package:sincro_mobile/features/financas/novo_lancamento_screen.dart';
 
 class _FakeLancamentosRepository extends LancamentosRepository {
-  _FakeLancamentosRepository({
-    this.throwOnConfirmar = false,
-    this.throwOnIgnorar = false,
-    this.delay,
-  }) : super(Dio());
+  _FakeLancamentosRepository({this.throwOnIgnorar = false, this.delay})
+    : super(Dio());
   String? confirmedId;
   String? ignoredId;
   int confirmarCallCount = 0;
-  final bool throwOnConfirmar;
   final bool throwOnIgnorar;
   final Duration? delay;
 
@@ -30,10 +27,6 @@ class _FakeLancamentosRepository extends LancamentosRepository {
     String? cartaoId,
   }) async {
     confirmarCallCount++;
-    if (delay != null) await Future<void>.delayed(delay!);
-    if (throwOnConfirmar) {
-      throw DioException(requestOptions: RequestOptions(path: '/financas/lancamentos/$id/confirmar'));
-    }
     confirmedId = id;
   }
 
@@ -41,7 +34,11 @@ class _FakeLancamentosRepository extends LancamentosRepository {
   Future<void> ignorar(String id) async {
     if (delay != null) await Future<void>.delayed(delay!);
     if (throwOnIgnorar) {
-      throw DioException(requestOptions: RequestOptions(path: '/financas/lancamentos/$id/ignorar'));
+      throw DioException(
+        requestOptions: RequestOptions(
+          path: '/financas/lancamentos/$id/ignorar',
+        ),
+      );
     }
     ignoredId = id;
   }
@@ -65,9 +62,10 @@ final _lancamento = LancamentoFinanceiro(
 
 void main() {
   testWidgets(
-    'Confirmar button calls repository.confirmar with the lançamento id',
+    'Confirmar button navigates to NovoLancamentoScreen without calling repository.confirmar',
     (tester) async {
       final repository = _FakeLancamentosRepository();
+      var pushed = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -80,7 +78,10 @@ void main() {
                   showDragHandle: true,
                   builder: (sheetContext) => ConfirmarLancamentoSheetContent(
                     lancamento: _lancamento,
-                    onConfirmar: () => repository.confirmar(_lancamento.id),
+                    onConfirmar: () {
+                      pushed = true;
+                      Navigator.of(sheetContext).pop();
+                    },
                     onIgnorar: () => repository.ignorar(_lancamento.id),
                   ),
                 ),
@@ -97,10 +98,11 @@ void main() {
       expect(find.text('Fatura Nubank'), findsOneWidget);
       expect(find.textContaining('512,40'), findsOneWidget);
 
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.text('Revisar e confirmar'));
       await tester.pumpAndSettle();
 
-      expect(repository.confirmedId, 'l1');
+      expect(pushed, isTrue);
+      expect(repository.confirmarCallCount, 0);
     },
   );
 
@@ -120,7 +122,7 @@ void main() {
                   showDragHandle: true,
                   builder: (sheetContext) => ConfirmarLancamentoSheetContent(
                     lancamento: _lancamento,
-                    onConfirmar: () => repository.confirmar(_lancamento.id),
+                    onConfirmar: () => Navigator.of(sheetContext).pop(),
                     onIgnorar: () => repository.ignorar(_lancamento.id),
                   ),
                 ),
@@ -140,11 +142,9 @@ void main() {
     },
   );
 
-  Widget _appFor(_FakeLancamentosRepository repository) {
+  Widget appFor(_FakeLancamentosRepository repository) {
     return ProviderScope(
-      overrides: [
-        lancamentosRepositoryProvider.overrideWithValue(repository),
-      ],
+      overrides: [lancamentosRepositoryProvider.overrideWithValue(repository)],
       child: MaterialApp(
         theme: sincroLightTheme,
         home: Scaffold(
@@ -153,11 +153,8 @@ void main() {
               return Consumer(
                 builder: (context, ref, _) {
                   return ElevatedButton(
-                    onPressed: () => showConfirmarLancamentoSheet(
-                      context,
-                      ref,
-                      _lancamento,
-                    ),
+                    onPressed: () =>
+                        showConfirmarLancamentoSheet(context, ref, _lancamento),
                     child: const Text('abrir'),
                   );
                 },
@@ -170,40 +167,51 @@ void main() {
   }
 
   testWidgets(
-    'showConfirmarLancamentoSheet: on success calls the repository and closes the sheet',
+    'showConfirmarLancamentoSheet: Confirmar closes the sheet and opens NovoLancamentoScreen '
+    'pré-preenchida, sem chamar a API',
     (tester) async {
       final repository = _FakeLancamentosRepository();
-      await tester.pumpWidget(_appFor(repository));
+      await tester.pumpWidget(appFor(repository));
 
       await tester.tap(find.text('abrir'));
       await tester.pumpAndSettle();
-      expect(find.text('Confirmar lançamento'), findsOneWidget);
+      expect(find.text('Lançamento detectado'), findsOneWidget);
 
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.text('Revisar e confirmar'));
       await tester.pumpAndSettle();
 
-      expect(repository.confirmedId, 'l1');
-      expect(find.text('Confirmar lançamento'), findsNothing);
+      // A sheet fechou e a confirmação real (chamada à API) ainda não aconteceu — ela só
+      // ocorre quando o usuário salvar na tela de edição (ver novo_lancamento_screen_test.dart).
+      expect(repository.confirmarCallCount, 0);
+      expect(find.text('Lançamento detectado'), findsNothing);
+      expect(find.byType(NovoLancamentoScreen), findsOneWidget);
+      expect(find.text('Revisar lançamento'), findsOneWidget);
+      expect(find.text('Fatura Nubank'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'showConfirmarLancamentoSheet: on repository failure, keeps the sheet open and shows a SnackBar',
+    'showConfirmarLancamentoSheet: title and body reflect that nothing is saved yet '
+    '(item 4), and the resumo fields are still shown',
     (tester) async {
-      final repository = _FakeLancamentosRepository(throwOnConfirmar: true);
-      await tester.pumpWidget(_appFor(repository));
+      final repository = _FakeLancamentosRepository();
+      await tester.pumpWidget(appFor(repository));
 
       await tester.tap(find.text('abrir'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Confirmar'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Confirmar lançamento'), findsOneWidget);
+      expect(find.text('Lançamento detectado'), findsOneWidget);
       expect(
-        find.text('Não foi possível confirmar agora. Tente novamente.'),
+        find.textContaining('Nada é gravado até você revisar e salvar'),
         findsOneWidget,
       );
+      expect(find.text('Descrição'), findsOneWidget);
+      expect(find.text('Fatura Nubank'), findsOneWidget);
+      expect(find.text('Valor'), findsOneWidget);
+      expect(find.textContaining('512,40'), findsOneWidget);
+      expect(find.text('Vencimento'), findsOneWidget);
+      expect(find.text('Ignorar'), findsOneWidget);
+      expect(find.text('Revisar e confirmar'), findsOneWidget);
     },
   );
 
@@ -211,7 +219,7 @@ void main() {
     'showConfirmarLancamentoSheet: Ignorar failure keeps the sheet open and shows a SnackBar',
     (tester) async {
       final repository = _FakeLancamentosRepository(throwOnIgnorar: true);
-      await tester.pumpWidget(_appFor(repository));
+      await tester.pumpWidget(appFor(repository));
 
       await tester.tap(find.text('abrir'));
       await tester.pumpAndSettle();
@@ -219,7 +227,7 @@ void main() {
       await tester.tap(find.text('Ignorar'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Confirmar lançamento'), findsOneWidget);
+      expect(find.text('Lançamento detectado'), findsOneWidget);
       expect(
         find.text('Não foi possível ignorar agora. Tente novamente.'),
         findsOneWidget,
@@ -228,26 +236,31 @@ void main() {
   );
 
   testWidgets(
-    'showConfirmarLancamentoSheet: disables the buttons while the request is in flight '
-    'and ignores a second tap (double-tap guard)',
+    'showConfirmarLancamentoSheet: shows the spinner on Ignorar (who is actually in flight) '
+    'and disables Confirmar, while ignoring a second tap (double-tap guard)',
     (tester) async {
       final repository = _FakeLancamentosRepository(
         delay: const Duration(milliseconds: 200),
       );
-      await tester.pumpWidget(_appFor(repository));
+      await tester.pumpWidget(appFor(repository));
 
       await tester.tap(find.text('abrir'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Confirmar'));
-      await tester.pump(); // apenas o rebuild que desabilita os botões, sem resolver o Future.
+      await tester.tap(find.text('Ignorar'));
+      await tester
+          .pump(); // apenas o rebuild que desabilita os botões, sem resolver o Future.
 
-      // Enquanto a requisição está em voo, o FilledButton mostra um spinner em vez do texto,
-      // e um segundo toque não deve gerar uma segunda chamada ao repositório.
-      expect(find.text('Confirmar'), findsNothing);
+      // `isSubmitting` é compartilhado pelos dois botões, mas só o Ignorar de fato fala com a
+      // API aqui — é nele que o spinner deve aparecer. O FilledButton ("Revisar e confirmar")
+      // mantém seu texto, só fica desabilitado.
+      expect(find.text('Ignorar'), findsNothing);
+      expect(find.text('Revisar e confirmar'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      final filledButton = tester.widget<FilledButton>(find.byType(FilledButton));
+      final filledButton = tester.widget<FilledButton>(
+        find.byType(FilledButton),
+      );
       expect(filledButton.onPressed, isNull);
       final outlinedButton = tester.widget<OutlinedButton>(
         find.byType(OutlinedButton),
@@ -256,8 +269,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(repository.confirmarCallCount, 1);
-      expect(find.text('Confirmar lançamento'), findsNothing);
+      expect(repository.ignoredId, 'l1');
+      expect(find.text('Lançamento detectado'), findsNothing);
     },
   );
 }

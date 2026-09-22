@@ -1,4 +1,7 @@
-import { isCardInvoiceSubject, isSettledPaymentSubject } from './invoice-subject-patterns';
+import {
+  isCardInvoiceSubject,
+  isSettledPaymentSubject,
+} from './invoice-subject-patterns';
 
 describe('isCardInvoiceSubject', () => {
   it.each([
@@ -26,6 +29,23 @@ describe('isCardInvoiceSubject', () => {
 
 describe('isSettledPaymentSubject', () => {
   it.each([
+    'Extrato da fatura já paga',
+    'Extrato da fatura anterior, totalmente paga',
+    'Sua fatura está paga',
+    'Fatura, já paga, e a próxima em aberto',
+    'Fatura atual integralmente paga',
+  ])('settled with adverb/adjective between "fatura" and "paga": %s', (s) => {
+    expect(isSettledPaymentSubject(s)).toBe(true);
+  });
+  it.each([
+    'Extrato da fatura ainda não paga',
+    'Sua fatura ainda não foi paga',
+    'Sua fatura não está paga, evite juros',
+    'Fatura em aberto: pague hoje',
+  ])('NOT settled when the payment is negated or open: %s', (s) => {
+    expect(isSettledPaymentSubject(s)).toBe(false);
+  });
+  it.each([
     'Recibo: pagamento da sua fatura do cartão confirmado',
     'Sua fatura do cartão foi paga',
     'Fatura do cartão quitada',
@@ -41,14 +61,23 @@ describe('isSettledPaymentSubject', () => {
     'Identificamos que sua fatura do cartão não foi paga',
     'Seu pagamento não foi confirmado — regularize sua fatura do cartão',
     'Fatura em aberto: não paga até o vencimento',
-  ])('does NOT treat "%s" as settled (negation) — an overdue invoice must stay visible, not be silently dropped', (text) => {
-    expect(isSettledPaymentSubject(text)).toBe(false);
-  });
+  ])(
+    'does NOT treat "%s" as settled (negation) — an overdue invoice must stay visible, not be silently dropped',
+    (text) => {
+      expect(isSettledPaymentSubject(text)).toBe(false);
+    },
+  );
 
   it.each([
-    ['boleto boilerplate, not a payment confirmation', 'Boleto disponível - recibo do sacado em anexo'],
+    [
+      'boleto boilerplate, not a payment confirmation',
+      'Boleto disponível - recibo do sacado em anexo',
+    ],
     ['unrelated "recibo"', 'Requisição de recibo fiscal'],
-    ['"quitad" as a substring of an unrelated word, not a whole word', 'Fatura do cartão Requitada'],
+    [
+      '"quitad" as a substring of an unrelated word, not a whole word',
+      'Fatura do cartão Requitada',
+    ],
   ])('does NOT treat %s as settled: "%s"', (_label, text) => {
     expect(isSettledPaymentSubject(text)).toBe(false);
   });
@@ -74,16 +103,34 @@ describe('isSettledPaymentSubject', () => {
     'Débito automático realizado para sua fatura do cartão',
     'Sua fatura do cartão foi cancelada',
     'Sua fatura do cartão foi estornada',
-  ])('treats an active-voice confirmation or a cancelled/reversed invoice as settled: "%s"', (text) => {
-    expect(isSettledPaymentSubject(text)).toBe(true);
-  });
+  ])(
+    'treats an active-voice confirmation or a cancelled/reversed invoice as settled: "%s"',
+    (text) => {
+      expect(isSettledPaymentSubject(text)).toBe(true);
+    },
+  );
 
   it.each([
-    ['a reassurance opener, not a negation of the settled phrase that follows', 'Não se preocupe, o pagamento da sua fatura do cartão foi confirmado com sucesso'],
-    ['an unrelated clause before the colon', 'Não identificamos pendências: sua fatura do cartão está quitada'],
-    ['a reassurance paraphrase ("não precisa se preocupar")', 'Não precisa se preocupar, o pagamento da sua fatura do cartão foi confirmado'],
-    ['a reassurance paraphrase ("não faça nada")', 'Não faça nada, recebemos o pagamento da sua fatura do cartão'],
-    ['a reassurance paraphrase ("não se assuste")', 'Não se assuste, sua fatura do cartão já está quitada'],
+    [
+      'a reassurance opener, not a negation of the settled phrase that follows',
+      'Não se preocupe, o pagamento da sua fatura do cartão foi confirmado com sucesso',
+    ],
+    [
+      'an unrelated clause before the colon',
+      'Não identificamos pendências: sua fatura do cartão está quitada',
+    ],
+    [
+      'a reassurance paraphrase ("não precisa se preocupar")',
+      'Não precisa se preocupar, o pagamento da sua fatura do cartão foi confirmado',
+    ],
+    [
+      'a reassurance paraphrase ("não faça nada")',
+      'Não faça nada, recebemos o pagamento da sua fatura do cartão',
+    ],
+    [
+      'a reassurance paraphrase ("não se assuste")',
+      'Não se assuste, sua fatura do cartão já está quitada',
+    ],
   ])(
     'does NOT let an unrelated earlier negation over-block a genuinely settled clause: %s ("%s")',
     (_label, text) => {
@@ -92,18 +139,39 @@ describe('isSettledPaymentSubject', () => {
   );
 
   it.each([
-    ['negation before a colon-introduced continuation stays scoped correctly', 'Não conseguimos localizar o seguinte: recibo de pagamento da sua fatura do cartão'],
-    ['negation stays scoped across a colon when genuinely related', 'Ainda não temos novidades: sua fatura do cartão foi paga?'],
+    [
+      'negation before a colon-introduced continuation stays scoped correctly',
+      'Não conseguimos localizar o seguinte: recibo de pagamento da sua fatura do cartão',
+    ],
+    [
+      'negation stays scoped across a colon when genuinely related',
+      'Ainda não temos novidades: sua fatura do cartão foi paga?',
+    ],
   ])('does NOT treat %s as settled: "%s"', (_label, text) => {
     expect(isSettledPaymentSubject(text)).toBe(false);
   });
 
   it.each([
-    ['an unrelated auto-debit cancellation, invoice still due', 'Débito automático cancelado: pague sua fatura do cartão até 10/10'],
-    ['the CARD (not the invoice) being cancelled — a new invoice is due', 'Seu cartão foi cancelado — fatura final do cartão disponível'],
-    ['a reissued invoice after the old card was cancelled', 'Sua fatura foi reemitida após o cartão anterior ter sido cancelado'],
-    ['an installment plan cancellation, invoice still open', 'Parcelamento cancelado: sua fatura do cartão segue em aberto'],
-  ])('does NOT treat %s as settled (only fatura/pagamento itself being cancelled counts): "%s"', (_label, text) => {
-    expect(isSettledPaymentSubject(text)).toBe(false);
-  });
+    [
+      'an unrelated auto-debit cancellation, invoice still due',
+      'Débito automático cancelado: pague sua fatura do cartão até 10/10',
+    ],
+    [
+      'the CARD (not the invoice) being cancelled — a new invoice is due',
+      'Seu cartão foi cancelado — fatura final do cartão disponível',
+    ],
+    [
+      'a reissued invoice after the old card was cancelled',
+      'Sua fatura foi reemitida após o cartão anterior ter sido cancelado',
+    ],
+    [
+      'an installment plan cancellation, invoice still open',
+      'Parcelamento cancelado: sua fatura do cartão segue em aberto',
+    ],
+  ])(
+    'does NOT treat %s as settled (only fatura/pagamento itself being cancelled counts): "%s"',
+    (_label, text) => {
+      expect(isSettledPaymentSubject(text)).toBe(false);
+    },
+  );
 });

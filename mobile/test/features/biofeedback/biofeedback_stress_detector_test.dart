@@ -66,6 +66,58 @@ void main() {
 
       expect(resultado, true);
     });
+    test('attributes interval step samples proportionally to the overlap with the window', () {
+      final detector = BiofeedbackStressDetector();
+      final t = DateTime(2026, 9, 20, 9, 15);
+      // 120 passos entre 09:00 e 09:20 (20 min): a janela 09:12:30–09:17:30 sobrepõe 5 min → 30
+      // passos atribuídos, acima do limiar de 15 → não está em repouso.
+      final caminhada = [
+        HealthReading(
+          valor: 120,
+          timestamp: DateTime(2026, 9, 20, 9, 0),
+          fim: DateTime(2026, 9, 20, 9, 20),
+        ),
+      ];
+      expect(detector.emRepouso(timestamp: t, leiturasPassos: caminhada, treinos: []), isFalse);
+
+      // 40 passos na mesma hora: 5/20 → 10 passos na janela, abaixo do limiar → em repouso.
+      final poucosPassos = [
+        HealthReading(
+          valor: 40,
+          timestamp: DateTime(2026, 9, 20, 9, 0),
+          fim: DateTime(2026, 9, 20, 9, 20),
+        ),
+      ];
+      expect(detector.emRepouso(timestamp: t, leiturasPassos: poucosPassos, treinos: []), isTrue);
+    });
+
+    test('an interval step sample that starts before the window still counts (no longer leaks as rest)', () {
+      final detector = BiofeedbackStressDetector();
+      final t = DateTime(2026, 9, 20, 9, 15);
+      // Antes, só `timestamp` (09:00) era comparado com a janela 09:12:30–09:17:30 e a caminhada
+      // inteira passava despercebida.
+      final caminhada = [
+        HealthReading(
+          valor: 600,
+          timestamp: DateTime(2026, 9, 20, 9, 0),
+          fim: DateTime(2026, 9, 20, 9, 30),
+        ),
+      ];
+      expect(detector.emRepouso(timestamp: t, leiturasPassos: caminhada, treinos: []), isFalse);
+    });
+
+    test('an interval step sample entirely outside the window contributes nothing', () {
+      final detector = BiofeedbackStressDetector();
+      final t = DateTime(2026, 9, 20, 9, 15);
+      final antes = [
+        HealthReading(
+          valor: 900,
+          timestamp: DateTime(2026, 9, 20, 8, 0),
+          fim: DateTime(2026, 9, 20, 9, 10),
+        ),
+      ];
+      expect(detector.emRepouso(timestamp: t, leiturasPassos: antes, treinos: []), isTrue);
+    });
   });
 
   group('mediasEmRepouso', () {
@@ -341,6 +393,112 @@ void main() {
       expect(resultado, hasLength(14));
       expect(resultado.first.data, DateTime(2026, 7, 22)); // 21 foi podado
       expect(resultado.last.data, DateTime(2026, 8, 4));
+    });
+  });
+
+  group('detectar sem VFC (linha de base só de FC)', () {
+    List<DiaRepouso> historicoSoFc() => [
+          for (var i = 1; i <= 7; i++)
+            DiaRepouso(data: DateTime(2026, 9, 20 - i), mediaFcRepouso: 60 + (i % 3) * 2.0),
+        ];
+
+    test('linhaDeBase is null with fewer than 7 prior days', () {
+      final detector = BiofeedbackStressDetector();
+      final base = detector.linhaDeBase(
+        historico: historicoSoFc().sublist(0, 6),
+        hoje: DateTime(2026, 9, 20),
+      );
+      expect(base, isNull);
+    });
+
+    test('linhaDeBase has FC stats but no VFC when the history has no VFC', () {
+      final detector = BiofeedbackStressDetector();
+      final base = detector.linhaDeBase(historico: historicoSoFc(), hoje: DateTime(2026, 9, 20))!;
+      expect(base.dias, 7);
+      expect(base.temVfc, isFalse);
+      expect(base.fcMedia, closeTo(62.0, 0.01));
+      expect(base.fcDesvio, greaterThan(0));
+    });
+
+    test('VFC only enters the baseline when at least 7 prior days have it', () {
+      final detector = BiofeedbackStressDetector();
+      final historico = [
+        for (var i = 1; i <= 8; i++)
+          DiaRepouso(
+            data: DateTime(2026, 9, 20 - i),
+            mediaFcRepouso: 60,
+            mediaVfcRepouso: i <= 6 ? 45.0 : null,
+          ),
+      ];
+      final base = detector.linhaDeBase(historico: historico, hoje: DateTime(2026, 9, 20))!;
+      expect(base.temVfc, isFalse);
+      expect(
+        detector.usaVfc(mediaVfcRepousoHoje: 40, historico: historico, hoje: DateTime(2026, 9, 20)),
+        isFalse,
+      );
+    });
+
+    test('is calmo/elevado from FC alone with a 2σ margin when there is no VFC baseline', () {
+      final detector = BiofeedbackStressDetector();
+      final historico = historicoSoFc();
+      final base = detector.linhaDeBase(historico: historico, hoje: DateTime(2026, 9, 20))!;
+      final limiar15 = base.fcMedia + 1.5 * base.fcDesvio;
+      final limiar20 = base.fcMedia + 2.0 * base.fcDesvio;
+
+      // Entre 1,5σ e 2σ: com VFC seria "FC elevada", mas sem a confirmação da VFC ainda é calmo.
+      expect(
+        detector.detectar(
+          mediaFcRepousoHoje: (limiar15 + limiar20) / 2,
+          mediaVfcRepousoHoje: null,
+          historico: historico,
+          hoje: DateTime(2026, 9, 20),
+        ),
+        EstadoEstresse.calmo,
+      );
+      expect(
+        detector.detectar(
+          mediaFcRepousoHoje: limiar20 + 0.1,
+          mediaVfcRepousoHoje: null,
+          historico: historico,
+          hoje: DateTime(2026, 9, 20),
+        ),
+        EstadoEstresse.elevado,
+      );
+    });
+
+    test('falls back to FC alone when the baseline has VFC but today has none yet', () {
+      final detector = BiofeedbackStressDetector();
+      final historico = [
+        for (var i = 1; i <= 7; i++)
+          DiaRepouso(
+            data: DateTime(2026, 9, 20 - i),
+            mediaFcRepouso: 60 + (i % 3) * 2.0,
+            mediaVfcRepouso: 45 + (i % 2) * 4.0,
+          ),
+      ];
+      final base = detector.linhaDeBase(historico: historico, hoje: DateTime(2026, 9, 20))!;
+      expect(base.temVfc, isTrue);
+      final estado = detector.detectar(
+        mediaFcRepousoHoje: base.fcMedia + 2.5 * base.fcDesvio,
+        mediaVfcRepousoHoje: null,
+        historico: historico,
+        hoje: DateTime(2026, 9, 20),
+      );
+      expect(estado, EstadoEstresse.elevado);
+    });
+  });
+
+  group('atualizarHistorico sem VFC', () {
+    test('records the day with FC alone, leaving VFC null', () {
+      final detector = BiofeedbackStressDetector();
+      final atualizado = detector.atualizarHistorico(
+        historicoAtual: const [],
+        hoje: DateTime(2026, 9, 20, 15),
+        mediaFcRepousoHoje: 63,
+        mediaVfcRepousoHoje: null,
+      );
+      expect(atualizado.single.mediaFcRepouso, 63);
+      expect(atualizado.single.mediaVfcRepouso, isNull);
     });
   });
 }

@@ -8,8 +8,10 @@ class BiofeedbackSummaryCalculator {
     required List<HealthReading> leiturasVfc,
     required DateTime agora,
   }) {
+    final maisRecente = _maisRecente(leiturasFc);
     return BiofeedbackSummary(
-      ultimaFc: _ultimoValor(leiturasFc),
+      ultimaFc: maisRecente?.valor,
+      ultimaFcEm: maisRecente?.timestamp,
       mediaFcHoje: _media(leiturasFc),
       mediaVfcHoje: _media(leiturasVfc),
       // Placeholder: `BiofeedbackSyncService` sobrescreve com o estado real detectado. O cálculo
@@ -19,12 +21,9 @@ class BiofeedbackSummaryCalculator {
     );
   }
 
-  double? _ultimoValor(List<HealthReading> leituras) {
+  HealthReading? _maisRecente(List<HealthReading> leituras) {
     if (leituras.isEmpty) return null;
-    final maisRecente = leituras.reduce(
-      (a, b) => a.timestamp.isAfter(b.timestamp) ? a : b,
-    );
-    return maisRecente.valor;
+    return leituras.reduce((a, b) => a.timestamp.isAfter(b.timestamp) ? a : b);
   }
 
   double? _media(List<HealthReading> leituras) {

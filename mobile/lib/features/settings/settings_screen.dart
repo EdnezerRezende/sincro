@@ -362,6 +362,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref.read(biofeedbackCacheProvider).clear();
       ref.invalidate(biofeedbackAtivoProvider);
       ref.invalidate(biofeedbackResumoProvider);
+      ref.invalidate(biofeedbackSerieDiaProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Biofeedback desativado.')));
       }

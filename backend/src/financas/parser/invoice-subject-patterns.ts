@@ -43,6 +43,10 @@ const SETTLED_PAYMENT_SUBJECT_PATTERNS = [
   /fatura\s.{0,35}confirmad[oa]/i,
   /\bfoi\s+pag[ao]\b/i,
   /\bfatura\s+pag[ao]\b/i,
+  // "fatura já paga", "fatura anterior, totalmente paga", "fatura atual está paga": até 3 palavras
+  // de um conjunto fechado entre "fatura" e "pag[ao]" — "ainda não" fica fora do conjunto de
+  // propósito, para que "fatura ainda não paga" continue NÃO liquidada.
+  /\bfatura,?\s+(?:(?:j[áa]|anterior|atual|passada|totalmente|integralmente|est[áa]|foi),?\s+){1,3}pag[ao]\b/i,
   /\bquitad[ao]\b/i,
   /recibo\s+de\s+pagamento/i,
   /comprovante\s+de\s+pagamento/i,
@@ -90,7 +94,50 @@ function normalize(text: string | null | undefined): string {
 
 export function isCardInvoiceSubject(assunto: string): boolean {
   const normalized = normalize(assunto);
-  return CARD_INVOICE_SUBJECT_PATTERNS.some((pattern) => pattern.test(normalized));
+  return CARD_INVOICE_SUBJECT_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
+  );
+}
+
+const UB =
+  '(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))';
+/** Verbo/estado de ciclo de cobrança ATIVO (fechou/chegou/disponível/vence/em aberto/ainda não
+ *  paga...). Só formas VERBAIS: o substantivo "vencimento" fica de fora, porque "Comprovante de
+ *  pagamento: R$ 120,00 - vencimento 05/10" é recibo, não cobrança. Mesmos radicais do S1a/S2 do
+ *  detector — precisa acompanhar quando eles mudarem. */
+const ACTIVE_BILLING_RE = new RegExp(
+  `${UB}(?:fechou|fechada|chegou|dispon[ií]ve(?:l|is)|gerad[oa]s?|emitid[oa]s?|em atraso|pendente|em aberto|at[ée] (?:o )?dia \\d|venc(?:e|em|eu|endo|er[áa]|id[oa]s?)|(?:ainda )?n[ãa]o (?:foi |est[áa] |estava )?paga)${UB}`,
+  'iu',
+);
+/** A oração ativa precisa nomear o documento ou o próximo ciclo: "veja o extrato disponível" tem
+ *  verbo de ciclo mas é o EXTRATO que está disponível — a fatura foi paga. */
+const BILLING_SUBJECT_RE = new RegExp(
+  `${UB}(?:faturas?|boletos?|carnês?|cobran[çc]as?|mensalidades?|parcelas?|pr[óo]ximas?|novas?|atual|atuais)${UB}`,
+  'iu',
+);
+/** Separadores de oração para a checagem de cobrança vigente: além de . ! ? ; : , e travessão,
+ *  hífen/barra cercados de espaço e parênteses/colchetes ("Fatura paga - a próxima vence dia 10",
+ *  "Fatura paga (a próxima já está disponível)"). */
+const ACTIVE_CLAUSE_SPLIT_RE = /[.!?;:,—–()[\]]+|\s[-/]\s|\n+/;
+
+export function hasActiveBillingClause(text: string): boolean {
+  return normalize(text)
+    .split(ACTIVE_CLAUSE_SPLIT_RE)
+    .some(
+      (clause) =>
+        !isSettledPaymentSubject(clause) &&
+        ACTIVE_BILLING_RE.test(clause) &&
+        BILLING_SUBJECT_RE.test(clause),
+    );
+}
+
+/** "Fatura anterior paga. Fatura de outubro disponível": a 1ª oração é liquidação, a 2ª anuncia a
+ *  cobrança vigente. O veto de "pagamento já feito" só vale quando NENHUMA outra oração traz
+ *  cobrança vigente. É a checagem que a triagem, a evidência negativa do parser (assunto e corpo) e
+ *  o classificador heurístico usam — se uma delas olhasse o texto inteiro, as outras seriam letra
+ *  morta. */
+export function isSettledWithoutActiveBilling(text: string): boolean {
+  return isSettledPaymentSubject(text) && !hasActiveBillingClause(text);
 }
 
 export function isSettledPaymentSubject(text: string): boolean {

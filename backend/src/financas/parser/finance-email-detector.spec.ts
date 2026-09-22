@@ -88,6 +88,19 @@ describe('triagem — sinais fortes', () => {
       'S3',
     ],
     ["Sam's Club <fatura_digital@cartaosamsclub.com.br>", 'Confira!', 'S3'],
+    [
+      'Nubank <todomundo@nubank.com.br>',
+      'Extrato da fatura do Cartão Nubank',
+      'S1c',
+    ],
+    ['Banco X <no-reply@bancox.com.br>', 'Seu extrato de fatura chegou', 'S1c'],
+    ['Nubank <todomundo@nubank.com.br>', 'Extrato da sua fatura', 'S1c'],
+    [
+      'Banco X <no-reply@bancox.com.br>',
+      'Fatura do cartão — extrato em anexo',
+      'S1c',
+    ],
+    ['Banco X <no-reply@bancox.com.br>', 'Fatura: extrato disponível', 'S1c'],
   ])('%s / %s → forte por %s', (r, a, sinal) => {
     expect(t(r, a)).toMatchObject({ nivel: 'forte', sinais: [sinal] });
   });
@@ -143,9 +156,224 @@ describe('triagem — sinais fortes', () => {
   });
 });
 
+describe('triagem — S1c (extrato da fatura) não fura os demais vetos', () => {
+  const nubank = 'Nubank <todomundo@nubank.com.br>';
+  it.each([
+    ['veto brando', 'Saiba ler o extrato da sua fatura'],
+    ['veto brando', 'Descubra o extrato da fatura digital'],
+    ['veto brando', 'Entenda o extrato da sua fatura'],
+    ['veto brando', 'Novidades no extrato da fatura'],
+    ['veto brando', 'Conheça o novo extrato da fatura'],
+    ['veto brando', 'Dica: o extrato da fatura mudou'],
+    ['veto brando', 'Aproveite o novo extrato da fatura'],
+    ['já paga', 'Extrato da fatura já paga'],
+    ['já paga', 'Extrato da fatura anterior, totalmente paga'],
+    ['fidelidade', 'Extrato de pontos Livelo para abater na fatura'],
+    ['informe de rendimentos', 'Extrato para IR e fatura de 2025'],
+    ['informe de rendimentos', 'Extrato de rendimentos da fatura'],
+    [
+      'informe de rendimentos',
+      'Informe de rendimentos: extrato consolidado da fatura anual',
+    ],
+    ['investimento', 'Extrato do seu investimento e a fatura'],
+    ['recompensas', 'Extrato da fatura do programa de recompensas'],
+    ['IRPF', 'Extrato da fatura para o IRPF'],
+    ['IRPF', 'Extratos das faturas de 2025 — IRPF'],
+    ['fidelidade', 'Extrato da fatura Livelo'],
+    ['previdência', 'Extrato da fatura da sua previdência privada'],
+    ['fundo', 'Extrato da fatura do seu fundo'],
+    ['dividendos', 'Extrato da fatura e dos seus dividendos'],
+    ['clube', 'Extrato da fatura do seu clube de vantagens'],
+    ['conta + marketing', 'Extrato da conta: parcele sua fatura em 12x'],
+    [
+      'informe de rendimentos',
+      'Informe de rendimentos: extrato da fatura anual',
+    ],
+    [
+      'informe de rendimentos',
+      'Informe de rendimentos: extrato da fatura 2025',
+    ],
+    ['IR', 'Extratos das faturas de 2025 para IR'],
+    ['IR', 'Extrato da fatura anual para o Imposto de Renda'],
+    ['declaração', 'Extrato das faturas do ano para sua declaração'],
+    ['rendimentos', 'Extrato da fatura de rendimentos'],
+    ['investimento', 'Extrato da fatura do seu investimento'],
+    ['pontos', 'Extrato da fatura de pontos Livelo'],
+    ['milhas', 'Extrato da fatura: suas milhas do mês'],
+  ])('%s: %s → nao', (_motivo, assunto) => {
+    expect(t(nubank, assunto).nivel).toBe('nao');
+  });
+  it('fatura ainda não paga continua sendo cobrança', () => {
+    expect(t(nubank, 'Extrato da fatura ainda não paga').nivel).toBe('forte');
+  });
+  it.each([
+    ['A fatura do seu cartão Nubank está fechada. Confira o extrato', 'S1a'],
+    ['Sua fatura venceu — veja o extrato no app', 'S1a'],
+    ['Sua fatura ainda não foi paga: veja o extrato', 'S1a'],
+    ['Boleto disponível: confira também seu extrato', 'S2'],
+    ['Fatura por e-mail - Setembro/2026 (extrato anexo)', 'S1b'],
+  ])(
+    'veto de extrato cede a sinal forte do assunto: %s → %s',
+    (assunto, sinal) => {
+      expect(t(nubank, assunto)).toMatchObject({
+        nivel: 'forte',
+        sinais: [sinal],
+      });
+    },
+  );
+  it.each([
+    'Extrato da fatura vai ir por e-mail',
+    'EXTRATO DA FATURA VAI IR POR E-MAIL',
+    'Extrato da Fatura — Hora de IR ao app',
+  ])('sigla IR sem contexto fiscal não derruba: %s', (assunto) => {
+    expect(t(nubank, assunto).nivel).toBe('forte');
+  });
+  it.each([
+    ['Extratos das suas faturas', 'S1c'],
+    ['Extrato de suas faturas', 'S1c'],
+    ['Extrato das minhas faturas', 'S1c'],
+    ['Extrato desta fatura', 'S1c'],
+    ['Fatura e extrato do cartão disponíveis no app', 'S1c'],
+  ])(
+    'S1c aceita plural/possessivo/demonstrativo: %s → %s',
+    (assunto, sinal) => {
+      expect(t(nubank, assunto)).toMatchObject({
+        nivel: 'forte',
+        sinais: [sinal],
+      });
+    },
+  );
+  it.each([
+    'Lembrete: extrato e fatura de outubro',
+    'Fatura de outubro e extrato no app',
+    'Boleto e extrato de setembro',
+    'Extrato e fatura do consórcio de outubro',
+    'Extrato bancário e fatura de energia',
+  ])(
+    'extrato + documento de cobrança sem sinal forte cai em fraco (corpo decide): %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).toBe('fraco');
+    },
+  );
+  it.each([
+    'Entenda o que acontece quando a fatura fica em aberto',
+    'Descubra por que sua fatura está em aberto',
+    'Saiba o que fazer se a fatura ainda não foi paga',
+    'Novidades para quem tem a fatura em aberto',
+    'Dica: a fatura em aberto pode ser negociada',
+    'Conheça o novo jeito de pagar a fatura em aberto',
+    'Aproveite: a fatura ainda não foi paga, negocie agora',
+    'Saiba como negociar a fatura em atraso',
+  ])(
+    'verbo de marketing ANTES do S1a é cabeça, não cauda → nao: %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).toBe('nao');
+    },
+  );
+  it.each([
+    ['Fatura anterior paga. Fatura de outubro disponível', 'fraco'],
+    ['Fatura anterior paga: a atual vence dia 10', 'fraco'],
+  ])(
+    'liquidação de fatura anterior não veta a cobrança vigente: %s → %s',
+    (assunto, nivel) => {
+      expect(t(nubank, assunto).nivel).toBe(nivel);
+    },
+  );
+  it('tema fiscal anula o "documento de cobrança" (E7 não pode salvar "Informe de rendimentos e sua fatura anual")', () => {
+    expect(
+      t(nubank, 'Informe de rendimentos e sua fatura anual'),
+    ).toMatchObject({
+      nivel: 'fraco',
+      assuntoTemSubstantivoCobranca: true,
+      assuntoTemDocumentoDeCobranca: false,
+    });
+  });
+  it.each([
+    'Sua fatura foi paga. A próxima está em aberto',
+    'Fatura quitada! A próxima já está em aberto',
+    'Fatura anterior paga. A nova fatura ainda não foi paga',
+    'Fatura quitada. Boleto de outubro emitido',
+    'Fatura, já paga, e a próxima em aberto',
+  ])(
+    'CICLO acompanha S1a/S2 — cobrança vigente após liquidação não vira nao: %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).not.toBe('nao');
+    },
+  );
+  it.each([
+    'Sua fatura não paga juros no parcelamento',
+    'Com a Nu, a fatura não paga tarifa',
+    'A fatura não paga anuidade',
+  ])(
+    '"não paga" como VERBO (juros/tarifa) não é cobrança em aberto: %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).not.toBe('forte');
+    },
+  );
+  it.each([
+    'Extrato da fatura para declarar',
+    'Extrato das faturas de 2025 para declarar',
+    'Extrato da fatura para a Receita Federal',
+    'Extrato da fatura: guarde para declarar',
+    'Extrato da fatura para o leão',
+  ])('tema fiscal por flexão/sinônimo: %s → nao', (assunto) => {
+    expect(t(nubank, assunto).nivel).toBe('nao');
+  });
+  it.each([
+    'Declaração anual: extrato e fatura',
+    'Extrato, boleto e informe de rendimentos',
+  ])(
+    'decisão explícita: tema fiscal VENCE o documento de cobrança → nao (não fraco): %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).toBe('nao');
+    },
+  );
+  it.each([
+    'Sua fatura foi paga: veja o extrato disponível',
+    'Sua fatura do cartão está quitada — extrato disponível',
+    'Fatura paga: extrato disponível',
+    'Fatura quitada, obrigado! Extrato disponível',
+    'Comprovante de pagamento: R$ 120,00 - vencimento 05/10/2026',
+    'Pagamento confirmado: boleto com vencimento em 05/10',
+    'Comprovante de pagamento — fatura com vencimento em 10/10/2026',
+    'Pagamento da fatura confirmado, vencimento 10/10',
+  ])(
+    'recibo com "extrato disponível"/"vencimento" na oração vizinha continua nao: %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).toBe('nao');
+    },
+  );
+  it.each([
+    'Fatura paga - a próxima vence dia 10',
+    'Fatura paga (a próxima já está disponível)',
+    'Fatura anterior paga / a atual vence dia 10',
+    'Pagamento recebido! Nova fatura emitida',
+    'Recebemos seu pagamento. Sua fatura de outubro já está disponível',
+  ])(
+    'separadores completos e vetos por oração — cobrança vigente não vira nao: %s',
+    (assunto) => {
+      expect(t(nubank, assunto).nivel).not.toBe('nao');
+    },
+  );
+  it('"Parcele sua fatura em 12x" é marketing', () => {
+    expect(t(nubank, 'Parcele sua fatura em 12x').nivel).toBe('nao');
+  });
+  it('assuntoTemDocumentoDeCobranca é mais estreito que o substantivo genérico', () => {
+    expect(t(nubank, 'Relatório anual do seu consórcio')).toMatchObject({
+      assuntoTemSubstantivoCobranca: true,
+      assuntoTemDocumentoDeCobranca: false,
+    });
+    expect(t(nubank, 'Boleto da mensalidade')).toMatchObject({
+      assuntoTemDocumentoDeCobranca: true,
+    });
+  });
+});
+
 describe('triagem — vetos duros', () => {
   it.each([
     'Seu extrato da conta Nu Empresas',
+    'Extrato da sua conta do Nubank',
+    'Extrato bancário de agosto',
     'O cadastro do seu Débito automático foi cadastrado',
     'Seu recibo de pedido',
     'Seu pedido foi enviado',

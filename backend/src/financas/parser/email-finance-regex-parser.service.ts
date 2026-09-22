@@ -15,8 +15,9 @@ import {
 import { resolverInstituicao } from './institution-map';
 import { isCardInvoiceSubject } from './invoice-subject-patterns';
 
-/** Sobe a cada mudança de regra; `EmailSummary.parserFinancasVersao < FINANCE_PARSER_VERSION` é reprocessado. */
-export const FINANCE_PARSER_VERSION = 2;
+/** Sobe a cada mudança de regra; `EmailSummary.parserFinancasVersao < FINANCE_PARSER_VERSION` é reprocessado.
+ *  v3: S1c ("extrato da fatura" é cobrança) + E7 (anexo CSV/XLS/XLSX como evidência). */
+export const FINANCE_PARSER_VERSION = 3;
 export const CABECA_TIPO = 600;
 
 export type TipoLancamentoParser = 'DESPESA' | 'FATURA_CARTAO';
@@ -28,6 +29,11 @@ export interface ParsedLancamento {
   dataVencimento: Date;
   dataEncontrada: boolean;
   codigoBarras: string | null;
+}
+export interface ResultadoParse {
+  lancamento: ParsedLancamento | null;
+  /** Preenchido quando `lancamento` é null. */
+  motivo: string | null;
 }
 export interface ParseParams {
   remetente: string;
@@ -59,20 +65,44 @@ const PRODUTO_NAO_CARTAO_RE = wb(
 );
 
 /** Orientado à `triagem()` de `finance-email-detector.ts`: `forte` sempre gera lançamento (salvo
- *  evidência negativa no corpo); `fraco` só gera com evidência de cobrança suficiente (E1–E6). O
+ *  evidência negativa no corpo); `fraco` só gera com evidência de cobrança suficiente (E1–E7). O
  *  `INSTITUTION_MAP` (via `resolverInstituicao`) é só enriquecimento — nome/tipoPadrão — nunca a
  *  porta de entrada da detecção. */
 @Injectable()
 export class EmailFinanceRegexParserService {
   parse(p: ParseParams): ParsedLancamento | null {
-    if (p.triagem.nivel === 'nao') return null;
+    return this.parseDetalhado(p).lancamento;
+  }
+
+  /** Mesmo que `parse`, mas diz POR QUE recusou — é o que vai para a linha de auditoria do
+   *  FinanceEmailProcessor ("evidência negativa no corpo" e "sinal fraco sem evidência" são
+   *  diagnósticos opostos: no primeiro o e-mail é cobrança já resolvida; no segundo, provavelmente
+   *  nem é cobrança). */
+  parseDetalhado(p: ParseParams): ResultadoParse {
+    if (p.triagem.nivel === 'nao')
+      return { lancamento: null, motivo: 'triagem nao' };
     const marcado = p.triagem.sinais.includes('S4');
     const corpo = normalizar(p.corpo);
-    if (!marcado && temEvidenciaNegativa(corpo, p.assunto)) return null;
+    if (!marcado && temEvidenciaNegativa(corpo, p.assunto))
+      return {
+        lancamento: null,
+        motivo:
+          'evidência negativa no corpo (pagamento já feito, pix/estorno recebido...)',
+      };
     if (p.triagem.nivel === 'fraco') {
       const ev = evidenciasDeCobranca(corpo, p.anexos, p.recebidoEm);
-      if (!evidenciaSuficiente(ev, p.triagem.assuntoTemSubstantivoCobranca))
-        return null;
+      if (
+        !evidenciaSuficiente(
+          ev,
+          p.triagem.assuntoTemSubstantivoCobranca,
+          p.triagem.assuntoTemDocumentoDeCobranca,
+          p.triagem.assuntoTemTemaNaoCobranca,
+        )
+      )
+        return {
+          lancamento: null,
+          motivo: `sinal fraco sem evidência suficiente (encontradas: ${ev.size ? [...ev].sort().join(',') : 'nenhuma'})`,
+        };
     }
 
     const inst = resolverInstituicao(p.remetente, p.assunto);
@@ -81,13 +111,16 @@ export class EmailFinanceRegexParserService {
     const codigoBarras = extrairCodigoBarras(corpo);
 
     return {
-      tipo: this.decidirTipo(p.assunto, corpo, inst.tipoPadrao),
-      descricao: p.assunto.trim(),
-      instituicao: inst.nome,
-      valor,
-      dataVencimento: data.data ?? p.recebidoEm,
-      dataEncontrada: data.data !== null,
-      codigoBarras,
+      lancamento: {
+        tipo: this.decidirTipo(p.assunto, corpo, inst.tipoPadrao),
+        descricao: p.assunto.trim(),
+        instituicao: inst.nome,
+        valor,
+        dataVencimento: data.data ?? p.recebidoEm,
+        dataEncontrada: data.data !== null,
+        codigoBarras,
+      },
+      motivo: null,
     };
   }
 

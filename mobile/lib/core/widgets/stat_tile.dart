@@ -9,12 +9,17 @@ class StatTile extends StatelessWidget {
     required this.label,
     required this.value,
     this.unit,
+    this.caption,
     this.semanticsLabel,
   });
 
   final String label;
   final String value;
   final String? unit;
+
+  /// Linha curta abaixo do valor ("às 14:50", "pelo relógio"): qualifica o número sem competir
+  /// com ele. Opcional — sem caption o tile fica igual ao da prancha original.
+  final String? caption;
 
   /// Leitura por voz do tile inteiro (ex.: "Frequência cardíaca em repouso hoje: 68 bpm").
   final String? semanticsLabel;
@@ -65,6 +70,15 @@ class StatTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (caption != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  caption!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
             ],
           ),
         ),

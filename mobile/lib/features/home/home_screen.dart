@@ -936,6 +936,7 @@ Future<void> _ativarBiofeedback(BuildContext context, WidgetRef ref) async {
     // A sincronização acima também grava o histórico de repouso, que alimenta o contador
     // "(N de 7 dias)" da tela de detalhe.
     ref.invalidate(biofeedbackDiasNoHistoricoProvider);
+    ref.invalidate(biofeedbackSerieDiaProvider);
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

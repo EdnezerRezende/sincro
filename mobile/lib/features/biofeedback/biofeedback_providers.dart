@@ -8,6 +8,7 @@ import 'biofeedback_stress_detector.dart';
 import 'biofeedback_summary.dart';
 import 'biofeedback_summary_calculator.dart';
 import 'biofeedback_sync_service.dart';
+import 'serie_dia.dart';
 import '../onboarding/anamnese/anamnese_providers.dart' show sensoryProfileRepositoryProvider;
 import '../grounding_cards/grounding_cards_providers.dart' show groundingCardsRepositoryProvider;
 
@@ -45,6 +46,12 @@ final biofeedbackAtivoProvider = FutureProvider.autoDispose<bool>((ref) {
 
 final biofeedbackResumoProvider = FutureProvider.autoDispose<BiofeedbackSummary?>((ref) {
   return ref.watch(biofeedbackCacheProvider).getResumo();
+});
+
+/// Série de FC do dia (blocos de 5 min) gravada pela última sincronização; `null` antes da
+/// primeira. Pode ser de outro dia se o app foi aberto depois da meia-noite — a tela confere.
+final biofeedbackSerieDiaProvider = FutureProvider.autoDispose<SerieDia?>((ref) {
+  return ref.watch(biofeedbackCacheProvider).getSerieDia();
 });
 
 final biofeedbackDiasNoHistoricoProvider = FutureProvider.autoDispose<int>((ref) async {

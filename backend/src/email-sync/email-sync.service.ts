@@ -18,7 +18,9 @@ import { classificarErroGmail } from '../gmail/gmail-error.util';
 import { MARCADOR_NOME } from '../gmail/gmail-api-client.service';
 
 /** Tamanho do lote de reprocessamento (passo B) por usuário por ciclo — ver spec "Reprocessamento
- *  e escrita idempotente": com cron de 20 min, 500 summaries legados zeram em ~3h. */
+ *  e escrita idempotente". Com o cron do scheduler a cada 2 min, um bump de FINANCE_PARSER_VERSION
+ *  reavalia até 1.500 e-mails/hora por usuário (e uma linha de log por e-mail, no
+ *  FinanceEmailProcessor) até a fila zerar. */
 const LOTE_REPROCESSAMENTO = 50;
 
 /** Projeção usada nos dois métodos de listagem (`listarLegado` e `listarPagina`): só o que o

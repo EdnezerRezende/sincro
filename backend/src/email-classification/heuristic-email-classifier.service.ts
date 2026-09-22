@@ -5,7 +5,10 @@ import {
   EmailClassifier,
   EmailToClassify,
 } from './email-classifier.interface';
-import { isCardInvoiceSubject, isSettledPaymentSubject } from '../financas/parser/invoice-subject-patterns';
+import {
+  isCardInvoiceSubject,
+  isSettledWithoutActiveBilling,
+} from '../financas/parser/invoice-subject-patterns';
 
 // 'importante' is deliberately excluded: it's too broad to fix with a word boundary alone
 // ("informação importante" in a marketing footer is still a real match, just not a useful
@@ -19,7 +22,13 @@ import { isCardInvoiceSubject, isSettledPaymentSubject } from '../financas/parse
 // "fatura"+"cartão" check the finance parser uses — so a subject like "A fatura do seu cartão
 // chegou" still surfaces as needing attention even when it never says "vencimento"/"vence"
 // verbatim, without the false-positive blast radius of the bare noun.
-const PALAVRAS_CHAVE_URGENTES = ['urgente', 'prazo', 'vencimento', 'vence', 'ação necessária'];
+const PALAVRAS_CHAVE_URGENTES = [
+  'urgente',
+  'prazo',
+  'vencimento',
+  'vence',
+  'ação necessária',
+];
 const RESUMO_MAX_LENGTH = 100;
 
 function escapeRegExp(value: string): string {
@@ -34,13 +43,19 @@ function escapeRegExp(value: string): string {
  * character immediately before the match ('n') is a letter, so the lookbehind fails.
  */
 function containsWholeWord(text: string, phrase: string): boolean {
-  const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(phrase)}(?![\\p{L}\\p{N}])`, 'iu');
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}])${escapeRegExp(phrase)}(?![\\p{L}\\p{N}])`,
+    'iu',
+  );
   return pattern.test(text);
 }
 
 @Injectable()
 export class HeuristicEmailClassifier implements EmailClassifier {
-  async classify(email: EmailToClassify, _context: EmailClassificationContext): Promise<EmailClassification> {
+  async classify(
+    email: EmailToClassify,
+    _context: EmailClassificationContext,
+  ): Promise<EmailClassification> {
     // A settled-payment SUBJECT (e.g. "Recibo: pagamento da fatura confirmado") overrides
     // everything else, including the urgency-keyword list: a receipt is inherently non-urgent
     // regardless of what else the body mentions in passing (a next-cycle due date, a "vencimento"
@@ -48,12 +63,19 @@ export class HeuristicEmailClassifier implements EmailClassifier {
     // e-mails routinely carry conditional/boilerplate phrasing in the body ("caso o pagamento já
     // tenha sido confirmado, desconsidere", "o comprovante de pagamento fica disponível por 90
     // dias") that would wrongly veto a genuinely pending invoice if the body were scanned too.
-    if (isSettledPaymentSubject(email.assunto)) {
-      return { categoria: 'PODE_ESPERAR', resumoCurto: this.truncate(email.assunto) };
+    // Por oração: "Fatura anterior paga. Fatura de outubro disponível" anuncia uma cobrança
+    // vigente — o parser cria lançamento pendente para ele; aqui não pode virar PODE_ESPERAR.
+    if (isSettledWithoutActiveBilling(email.assunto)) {
+      return {
+        categoria: 'PODE_ESPERAR',
+        resumoCurto: this.truncate(email.assunto),
+      };
     }
 
     const temPalavraChave = PALAVRAS_CHAVE_URGENTES.some(
-      (palavra) => containsWholeWord(email.assunto, palavra) || containsWholeWord(email.corpo, palavra),
+      (palavra) =>
+        containsWholeWord(email.assunto, palavra) ||
+        containsWholeWord(email.corpo, palavra),
     );
     // Checked on the SUBJECT only, never the body: a promotional footer routinely contains the
     // phrase ("parcele no cartão... fatura do seu cartão, sem juros") without the e-mail being
@@ -61,7 +83,10 @@ export class HeuristicEmailClassifier implements EmailClassifier {
     const ehFaturaDeCartaoPendente = isCardInvoiceSubject(email.assunto);
 
     return {
-      categoria: temPalavraChave || ehFaturaDeCartaoPendente ? 'PRECISA_ATENCAO' : 'PODE_ESPERAR',
+      categoria:
+        temPalavraChave || ehFaturaDeCartaoPendente
+          ? 'PRECISA_ATENCAO'
+          : 'PODE_ESPERAR',
       resumoCurto: this.truncate(email.assunto),
     };
   }

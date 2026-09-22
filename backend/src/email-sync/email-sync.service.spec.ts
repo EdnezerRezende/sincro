@@ -1,4 +1,5 @@
 import { EmailSyncService, codificarCursor } from './email-sync.service';
+import { FINANCE_PARSER_VERSION } from '../financas/parser/email-finance-regex-parser.service';
 
 function buildDeps() {
   const prisma = {
@@ -743,7 +744,7 @@ describe('EmailSyncService', () => {
       expect(deps.prisma.emailSummary.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           labelIds: ['INBOX'],
-          parserFinancasVersao: 2,
+          parserFinancasVersao: FINANCE_PARSER_VERSION,
           parserFinancasTentativas: 0,
         }),
       });
@@ -858,7 +859,7 @@ describe('EmailSyncService', () => {
           userId: 'u1',
           OR: [
             { parserFinancasVersao: null },
-            { parserFinancasVersao: { lt: 2 } },
+            { parserFinancasVersao: { lt: FINANCE_PARSER_VERSION } },
           ],
         },
         orderBy: [{ parserFinancasTentativas: 'asc' }, { recebidoEm: 'desc' }],
@@ -867,7 +868,7 @@ describe('EmailSyncService', () => {
       expect(deps.prisma.emailSummary.update).toHaveBeenCalledWith({
         where: { id: 's1' },
         data: {
-          parserFinancasVersao: 2,
+          parserFinancasVersao: FINANCE_PARSER_VERSION,
           parserFinancasTentativas: 0,
           labelIds: [],
         },
@@ -967,7 +968,7 @@ describe('EmailSyncService', () => {
       expect(deps.prisma.emailSummary.update).toHaveBeenCalledWith({
         where: { id: 's1' },
         data: {
-          parserFinancasVersao: 2,
+          parserFinancasVersao: FINANCE_PARSER_VERSION,
           parserFinancasTentativas: 0,
           labelIds: [],
         },

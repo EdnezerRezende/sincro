@@ -10,6 +10,11 @@ import 'package:sincro_mobile/features/biofeedback/biofeedback_sync_service.dart
 import 'package:sincro_mobile/features/biofeedback/dia_repouso.dart';
 import 'package:sincro_mobile/features/biofeedback/estado_estresse.dart';
 import 'package:sincro_mobile/features/biofeedback/health_reading.dart';
+import 'package:sincro_mobile/features/biofeedback/linha_de_base.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+import 'package:sincro_mobile/features/biofeedback/serie_dia.dart';
 import 'package:sincro_mobile/features/biofeedback/treino_intervalo.dart';
 import 'package:sincro_mobile/features/grounding_cards/grounding_card.dart';
 import 'package:sincro_mobile/features/grounding_cards/grounding_cards_repository.dart';
@@ -29,10 +34,14 @@ class FakeGroundingCard extends Fake implements GroundingCard {}
 
 class FakeBiofeedbackSummary extends Fake implements BiofeedbackSummary {}
 
+class FakeSerieDia extends Fake implements SerieDia {}
+
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeBiofeedbackSummary());
     registerFallbackValue(FakeGroundingCard());
+    registerFallbackValue(FakeSerieDia());
+    registerFallbackValue((inicio: DateTime(2000), fim: DateTime(2000)));
   });
 
   BiofeedbackSyncService buildService(
@@ -52,10 +61,17 @@ void main() {
     List<GroundingCard> respiracaoAtivosSugeridos = const [],
     List<GroundingCard> todosAtivosSugeridos = const [],
     bool falharBuscaDeCards = false,
+    DateTime? ultimoPreenchimento,
   }) {
     when(() => healthService.solicitarPermissao()).thenAnswer((_) async => true);
-    when(() => healthService.lerPassosHoje()).thenAnswer((_) async => passos);
-    when(() => healthService.lerTreinosHoje()).thenAnswer((_) async => treinos);
+    when(() => healthService.lerPassos(any())).thenAnswer((_) async => passos);
+    when(() => healthService.lerTreinos(any())).thenAnswer((_) async => treinos);
+    when(() => healthService.lerFrequenciaRepousoNativa(any())).thenAnswer((_) async => null);
+    when(() => cache.setSerieDia(any())).thenAnswer((_) async {});
+    // Por padrão o preenchimento retroativo roda, mas as leituras mockadas são só de hoje — nenhum
+    // dia anterior ganha entrada. Os testes que o exercitam de verdade passam leituras de outros dias.
+    when(() => cache.getUltimoPreenchimento()).thenAnswer((_) async => ultimoPreenchimento);
+    when(() => cache.setUltimoPreenchimento(any())).thenAnswer((_) async {});
     when(() => cache.isAtivo()).thenAnswer((_) async => ativo);
     when(() => cache.getPermissoesVersao()).thenAnswer((_) async => permissoesVersao);
     when(() => cache.setPermissoesVersao(any())).thenAnswer((_) async {});
@@ -108,10 +124,10 @@ void main() {
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
     final agora = DateTime(2026, 8, 3, 15, 0);
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -140,10 +156,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -174,8 +190,8 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer((_) async => []);
+    when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => []);
     final service = buildService(
       healthService,
       cache,
@@ -203,10 +219,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -237,10 +253,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -269,10 +285,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -302,10 +318,10 @@ void main() {
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
     final agora = DateTime(2026, 8, 3, 15, 0);
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 80, timestamp: DateTime(2026, 8, 3, 9, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 45, timestamp: DateTime(2026, 8, 3, 9, 0))],
     );
     final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
@@ -325,8 +341,8 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer((_) async => []);
+    when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => []);
     final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
 
     await service.sincronizar(agora: DateTime(2026, 8, 3, 15, 0));
@@ -343,13 +359,13 @@ void main() {
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
     final agora = DateTime(2026, 8, 3, 15, 0);
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [
         HealthReading(valor: 70, timestamp: DateTime(2026, 8, 3, 8, 0)), // em repouso
         HealthReading(valor: 150, timestamp: DateTime(2026, 8, 3, 10, 0)), // durante treino
       ],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [
         HealthReading(valor: 45, timestamp: DateTime(2026, 8, 3, 8, 0)), // em repouso
         HealthReading(valor: 15, timestamp: DateTime(2026, 8, 3, 10, 0)), // durante treino
@@ -390,10 +406,10 @@ void main() {
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
     final agora = DateTime(2026, 8, 3, 15, 0);
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 150, timestamp: DateTime(2026, 8, 3, 10, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 15, timestamp: DateTime(2026, 8, 3, 10, 0))],
     );
     final service = buildService(
@@ -421,10 +437,10 @@ void main() {
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
     final agora = DateTime(2026, 8, 3, 15, 0);
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -447,10 +463,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final favorito = GroundingCard(
@@ -491,10 +507,10 @@ void main() {
     final cache = MockBiofeedbackCache();
     final alertService = MockBiofeedbackAlertService();
     final sensoryProfileRepository = MockSensoryProfileRepository();
-    when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer(
+    when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
       (_) async => [HealthReading(valor: 110, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
-    when(() => healthService.lerVariabilidadeHoje()).thenAnswer(
+    when(() => healthService.lerVariabilidade(any())).thenAnswer(
       (_) async => [HealthReading(valor: 20, timestamp: DateTime(2026, 8, 3, 8, 0))],
     );
     final service = buildService(
@@ -524,8 +540,8 @@ void main() {
 
   group('upgrade de permissões', () {
     void stubLeiturasVazias(MockBiofeedbackHealthService healthService) {
-      when(() => healthService.lerFrequenciaCardiacaHoje()).thenAnswer((_) async => []);
-      when(() => healthService.lerVariabilidadeHoje()).thenAnswer((_) async => []);
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer((_) async => []);
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => []);
     }
 
     test('requests the new permissions once for a user activated on an older version', () async {
@@ -569,7 +585,7 @@ void main() {
       // vazias para os tipos ainda não autorizados.
       verifyInOrder([
         () => healthService.solicitarPermissao(),
-        () => healthService.lerFrequenciaCardiacaHoje(),
+        () => healthService.lerFrequenciaCardiaca(any()),
       ]);
     });
 
@@ -647,6 +663,305 @@ void main() {
 
       verify(() => cache.setPermissoesVersao(BiofeedbackCache.versaoPermissoesAtual)).called(1);
       verify(() => cache.setResumo(any())).called(1);
+    });
+  });
+
+  group('preenchimento retroativo do histórico', () {
+    final agora = DateTime(2026, 9, 20, 15, 0);
+
+    /// 14 dias de leituras em repouso (3 por dia), sem VFC, mais as de hoje.
+    List<HealthReading> fcDeDuasSemanas() => [
+          for (var i = 0; i <= 14; i++)
+            for (final hora in [3, 9, 21])
+              HealthReading(
+                valor: 60 + (i % 4) * 2.0,
+                timestamp: DateTime(2026, 9, 20 - i, hora),
+              ),
+        ];
+
+    test('fills the missing prior days from the platform on the first sync, so the baseline is '
+        'ready immediately instead of "0 de 7 dias"', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      final leituras = fcDeDuasSemanas();
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer((_) async => leituras);
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+
+      await service.sincronizar(agora: agora);
+
+      final historico = verify(() => cache.setHistoricoRepouso(captureAny())).captured.single
+          as List<DiaRepouso>;
+      // 13 dias anteriores + hoje = a janela de 14 entradas.
+      expect(historico.length, 14);
+      expect(historico.first.data, DateTime(2026, 9, 7));
+      expect(historico.last.data, DateTime(2026, 9, 20));
+      expect(historico.every((d) => d.mediaVfcRepouso == null), isTrue);
+      final resumo = verify(() => cache.setResumo(captureAny())).captured.single
+          as BiofeedbackSummary;
+      expect(resumo.estadoEstresse, isNot(EstadoEstresse.coletandoDados));
+      expect(resumo.linhaDeBase, isNotNull);
+      // 13 dias preenchidos: o contador da tela não oscila na sincronização seguinte.
+      expect(resumo.linhaDeBase!.dias, 13);
+      expect(resumo.usaVfc, isFalse);
+      verify(() => cache.setUltimoPreenchimento(agora)).called(1);
+      // Uma leitura em lote por tipo (14 dias), além da de hoje.
+      verify(() => healthService.lerFrequenciaCardiaca(any())).called(2);
+    });
+
+    test('skips the batch read when the backfill already ran today', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      when(() => healthService.lerFrequenciaCardiaca(any()))
+          .thenAnswer((_) async => fcDeDuasSemanas());
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        ultimoPreenchimento: DateTime(2026, 9, 20, 8),
+      );
+
+      await service.sincronizar(agora: agora);
+
+      verify(() => healthService.lerFrequenciaCardiaca(any())).called(1);
+      verifyNever(() => cache.setUltimoPreenchimento(any()));
+      final historico = verify(() => cache.setHistoricoRepouso(captureAny())).captured.single
+          as List<DiaRepouso>;
+      expect(historico.length, 1);
+    });
+
+    test('does nothing when no prior day is missing', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      when(() => healthService.lerFrequenciaCardiaca(any()))
+          .thenAnswer((_) async => fcDeDuasSemanas());
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final completo = [
+        for (var i = 1; i <= 13; i++)
+          DiaRepouso(data: DateTime(2026, 9, 20 - i), mediaFcRepouso: 62),
+      ];
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        historico: completo,
+      );
+
+      await service.sincronizar(agora: agora);
+
+      verify(() => healthService.lerFrequenciaCardiaca(any())).called(1);
+      verifyNever(() => cache.getUltimoPreenchimento());
+    });
+
+    test('keeps the history and finishes the sync when the batch read fails', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      var chamadas = 0;
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer((_) async {
+        chamadas++;
+        if (chamadas == 2) throw Exception('Health Connect indisponível');
+        return [HealthReading(valor: 64, timestamp: DateTime(2026, 9, 20, 9))];
+      });
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+
+      await service.sincronizar(agora: agora);
+
+      verifyNever(() => cache.setUltimoPreenchimento(any()));
+      final historico = verify(() => cache.setHistoricoRepouso(captureAny())).captured.single
+          as List<DiaRepouso>;
+      expect(historico.length, 1);
+      verify(() => cache.setResumo(any())).called(1);
+    });
+  });
+
+  group('resumo fiel ao relógio', () {
+    final agora = DateTime(2026, 9, 20, 15, 0);
+
+    test('carries the latest reading with its time, min/max of the day and the native resting HR',
+        () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
+        (_) async => [
+          HealthReading(valor: 58, timestamp: DateTime(2026, 9, 20, 4)),
+          HealthReading(valor: 142, timestamp: DateTime(2026, 9, 20, 12, 10)),
+          HealthReading(valor: 71, timestamp: DateTime(2026, 9, 20, 14, 50)),
+        ],
+      );
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(
+        healthService,
+        cache,
+        alertService,
+        sensoryProfileRepository,
+        treinos: [
+          TreinoIntervalo(inicio: DateTime(2026, 9, 20, 12), fim: DateTime(2026, 9, 20, 12, 30)),
+        ],
+      );
+      when(() => healthService.lerFrequenciaRepousoNativa(any())).thenAnswer(
+        (_) async => HealthReading(valor: 55, timestamp: DateTime(2026, 9, 20, 6, 30)),
+      );
+
+      await service.sincronizar(agora: agora);
+
+      final resumo = verify(() => cache.setResumo(captureAny())).captured.single
+          as BiofeedbackSummary;
+      expect(resumo.ultimaFc, 71);
+      expect(resumo.ultimaFcEm, DateTime(2026, 9, 20, 14, 50));
+      expect(resumo.fcMinHoje, 58);
+      expect(resumo.fcMaxHoje, 142);
+      expect(resumo.fcRepousoNativa, 55);
+      expect(resumo.fcRepousoNativaEm, DateTime(2026, 9, 20, 6, 30));
+      // A média em repouso exclui o treino.
+      expect(resumo.mediaFcHoje, closeTo(64.5, 0.01));
+      final periodo = verify(() => healthService.lerFrequenciaRepousoNativa(captureAny()))
+          .captured
+          .single as ({DateTime inicio, DateTime fim});
+      expect(periodo.fim, agora);
+      expect(periodo.inicio, agora.subtract(const Duration(hours: 48)));
+
+      final serie = verify(() => cache.setSerieDia(captureAny())).captured.single as SerieDia;
+      expect(serie.pontos.length, 3);
+      expect(serie.pontos[1].emRepouso, isFalse);
+      expect(serie.pontos[0].emRepouso, isTrue);
+      expect(serie.dia, DateTime(2026, 9, 20));
+    });
+
+    test('a failing native resting-HR read leaves the field null and the sync completes', () async {
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
+        (_) async => [HealthReading(valor: 66, timestamp: DateTime(2026, 9, 20, 9))],
+      );
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+      when(() => healthService.lerFrequenciaRepousoNativa(any()))
+          .thenThrow(Exception('permissão negada'));
+
+      await service.sincronizar(agora: agora);
+
+      final resumo = verify(() => cache.setResumo(captureAny())).captured.single
+          as BiofeedbackSummary;
+      expect(resumo.fcRepousoNativa, isNull);
+      expect(resumo.ultimaFc, 66);
+    });
+  });
+
+  group('lacunas do crítico (rodada 1)', () {
+    test('a single step sample covering the whole day does not turn the day into activity', () {
+      final detector = BiofeedbackStressDetector();
+      final diaInteiro = [
+        HealthReading(
+          valor: 8000,
+          timestamp: DateTime(2026, 9, 19),
+          fim: DateTime(2026, 9, 20),
+        ),
+      ];
+      expect(
+        detector.emRepouso(
+          timestamp: DateTime(2026, 9, 19, 3),
+          leiturasPassos: diaInteiro,
+          treinos: [],
+        ),
+        isTrue,
+      );
+      // Uma amostra de até 1 h continua sendo atribuída proporcionalmente.
+      final umaHora = [
+        HealthReading(
+          valor: 600,
+          timestamp: DateTime(2026, 9, 19, 9),
+          fim: DateTime(2026, 9, 19, 10),
+        ),
+      ];
+      expect(
+        detector.emRepouso(
+          timestamp: DateTime(2026, 9, 19, 9, 30),
+          leiturasPassos: umaHora,
+          treinos: [],
+        ),
+        isFalse,
+      );
+    });
+
+    test('backfill dates its entries by calendar day even across a DST change', () async {
+      // 2026-03-08 é a virada do horário de verão em America/New_York; o teste força o cálculo
+      // com um `agora` logo depois dela. Sem fuso com DST na máquina o teste continua válido
+      // (as datas só precisam ser meia-noite local do dia certo).
+      final healthService = MockBiofeedbackHealthService();
+      final cache = MockBiofeedbackCache();
+      final alertService = MockBiofeedbackAlertService();
+      final sensoryProfileRepository = MockSensoryProfileRepository();
+      final agora = DateTime(2026, 3, 9, 15);
+      when(() => healthService.lerFrequenciaCardiaca(any())).thenAnswer(
+        (_) async => [
+          for (var i = 0; i <= 13; i++)
+            HealthReading(valor: 60, timestamp: DateTime(2026, 3, 9 - i, 3)),
+        ],
+      );
+      when(() => healthService.lerVariabilidade(any())).thenAnswer((_) async => const []);
+      final service = buildService(healthService, cache, alertService, sensoryProfileRepository);
+
+      await service.sincronizar(agora: agora);
+
+      final historico = verify(() => cache.setHistoricoRepouso(captureAny())).captured.single
+          as List<DiaRepouso>;
+      expect(historico.length, 14);
+      for (final d in historico) {
+        expect(d.data.hour, 0, reason: 'entrada ${d.data} deveria ser meia-noite local');
+      }
+      expect(historico.map((d) => d.data.day).toList(), [24, 25, 26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    });
+
+    test('a corrupted backfill stamp is treated as "never ran" instead of throwing', () async {
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      await SharedPreferencesAsync().setString(
+        'biofeedback_historico_preenchido_em',
+        'nao-e-data',
+      );
+      await SharedPreferencesAsync().setString('biofeedback_serie_dia', '{corrompido');
+      final cache = BiofeedbackCache();
+      expect(await cache.getUltimoPreenchimento(), isNull);
+      expect(await cache.getSerieDia(), isNull);
+    });
+
+    test('faixaRepousoFc uses the same margin that decided the state', () {
+      const base = LinhaDeBase(dias: 10, fcMedia: 60, fcDesvio: 2);
+      final comVfc = BiofeedbackSummary(
+        ultimaFc: null,
+        mediaFcHoje: null,
+        mediaVfcHoje: null,
+        linhaDeBase: base,
+        usaVfc: true,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime(2026, 9, 20),
+      );
+      final soFc = BiofeedbackSummary(
+        ultimaFc: null,
+        mediaFcHoje: null,
+        mediaVfcHoje: null,
+        linhaDeBase: base,
+        usaVfc: false,
+        estadoEstresse: EstadoEstresse.calmo,
+        atualizadoEm: DateTime(2026, 9, 20),
+      );
+      expect(comVfc.faixaRepousoFc, (minimo: 57.0, maximo: 63.0));
+      expect(soFc.faixaRepousoFc, (minimo: 56.0, maximo: 64.0));
     });
   });
 }

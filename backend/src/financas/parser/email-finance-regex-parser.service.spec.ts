@@ -39,7 +39,9 @@ describe('EmailFinanceRegexParserService.parse', () => {
     });
 
   it('exports the parser version', () =>
-    expect(FINANCE_PARSER_VERSION).toBe(2));
+    // Tripwire deliberado: quem sobe a versão precisa vir aqui e assumir que TODO o histórico
+    // sincronizado será reprocessado (custo: 1 chamada Gmail por e-mail elegível).
+    expect(FINANCE_PARSER_VERSION).toBe(3));
 
   describe('e-mails reais', () => {
     it('Nubank fatura fechada: forte, valor null, data inferida do "15 de setembro"', () => {
@@ -428,5 +430,93 @@ describe('EmailFinanceRegexParserService.parse', () => {
       });
       expect(r?.tipo).toBe('FATURA_CARTAO');
     });
+  });
+});
+
+describe('EmailFinanceRegexParserService — liquidação em outra oração, ponta a ponta', () => {
+  const service = new EmailFinanceRegexParserService();
+  const nubank = 'Nubank <todomundo@nubank.com.br>';
+  const corpo = 'Valor a pagar: R$ 120,00 · vencimento 10/10/2026';
+  const recebidoEm = new Date('2026-10-01T12:00:00Z');
+  const run = (assunto: string, anexos: AnexoMeta[] = []) =>
+    service.parseDetalhado({
+      remetente: nubank,
+      assunto,
+      corpo,
+      recebidoEm,
+      triagem: triagem(nubank, assunto, { marcado: false }),
+      anexos,
+    });
+  it.each([
+    'Fatura anterior paga. Fatura de outubro disponível',
+    'Fatura anterior paga: a atual vence dia 10',
+    'Pagamento confirmado. Sua próxima fatura chegou',
+    'Sua fatura foi paga; fatura de novembro disponível',
+  ])(
+    '%s + corpo com valor → lançamento (a regra não é letra morta)',
+    (assunto) => {
+      const r = run(assunto);
+      expect(r.motivo).toBeNull();
+      expect(r.lancamento).toMatchObject({ valor: 120, dataEncontrada: true });
+    },
+  );
+  it('"Sua fatura foi paga. Obrigado" continua sem lançamento', () => {
+    expect(run('Sua fatura foi paga. Obrigado').lancamento).toBeNull();
+  });
+  it('PDF com "fatura" no nome também não fura a trava fiscal (E6 em tema fiscal)', () => {
+    const assunto = 'Informe de rendimentos e sua fatura anual';
+    const r = service.parseDetalhado({
+      remetente: nubank,
+      assunto,
+      corpo: 'Seu informe está disponível no app. Rendimentos: R$ 4.320,00',
+      recebidoEm,
+      triagem: triagem(nubank, assunto, { marcado: false }),
+      anexos: [
+        {
+          filename: 'fatura-2025.pdf',
+          mimeType: 'application/pdf',
+          size: 10,
+          attachmentId: 'a',
+        },
+      ],
+    });
+    expect(r.lancamento).toBeNull();
+  });
+  it('liquidação no corpo, por oração: "Recebemos o pagamento da fatura anterior. A fatura de outubro já está disponível." gera lançamento', () => {
+    const assunto = 'A fatura do seu cartão Nubank está fechada';
+    const r = service.parseDetalhado({
+      remetente: nubank,
+      assunto,
+      corpo:
+        'Recebemos o pagamento da sua fatura anterior. A fatura de outubro já está disponível.\nValor a pagar: R$ 120,00\nVencimento: 10/10/2026',
+      recebidoEm,
+      triagem: triagem(nubank, assunto, { marcado: false }),
+      anexos: [],
+    });
+    expect(r.motivo).toBeNull();
+    expect(r.lancamento).toMatchObject({ valor: 120 });
+  });
+  it('planilha com "fatura" no nome não fura a trava fiscal (E6 não vale para planilha)', () => {
+    const r = service.parseDetalhado({
+      remetente: nubank,
+      assunto: 'Informe de rendimentos e sua fatura anual',
+      corpo: 'Seu informe está disponível no app.',
+      recebidoEm,
+      triagem: triagem(nubank, 'Informe de rendimentos e sua fatura anual', {
+        marcado: false,
+      }),
+      anexos: [
+        {
+          filename: 'fatura-2025.csv',
+          mimeType: 'text/csv',
+          size: 10,
+          attachmentId: 'a',
+        },
+      ],
+    });
+    expect(r.lancamento).toBeNull();
+    expect(r.motivo).toContain(
+      'sinal fraco sem evidência suficiente (encontradas: E7)',
+    );
   });
 });

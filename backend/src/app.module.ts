@@ -16,6 +16,7 @@ import { GroundingCardsModule } from './grounding-cards/grounding-cards.module';
 import { RagModule } from './rag/rag.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { EmailReplyModule } from './email-reply/email-reply.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { EmailReplyModule } from './email-reply/email-reply.module';
     RagModule,
     CalendarModule,
     EmailReplyModule,
+    WhatsappModule,
   ],
 })
 export class AppModule {}

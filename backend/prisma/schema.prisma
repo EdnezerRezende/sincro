@@ -17,6 +17,7 @@ model User {
   fcmToken        String?          @map("fcm_token")
   diaRecebimento  Int?             @map("dia_recebimento")
   isAdmin         Boolean          @default(false) @map("is_admin")
+  appBuild        Int?             @map("app_build")
   sensoryProfile  SensoryProfile?
   trustedContacts TrustedContact[]
   gmailConnection GmailConnection?
@@ -161,6 +162,7 @@ enum StatusLancamento {
 enum OrigemLancamento {
   EMAIL_PARSER
   MANUAL
+  WHATSAPP
 }
 
 model ContaFinanceira {
@@ -207,6 +209,7 @@ model LancamentoFinanceiro {
   origem          OrigemLancamento
   isPago          Boolean           @default(false) @map("is_pago")
   emailMessageId  String?           @map("email_message_id")
+  whatsappMessageId String?         @map("whatsapp_message_id")
   codigoBarras    String?           @map("codigo_barras")
   cartaoId        String?           @map("cartao_id")
   contaId         String?           @map("conta_id")
@@ -218,6 +221,7 @@ model LancamentoFinanceiro {
   conta           ContaFinanceira?  @relation(fields: [contaId], references: [id])
 
   @@unique([userId, emailMessageId])
+  @@unique([userId, whatsappMessageId])
   @@index([userId, status])
   @@index([userId, dataVencimento])
   @@map("lancamentos_financeiros")
@@ -255,4 +259,66 @@ model KnowledgeChunk {
 
   @@index([documentoId])
   @@map("knowledge_chunks")
+}
+
+// ========== WhatsApp Financas (Spec §6.2) ==========
+
+model WhatsappVinculo {
+  id                    String    @id @default(uuid())
+  userId                String    @unique @map("user_id")
+  telefoneHash          String?   @unique @map("telefone_hash")
+  telefoneCriptografado String?   @map("telefone_criptografado")
+  codigoHash            String?   @unique @map("codigo_hash")
+  codigoExpiraEm        DateTime? @map("codigo_expira_em")
+  avisoIndisponivelEm   DateTime? @map("aviso_indisponivel_em")
+  avisoAtualizarEm      DateTime? @map("aviso_atualizar_em")
+  verificadoEm          DateTime? @map("verificado_em")
+  criadoEm              DateTime  @default(now()) @map("criado_em")
+
+  @@map("whatsapp_vinculos")
+}
+
+model WhatsappRemetente {
+  telefoneHash        String    @id @map("telefone_hash")
+  falhas              Int       @default(0)
+  bloqueadoAte        DateTime? @map("bloqueado_ate")
+  avisoNaoVinculadoEm DateTime? @map("aviso_nao_vinculado_em")
+  ultimaMensagemEm    DateTime  @default(now()) @map("ultima_mensagem_em")
+
+  @@index([ultimaMensagemEm])
+  @@map("whatsapp_remetentes")
+}
+
+model WhatsappMensagem {
+  id                     String   @id @default(uuid())
+  wamid                  String   @unique
+  telefoneHash           String?  @map("telefone_hash")
+  userId                 String?  @map("user_id")
+  direcao                String
+  tipo                   String
+  textoCifrado           String?  @map("texto_cifrado")
+  lancamentoId           String?  @map("lancamento_id")
+  efeito                 String?
+  googleEventIdRemover   String?  @map("google_event_id_remover")
+  respostaWamid          String?  @map("resposta_wamid")
+  respostaPayloadCifrado String?  @map("resposta_payload_cifrado")
+  desfechoRascunho       String?  @map("desfecho_rascunho")
+  status                 String
+  tentativas             Int      @default(0)
+  criadoEm               DateTime @default(now()) @map("criado_em")
+
+  @@index([userId, criadoEm])
+  @@index([status, criadoEm])
+  @@map("whatsapp_mensagens")
+}
+
+model WhatsappConversaEstado {
+  userId   String   @id @map("user_id")
+  etapa    String
+  rascunho Json
+  expiraEm DateTime @map("expira_em")
+  versao   Int      @default(0)
+
+  @@index([expiraEm])
+  @@map("whatsapp_conversa_estado")
 }

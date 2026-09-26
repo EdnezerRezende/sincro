@@ -21,6 +21,11 @@ export class UsersController {
     return this.usersService.getOnboardingStatus(firebaseUid);
   }
 
+  @Get('me/features')
+  async getMyFeatures(@CurrentFirebaseUid() firebaseUid: string) {
+    return this.usersService.getFeatureFlags(firebaseUid);
+  }
+
   @Post('me/fcm-token')
   async registerFcmToken(@CurrentFirebaseUid() firebaseUid: string, @Body() dto: RegisterFcmTokenDto) {
     await this.usersService.registerFcmToken(firebaseUid, dto.fcmToken);

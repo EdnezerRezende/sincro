@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/ads/ads_consent.dart';
+import '../../core/ads/ads_service.dart';
 import '../auth/auth_providers.dart';
 import '../biofeedback/biofeedback_frequencia.dart';
 import '../biofeedback/biofeedback_providers.dart';
@@ -582,6 +584,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SectionCard(
             title: 'Conta',
             children: [
+              if (ref.watch(adsPrivacyOptionsRequiredProvider).value ?? false)
+                SectionRow(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacidade dos anúncios',
+                  subtitle: 'Rever suas escolhas de consentimento',
+                  enabled: !_busy,
+                  onTap: AdsConsent.showPrivacyOptions,
+                ),
               SectionRow(
                 icon: Icons.logout,
                 title: 'Sair',

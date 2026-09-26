@@ -4,12 +4,21 @@ import 'package:flutter/foundation.dart';
 
 /// IDs dos blocos de anúncio (Ad Units) do AdMob.
 ///
-/// Os IDs reais entram por `--dart-define` no build de release (ver `mobile/README.md`, seção
-/// "Anúncios (AdMob)"). Em debug/profile, sem o define, caímos nos IDs de teste oficiais do
-/// Google — nunca clique em anúncios reais durante o desenvolvimento (risco de suspensão da conta).
-/// Em release, sem o define, o formato fica simplesmente desligado: melhor não mostrar nada do que
-/// publicar um app servindo anúncios de teste.
+/// Build de release usa os blocos reais da conta AdMob do Sincro ([_prodIds]); debug/profile usa
+/// os IDs de teste oficiais do Google — nunca clique em anúncios reais durante o desenvolvimento
+/// (risco de suspensão da conta). Um `--dart-define=ADMOB_<FORMATO>_<PLATAFORMA>=...` sobrescreve
+/// ambos (ex.: para testar um bloco novo sem mudar o código). Ad Unit IDs não são segredos: vão
+/// embutidos no app publicado.
 enum AdFormat { banner, interstitial, rewarded }
+
+/// Blocos reais (AdMob → Apps → Sincro → Blocos de anúncios).
+/// App IDs: Android ca-app-pub-8203324650722374~1392959320 · iOS ca-app-pub-8203324650722374~6578012408
+/// (configurados em android/app/build.gradle.kts e ios/Flutter/*.xcconfig).
+const _prodIds = {
+  AdFormat.banner: (android: 'ca-app-pub-8203324650722374/5140632641', ios: 'ca-app-pub-8203324650722374/8429226687'),
+  AdFormat.interstitial: (android: 'ca-app-pub-8203324650722374/3827550970', ios: 'ca-app-pub-8203324650722374/1409446208'),
+  AdFormat.rewarded: (android: 'ca-app-pub-8203324650722374/2490504299', ios: 'ca-app-pub-8203324650722374/7575224298'),
+};
 
 /// IDs de teste públicos do Google (https://developers.google.com/admob/flutter/test-ads).
 const _testIds = {
@@ -36,14 +45,13 @@ const _definedIds = {
 /// Anúncios só existem no app nativo: o plugin não tem implementação web nem desktop.
 bool get adsSupportedPlatform => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
-/// Devolve o Ad Unit ID do [format] para a plataforma atual, ou `null` quando o formato não deve
-/// ser carregado (plataforma sem suporte ou release sem ID real configurado).
+/// Devolve o Ad Unit ID do [format] para a plataforma atual, ou `null` em plataforma sem suporte.
 String? adUnitIdFor(AdFormat format) {
   if (!adsSupportedPlatform) return null;
   final defined = Platform.isAndroid ? _definedIds[format]!.android : _definedIds[format]!.ios;
   if (defined.isNotEmpty) return defined;
-  if (kReleaseMode) return null;
-  return Platform.isAndroid ? _testIds[format]!.android : _testIds[format]!.ios;
+  final ids = kReleaseMode ? _prodIds[format]! : _testIds[format]!;
+  return Platform.isAndroid ? ids.android : ids.ios;
 }
 
 /// Hash do aparelho de teste para o UMP forçar o formulário de consentimento como se estivesse

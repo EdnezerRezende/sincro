@@ -69,22 +69,22 @@ busca de profissionais ou onboarding.
 
 ### IDs
 
-Em debug, sem configuração, são usados os IDs de **teste** do Google. Em release, um formato sem ID
-real fica desligado.
+Já estão no código: nenhum parâmetro extra de build é necessário.
 
-```bash
-flutter build appbundle --release \
-  --dart-define=ADMOB_BANNER_ANDROID=ca-app-pub-XXXX/1111 \
-  --dart-define=ADMOB_INTERSTITIAL_ANDROID=ca-app-pub-XXXX/2222 \
-  --dart-define=ADMOB_REWARDED_ANDROID=ca-app-pub-XXXX/3333
-# iOS: ADMOB_BANNER_IOS / ADMOB_INTERSTITIAL_IOS / ADMOB_REWARDED_IOS
-```
+| | Android | iOS |
+|---|---|---|
+| App ID | `ca-app-pub-8203324650722374~1392959320` | `ca-app-pub-8203324650722374~6578012408` |
+| Banner | `ca-app-pub-8203324650722374/5140632641` | `ca-app-pub-8203324650722374/8429226687` |
+| Intersticial | `ca-app-pub-8203324650722374/3827550970` | `ca-app-pub-8203324650722374/1409446208` |
+| Premiado | `ca-app-pub-8203324650722374/2490504299` | `ca-app-pub-8203324650722374/7575224298` |
 
-App ID (`ca-app-pub-XXXX~YYYY`):
-- **Android**: variável de ambiente `ADMOB_APP_ID_ANDROID` no build ou `admobAppId=` em
-  `android/key.properties` (fallback: App ID de teste).
-- **iOS**: crie `ios/Flutter/AdMob.xcconfig` (ignorado pelo git) com `ADMOB_APP_ID_IOS=...`
-  (fallback: App ID de teste, definido em `Debug.xcconfig`/`Release.xcconfig`).
+- Blocos: `lib/core/ads/ad_config.dart`. **Release** usa os blocos reais; **debug/profile** usa os
+  blocos de teste do Google (nunca clique nos anúncios reais). `--dart-define=ADMOB_BANNER_ANDROID=...`
+  (e equivalentes `_INTERSTITIAL_`, `_REWARDED_`, `_IOS`) sobrescreve os dois.
+- App ID Android: `android/app/build.gradle.kts` (sobrescrevível por `ADMOB_APP_ID_ANDROID` no
+  ambiente ou `admobAppId=` em `android/key.properties`).
+- App ID iOS: `ios/Flutter/Debug.xcconfig` e `Release.xcconfig` (sobrescrevível por
+  `ios/Flutter/AdMob.xcconfig`, fora do git).
 
 ### Consentimento (UMP)
 

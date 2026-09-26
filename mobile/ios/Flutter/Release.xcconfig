@@ -1,1 +1,5 @@
 #include "Generated.xcconfig"
+
+// AdMob App ID do Sincro (iOS). Um ios/Flutter/AdMob.xcconfig local (fora do git) pode sobrescrever.
+ADMOB_APP_ID_IOS=ca-app-pub-8203324650722374~6578012408
+#include? "AdMob.xcconfig"

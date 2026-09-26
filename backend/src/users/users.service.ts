@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureFlags, resolveFeatureFlags } from './feature-flags';
 
 @Injectable()
 export class UsersService {
@@ -46,5 +47,10 @@ export class UsersService {
   async updateDiaRecebimento(firebaseUid: string, diaRecebimento: number | null): Promise<void> {
     const user = await this.getByFirebaseUidOrThrow(firebaseUid);
     await this.prisma.user.update({ where: { id: user.id }, data: { diaRecebimento } });
+  }
+
+  async getFeatureFlags(firebaseUid: string): Promise<FeatureFlags> {
+    const user = await this.getByFirebaseUidOrThrow(firebaseUid);
+    return resolveFeatureFlags(user.plano);
   }
 }

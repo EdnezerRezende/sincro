@@ -64,5 +64,20 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- AdMob: App ID definido em Flutter/Debug.xcconfig / Release.xcconfig (ADMOB_APP_ID_IOS). -->
+		<key>GADApplicationIdentifier</key>
+		<string>$(ADMOB_APP_ID_IOS)</string>
+		<!-- Exibido pelo iOS se a mensagem de IDFA (ATT) for ativada no UMP do AdMob. -->
+		<key>NSUserTrackingUsageDescription</key>
+		<string>Usamos este identificador apenas para mostrar anúncios mais relevantes na versão gratuita do Sincro. Seus dados de saúde, e-mails e finanças nunca são compartilhados com anunciantes.</string>
+		<!-- Lista mínima (Google). Para mais redes/mediação, copie a lista completa de
+		     https://developers.google.com/admob/ios/3p-skadnetworks -->
+		<key>SKAdNetworkItems</key>
+		<array>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>cstr6suwn9.skadnetwork</string>
+			</dict>
+		</array>
 	</dict>
 </plist>

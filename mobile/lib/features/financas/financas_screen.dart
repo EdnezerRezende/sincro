@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_chip.dart';
+import '../../core/ads/sincro_banner_ad.dart';
 import '../calendar/calendar_providers.dart';
 import 'confirmar_lancamento_sheet.dart';
 import 'finance_providers.dart';
@@ -195,6 +196,8 @@ class _FinancasScreenState extends ConsumerState<FinancasScreen> {
           ),
         ],
       ),
+      // Banner no rodapé, controlado pelo feature toggle `ads.banner` (some sem deixar espaço).
+      bottomNavigationBar: const SincroBannerAd(),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [

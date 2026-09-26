@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/ads/ads_service.dart';
+import '../../core/ads/feature_flags.dart';
+import '../../core/ads/manual_sync_quota.dart';
+import '../../core/ads/rewarded_unlock_sheet.dart';
+import '../../core/ads/sincro_banner_ad.dart';
 import '../../core/revalidation.dart';
 import '../../core/theme.dart';
 import 'email_detail_screen.dart';
@@ -109,8 +114,13 @@ class _InboxScreenState extends ConsumerState<InboxScreen> with WidgetsBindingOb
   Future<void> _onRefresh() async {
     final repo = ref.read(emailSummaryRepositoryProvider);
     final notifier = ref.read(emailSummariesProvider.notifier);
+    if (!await _podeSincronizarManualmente()) {
+      await notifier.recarregar();
+      return;
+    }
     try {
       await repo.sincronizar();
+      _aoConcluirSincronizacao();
     } on DioException catch (e) {
       // 403 = Gmail não conectado (não é falta do escopo `gmail.modify`, que é tratado à parte em
       // arquivar/excluir): mostra o caminho de reconexão em vez de falhar em silêncio. Qualquer
@@ -122,6 +132,42 @@ class _InboxScreenState extends ConsumerState<InboxScreen> with WidgetsBindingOb
     } finally {
       await notifier.recarregar();
     }
+  }
+
+  // Cota de sincronizações manuais do plano gratuito (`limits.manualSyncsPerDay`, `null` =
+  // ilimitado — o padrão). Acabou a cota: oferece o anúncio premiado, que libera sincronizações
+  // ilimitadas por `ads.rewardedUnlockDuration`. Sem premiado disponível/ligado, só relê o cache.
+  Future<bool> _podeSincronizarManualmente() async {
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.fallback;
+    final quota = ref.read(manualSyncQuotaProvider);
+    if (await quota.tentarConsumir(flags.manualSyncsPerDay)) return true;
+    if (!mounted) return false;
+    if (!flags.ads.rewarded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Você usou todas as sincronizações manuais de hoje.')),
+      );
+      return false;
+    }
+    final ganhou = await mostrarDesbloqueioPremiado(
+      context,
+      titulo: 'Limite diário atingido',
+      beneficio: 'sincronizações ilimitadas',
+      duracao: flags.ads.rewardedUnlockDuration,
+    );
+    if (!ganhou) return false;
+    await quota.desbloquear(flags.ads.rewardedUnlockDuration);
+    return true;
+  }
+
+  // Ação de sucesso → confirmação + intersticial (se o toggle permitir e o último foi exibido há
+  // mais de `ads.interstitialMinInterval`, 3 min por padrão). Sem `await`: o puxar-para-atualizar
+  // termina normalmente e o anúncio, quando houver, aparece por cima da lista já atualizada.
+  void _aoConcluirSincronizacao() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sincronização concluída')),
+    );
+    unawaited(ref.read(adsServiceProvider).maybeShowInterstitial());
   }
 
   // Mesmo padrão de `_EmailTileState._mostrarReconectar`, com a cópia específica do refresh da
@@ -155,6 +201,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> with WidgetsBindingOb
         // da lista, que é o motivo de a pessoa estar nesta tela.
         actions: const [_GmailConnectionMenu()],
       ),
+      // Banner no rodapé, controlado pelo feature toggle `ads.banner` (some sem deixar espaço).
+      bottomNavigationBar: const SincroBannerAd(),
       body: RefreshIndicator(
         onRefresh: _onRefresh,
         child: summariesAsync.when(

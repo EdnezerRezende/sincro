@@ -48,6 +48,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // App ID do AdMob do Sincro (Android). Pode ser sobrescrito pelo ambiente de build ou por
+        // key.properties (`admobAppId=`). Usar o App ID real também em debug é o recomendado pelo
+        // Google; o que precisa ser de teste em debug são os blocos (ver lib/core/ads/ad_config.dart).
+        manifestPlaceholders["admobAppId"] =
+            System.getenv("ADMOB_APP_ID_ANDROID")
+                ?: (keystoreProperties["admobAppId"] as String?)
+                ?: "ca-app-pub-8203324650722374~1392959320"
     }
 
     signingConfigs {

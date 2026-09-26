@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/revalidation.dart';
 import '../../core/widgets/app_input.dart';
+import '../../core/ads/sincro_banner_ad.dart';
 import '../email_triage/email_triage_providers.dart';
 import '../email_triage/gmail_connection_repository.dart';
 import 'calendar_providers.dart';
@@ -108,6 +109,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           ),
         ],
       ),
+      // Banner no rodapé, controlado pelo feature toggle `ads.banner` (some sem deixar espaço).
+      bottomNavigationBar: const SincroBannerAd(),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showDialog<void>(
           context: context,

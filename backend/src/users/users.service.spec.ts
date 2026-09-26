@@ -185,3 +185,22 @@ describe('UsersService', () => {
     });
   });
 });
+
+describe('UsersService.getFeatureFlags', () => {
+  const originalEnv = process.env;
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('resolves the flags from the user plan', async () => {
+    process.env = { ...originalEnv, ADS_ENABLED: 'true' };
+    const prisma = buildPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', firebaseUid: 'fb1', plano: 'pro' });
+    const service = new UsersService(prisma as any);
+
+    const flags = await service.getFeatureFlags('fb1');
+
+    expect(flags.plano).toBe('pro');
+    expect(flags.ads.enabled).toBe(false);
+  });
+});

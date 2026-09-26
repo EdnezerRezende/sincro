@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FIREBASE_ADMIN } from '../auth/firebase-admin.provider';
 import type { FirebaseAdmin } from '../auth/firebase-admin.provider';
 import { GmailConnectionsService } from '../gmail/gmail-connections.service';
+import { FeatureFlags, resolveFeatureFlags } from './feature-flags';
 
 @Injectable()
 export class UsersService {
@@ -88,5 +89,10 @@ export class UsersService {
         }`,
       );
     }
+  }
+
+  async getFeatureFlags(firebaseUid: string): Promise<FeatureFlags> {
+    const user = await this.getByFirebaseUidOrThrow(firebaseUid);
+    return resolveFeatureFlags(user.plano);
   }
 }

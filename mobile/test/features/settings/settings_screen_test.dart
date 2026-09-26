@@ -1,12 +1,19 @@
 // Configurações na direção A: grupos em `SectionCard` com título 16 bold, linhas com ícone
 // tonal e o valor atual de cada preferência como subtítulo; funciona nos temas claro e escuro.
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sincro_mobile/core/theme.dart';
 import 'package:sincro_mobile/core/theme/theme_mode_preference.dart';
 import 'package:sincro_mobile/core/widgets/section_card.dart';
+import 'package:sincro_mobile/features/auth/auth_providers.dart';
+import 'package:sincro_mobile/features/auth/auth_service.dart';
 import 'package:sincro_mobile/features/biofeedback/biofeedback_providers.dart';
 import 'package:sincro_mobile/features/email_triage/email_triage_providers.dart';
 import 'package:sincro_mobile/features/email_triage/gmail_connection_repository.dart';
@@ -16,6 +23,7 @@ import 'package:sincro_mobile/features/home/home_layout_preference.dart';
 import 'package:sincro_mobile/features/home/home_providers.dart';
 import 'package:sincro_mobile/features/onboarding/onboarding_providers.dart';
 import 'package:sincro_mobile/features/onboarding/onboarding_status.dart';
+import 'package:sincro_mobile/features/onboarding/users_repository.dart';
 import 'package:sincro_mobile/features/settings/settings_screen.dart';
 import 'package:sincro_mobile/features/trusted_contacts/trusted_contact.dart';
 import 'package:sincro_mobile/features/trusted_contacts/trusted_contacts_providers.dart';
@@ -31,6 +39,20 @@ class _FakeHomeLayoutPreference extends HomeLayoutPreference {
   @override
   Future<void> setDesign(HomeDesignStyle design) async {}
 }
+
+class _FakeUsersRepository extends UsersRepository {
+  _FakeUsersRepository() : super(Dio());
+  bool deleteAccountCalled = false;
+
+  @override
+  Future<void> deleteAccount() async {
+    deleteAccountCalled = true;
+  }
+}
+
+class MockFirebaseAuth extends Mock implements FirebaseAuth {}
+
+class MockGoogleSignIn extends Mock implements GoogleSignIn {}
 
 Future<void> _rolarAte(WidgetTester tester, Finder alvo) async {
   await tester.scrollUntilVisible(alvo, 200, scrollable: find.byType(Scrollable).first);
@@ -130,5 +152,73 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SimpleDialog), findsOneWidget);
     expect(find.text('Abas (Hoje / Apoio)'), findsOneWidget);
+  });
+
+  testWidgets(
+    'excluir conta pede confirmação, chama o endpoint, limpa as preferências locais e sai',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'algo_qualquer': 'valor'});
+      final usersRepository = _FakeUsersRepository();
+      final mockFirebaseAuth = MockFirebaseAuth();
+      final mockGoogleSignIn = MockGoogleSignIn();
+      when(() => mockFirebaseAuth.signOut()).thenAnswer((_) async {});
+      when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async => null);
+
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._overrides(),
+          usersRepositoryProvider.overrideWithValue(usersRepository),
+          authServiceProvider.overrideWithValue(AuthService(mockFirebaseAuth, () => mockGoogleSignIn)),
+        ],
+        child: MaterialApp(
+          theme: sincroLightTheme,
+          home: const SettingsScreen(),
+          routes: {'/login': (_) => const Scaffold(body: Text('Tela de login'))},
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await _rolarAte(tester, find.text('Excluir conta'));
+      await tester.tap(find.text('Excluir conta'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('não pode ser desfeita'), findsOneWidget);
+      expect(usersRepository.deleteAccountCalled, isFalse);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Excluir conta'));
+      await tester.pumpAndSettle();
+
+      expect(usersRepository.deleteAccountCalled, isTrue);
+      verify(() => mockFirebaseAuth.signOut()).called(1);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getKeys(), isEmpty);
+      expect(find.text('Tela de login'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cancelar a confirmação de excluir conta não chama o endpoint', (tester) async {
+    final usersRepository = _FakeUsersRepository();
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ..._overrides(),
+        usersRepositoryProvider.overrideWithValue(usersRepository),
+      ],
+      child: MaterialApp(theme: sincroLightTheme, home: const SettingsScreen()),
+    ));
+    await tester.pumpAndSettle();
+
+    await _rolarAte(tester, find.text('Excluir conta'));
+    await tester.tap(find.text('Excluir conta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(usersRepository.deleteAccountCalled, isFalse);
   });
 }

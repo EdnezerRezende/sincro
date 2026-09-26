@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/auth_providers.dart';
 import '../biofeedback/biofeedback_frequencia.dart';
 import '../biofeedback/biofeedback_providers.dart';
@@ -377,6 +378,46 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir conta?'),
+        content: const Text(
+          'Isso apaga permanentemente sua conta e todos os seus dados: perfil sensorial, '
+          'contatos de confiança, conexão com o Gmail e resumos de e-mails, finanças (contas, '
+          'cartões e lançamentos) e vínculo do WhatsApp. Essa ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Excluir conta')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(usersRepositoryProvider).deleteAccount();
+      // Limpa tudo que ficou salvo localmente (biofeedback, preferências, etc.) — a conta que
+      // as gerou não existe mais no backend.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      await ref.read(authServiceProvider).signOut();
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível excluir sua conta. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _signOut() async {
     try {
       await ref.read(authServiceProvider).signOut();
@@ -588,6 +629,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 destructive: true,
                 enabled: !_busy,
                 onTap: _signOut,
+              ),
+              SectionRow(
+                icon: Icons.delete_forever_outlined,
+                title: 'Excluir conta',
+                destructive: true,
+                enabled: !_busy,
+                onTap: _deleteAccount,
               ),
             ],
           ),

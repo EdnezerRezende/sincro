@@ -14,4 +14,10 @@ class UsersRepository {
     final response = await _dio.get('/users/me');
     return OnboardingStatus.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Apaga permanentemente a conta e todos os dados do usuário no backend (LGPD art. 18 /
+  /// exigência de exclusão de conta da Google Play).
+  Future<void> deleteAccount() async {
+    await _dio.delete('/users/me');
+  }
 }

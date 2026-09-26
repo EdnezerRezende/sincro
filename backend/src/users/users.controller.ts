@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 import { CurrentFirebaseUid } from '../common/current-firebase-uid.decorator';
 import { UsersService } from './users.service';
@@ -30,6 +30,12 @@ export class UsersController {
   @Patch('me/dia-recebimento')
   async updateDiaRecebimento(@CurrentFirebaseUid() firebaseUid: string, @Body() dto: UpdateDiaRecebimentoDto) {
     await this.usersService.updateDiaRecebimento(firebaseUid, dto.diaRecebimento);
+    return { success: true };
+  }
+
+  @Delete('me')
+  async deleteMe(@CurrentFirebaseUid() firebaseUid: string) {
+    await this.usersService.deleteAccount(firebaseUid);
     return { success: true };
   }
 }

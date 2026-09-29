@@ -35,6 +35,141 @@ describe('AccountRetentionScheduler', () => {
     expect(usersService.deleteAccount).toHaveBeenCalledWith('inativo');
   });
 
+  it('keeps a user who signed in long ago but kept using the app (recent lastRefreshTime)', async () => {
+    // Regressão: o app mantém a sessão por meses, então lastSignInTime só reflete o login
+    // original. Quem usa o app todo dia tem lastRefreshTime recente e não pode ser apagado.
+    const agora = Date.now();
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            firebaseUid: 'usa-todo-dia',
+            createdAt: new Date(agora - 300 * DIA_MS),
+          },
+          { firebaseUid: 'sumiu', createdAt: new Date(agora - 300 * DIA_MS) },
+        ]),
+      },
+    };
+    const firebaseAdmin = buildFirebaseAdmin(() => ({
+      users: [
+        {
+          uid: 'usa-todo-dia',
+          metadata: {
+            lastSignInTime: new Date(agora - 200 * DIA_MS).toUTCString(),
+            lastRefreshTime: new Date(agora - 1 * DIA_MS).toUTCString(),
+          },
+        },
+        {
+          uid: 'sumiu',
+          metadata: {
+            lastSignInTime: new Date(agora - 200 * DIA_MS).toUTCString(),
+            lastRefreshTime: new Date(agora - 120 * DIA_MS).toUTCString(),
+          },
+        },
+      ],
+      notFound: [],
+    }));
+    const usersService = { deleteAccount: jest.fn() };
+    const scheduler = new AccountRetentionScheduler(
+      prisma as any,
+      usersService as any,
+      firebaseAdmin as any,
+    );
+
+    await scheduler.purgeInactiveAccounts();
+
+    expect(usersService.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(usersService.deleteAccount).toHaveBeenCalledWith('sumiu');
+  });
+
+  it('uses the most recent of lastSignInTime and lastRefreshTime (fresh sign-in, stale refresh)', async () => {
+    const agora = Date.now();
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            firebaseUid: 'login-recente',
+            createdAt: new Date(agora - 300 * DIA_MS),
+          },
+        ]),
+      },
+    };
+    const firebaseAdmin = buildFirebaseAdmin(() => ({
+      users: [
+        {
+          uid: 'login-recente',
+          metadata: {
+            lastSignInTime: new Date(agora - 2 * DIA_MS).toUTCString(),
+            lastRefreshTime: new Date(agora - 120 * DIA_MS).toUTCString(),
+          },
+        },
+      ],
+      notFound: [],
+    }));
+    const usersService = { deleteAccount: jest.fn() };
+    const scheduler = new AccountRetentionScheduler(
+      prisma as any,
+      usersService as any,
+      firebaseAdmin as any,
+    );
+
+    await scheduler.purgeInactiveAccounts();
+
+    expect(usersService.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('ignores an unparseable timestamp instead of letting it hide a recent one', async () => {
+    const agora = Date.now();
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { firebaseUid: 'data-invalida', createdAt: new Date(agora - 300 * DIA_MS) },
+        ]),
+      },
+    };
+    const firebaseAdmin = buildFirebaseAdmin(() => ({
+      users: [
+        {
+          uid: 'data-invalida',
+          metadata: {
+            lastSignInTime: 'não é uma data',
+            lastRefreshTime: new Date(agora - 2 * DIA_MS).toUTCString(),
+          },
+        },
+      ],
+      notFound: [],
+    }));
+    const usersService = { deleteAccount: jest.fn() };
+    const scheduler = new AccountRetentionScheduler(prisma as any, usersService as any, firebaseAdmin as any);
+
+    await scheduler.purgeInactiveAccounts();
+
+    expect(usersService.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('falls back to createdAt when the Firebase record comes without metadata', async () => {
+    const agora = Date.now();
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { firebaseUid: 'sem-metadata-novo', createdAt: new Date(agora - 5 * DIA_MS) },
+          { firebaseUid: 'sem-metadata-antigo', createdAt: new Date(agora - 300 * DIA_MS) },
+        ]),
+      },
+    };
+    const firebaseAdmin = buildFirebaseAdmin(() => ({
+      users: [{ uid: 'sem-metadata-novo' }, { uid: 'sem-metadata-antigo' }],
+      notFound: [],
+    }));
+    const usersService = { deleteAccount: jest.fn() };
+    const scheduler = new AccountRetentionScheduler(prisma as any, usersService as any, firebaseAdmin as any);
+
+    await expect(scheduler.purgeInactiveAccounts()).resolves.toBeUndefined();
+
+    expect(usersService.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(usersService.deleteAccount).toHaveBeenCalledWith('sem-metadata-antigo');
+  });
+
   it('treats a user with no matching Firebase Auth record (orphaned row) as eligible', async () => {
     const prisma = {
       user: {

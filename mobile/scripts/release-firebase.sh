@@ -40,6 +40,7 @@ GOOGLE_CLIENT_ID="${DEFAULT_GOOGLE_CLIENT_ID}"
 SENTRY_DSN=""
 SKIP_BUILD=false
 DRY_RUN=false
+BUILD_AAB=false
 
 show_help() {
   cat <<EOF
@@ -58,12 +59,14 @@ Opções:
       --sentry-dsn <dsn>        DSN do Sentry para crash reporting (opcional)
       --skip-build              Pula o build e distribui o APK existente
       --dry-run                 Executa apenas o build, sem enviar ao Firebase
+      --aab                     Também gera o Android App Bundle (.aab) para a Google Play
   -h, --help                    Exibe esta ajuda
 
 Exemplos:
   $(basename "$0") -b patch -m "Correção no fluxo de biofeedback e onboarding"
   $(basename "$0") -v 1.1.0+5 -m "Nova tela de finanças conectada ao Pluggy"
   $(basename "$0") --skip-build -m "Reteste da versão atual"
+  $(basename "$0") -b patch --aab --dry-run   # só gera APK + AAB para enviar à Play Console
 EOF
 }
 
@@ -108,6 +111,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=true
+      shift
+      ;;
+    --aab)
+      BUILD_AAB=true
       shift
       ;;
     -h|--help)
@@ -271,6 +278,22 @@ fi
 
 APK_SIZE=$(ls -lh "${APK_PATH}" | awk '{print $5}')
 echo -e "  ${GREEN}[✓] APK Release pronto: ${APK_PATH} (${APK_SIZE})${NC}"
+
+# Android App Bundle para a Google Play (a loja não aceita APK). Mesmos --dart-define do APK, para
+# que o app da loja e o dos testadores do Firebase se comportem igual.
+AAB_PATH="${MOBILE_DIR}/build/app/outputs/bundle/release/app-release.aab"
+if [[ "${BUILD_AAB}" == true && "${SKIP_BUILD}" != true ]]; then
+  echo -e "\n${YELLOW}==> 3b. Gerando Android App Bundle (Google Play)...${NC}"
+  AAB_CMD=("${BUILD_CMD[@]}")
+  AAB_CMD[2]="appbundle"
+  "${AAB_CMD[@]}"
+  if [[ ! -f "${AAB_PATH}" ]]; then
+    echo -e "${RED}Erro: Build finalizado mas AAB não foi encontrado em '${AAB_PATH}'!${NC}" >&2
+    exit 1
+  fi
+  AAB_SIZE=$(ls -lh "${AAB_PATH}" | awk '{print $5}')
+  echo -e "  ${GREEN}[✓] AAB pronto para a Play Console: ${AAB_PATH} (${AAB_SIZE})${NC}"
+fi
 
 # Firebase App Distribution Step
 if [[ "${DRY_RUN}" == true ]]; then

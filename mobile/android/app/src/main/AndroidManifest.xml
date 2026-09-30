@@ -12,7 +12,7 @@
          AndroidManifest.xml interno; declará-la aqui é redundante mas explícito. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:label="sincro_mobile"
+        android:label="Sincro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- AdMob: App ID vem do placeholder definido em app/build.gradle.kts. -->

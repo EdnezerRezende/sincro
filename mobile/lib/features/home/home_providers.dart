@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/material.dart';
 import '../../core/theme/theme_mode_preference.dart';
 import 'home_layout_mode.dart';
 import 'home_layout_preference.dart';

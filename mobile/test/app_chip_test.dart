@@ -19,7 +19,7 @@ void main() {
         ),
       );
 
-      final chipFinder = find.byType(FilterChip);
+      final chipFinder = find.byType(AppChip);
       expect(chipFinder, findsOneWidget);
 
       // Verificar altura do chip
@@ -51,8 +51,12 @@ void main() {
         ),
       );
 
-      expect(find.byType(FilterChip), findsOneWidget);
+      expect(find.byType(AppChip), findsOneWidget);
       expect(find.text('Select Me'), findsOneWidget);
+
+      await tester.tap(find.byType(AppChip));
+      await tester.pump();
+      expect(isSelected, isTrue);
     });
 
     testWidgets('Chip desabilitado não responde a toque', (tester) async {

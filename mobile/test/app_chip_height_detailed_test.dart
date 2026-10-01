@@ -6,7 +6,7 @@ import '../lib/core/widgets/app_chip.dart';
 
 void main() {
   group('AppChip Height Tests', () {
-    testWidgets('Input variant FilterChip height >= 36.0 dp', (WidgetTester tester) async {
+    testWidgets('Input variant chip height >= 36.0 dp', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: sincroLightTheme,
@@ -21,7 +21,7 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       expect(filterChipFinder, findsOneWidget);
 
       final size = tester.getSize(filterChipFinder);
@@ -30,7 +30,7 @@ void main() {
           reason: 'Input chip height must be >= 36.0 dp (Material Design 3)');
     });
 
-    testWidgets('Filter variant FilterChip height >= 36.0 dp', (WidgetTester tester) async {
+    testWidgets('Filter variant chip height >= 36.0 dp', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: sincroLightTheme,
@@ -45,14 +45,14 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       final size = tester.getSize(filterChipFinder);
       print('=== Filter Chip Height: ${size.height} dp ===');
       expect(size.height, greaterThanOrEqualTo(36.0),
           reason: 'Filter chip height must be >= 36.0 dp');
     });
 
-    testWidgets('Suggestion variant FilterChip height >= 36.0 dp', (WidgetTester tester) async {
+    testWidgets('Suggestion variant chip height >= 36.0 dp', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: sincroLightTheme,
@@ -67,7 +67,7 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       final size = tester.getSize(filterChipFinder);
       print('=== Suggestion Chip Height: ${size.height} dp ===');
       expect(size.height, greaterThanOrEqualTo(36.0),
@@ -90,7 +90,7 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       final size = tester.getSize(filterChipFinder);
       print('=== Selected Chip Height: ${size.height} dp ===');
       expect(size.height, greaterThanOrEqualTo(36.0),
@@ -113,7 +113,7 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       final size = tester.getSize(filterChipFinder);
       print('=== Disabled Chip Height: ${size.height} dp ===');
       expect(size.height, greaterThanOrEqualTo(36.0),
@@ -136,7 +136,7 @@ void main() {
         ),
       );
 
-      final filterChipFinder = find.byType(FilterChip);
+      final filterChipFinder = find.byType(AppChip);
       final size = tester.getSize(filterChipFinder);
       print('=== Icon Chip Height: ${size.height} dp ===');
       expect(size.height, greaterThanOrEqualTo(36.0),

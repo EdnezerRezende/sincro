@@ -1,0 +1,100 @@
+# CI do Sincro: roda em todo PR e em cada push na master.
+#
+# - backend: checagem de tipos (inclui os testes), build, testes unitários e lint dos arquivos
+#   alterados no PR. O lint cobre só o que o PR mexe porque o código antigo ainda tem centenas de
+#   erros de formatação; assim cada PR deixa os arquivos que toca limpos, sem exigir um
+#   reformatação geral de uma vez.
+# - mobile: análise estática (falha em erro ou aviso, não em "info") e todos os testes do Flutter.
+#
+# A versão do Flutter acompanha a que gerou o mobile/pubspec.lock; ao atualizar o Flutter
+# localmente, atualize FLUTTER_VERSION junto.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.5
+  NODE_VERSION: 22
+
+jobs:
+  backend:
+    name: Backend (NestJS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar cliente Prisma
+        # O generate não conecta no banco; a URL só precisa ter formato válido.
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Checagem de tipos (código e testes)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build
+        run: npm run build
+
+      - name: Testes unitários
+        run: npm test
+
+      - name: Lint dos arquivos alterados
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          files=$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- 'src/**/*.ts' 'test/**/*.ts' | sed 's#^backend/##')
+          if [ -z "$files" ]; then
+            echo "Nenhum arquivo .ts do backend alterado."
+            exit 0
+          fi
+          echo "$files"
+          npx eslint $files
+
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        # --enforce-lockfile: falha se o pubspec.lock não bater com o pubspec.yaml, em vez de
+        # resolver versões diferentes das usadas localmente.
+        run: flutter pub get --enforce-lockfile
+
+      - name: Análise estática
+        run: flutter analyze --no-fatal-infos
+
+      - name: Testes
+        run: flutter test

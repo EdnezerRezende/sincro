@@ -87,9 +87,8 @@ class _FakeEmailSummaryRepository extends EmailSummaryRepository {
 }
 
 class _FakeGmailConnectionRepository extends GmailConnectionRepository {
-  _FakeGmailConnectionRepository({this.disconnectError}) : super(Dio(), () => throw UnimplementedError());
+  _FakeGmailConnectionRepository() : super(Dio(), () => throw UnimplementedError());
 
-  final Object? disconnectError;
   int chamadasConnect = 0;
   int chamadasDisconnect = 0;
 
@@ -101,8 +100,6 @@ class _FakeGmailConnectionRepository extends GmailConnectionRepository {
   @override
   Future<void> disconnect() async {
     chamadasDisconnect++;
-    final erro = disconnectError;
-    if (erro != null) throw erro;
   }
 }
 
@@ -641,7 +638,10 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // `pump` e não `pumpAndSettle`: o indicador de progresso anima sem parar, então
+        // `pumpAndSettle` avançaria o relógio até o timer de 60 s esgotar.
+        await tester.pump();
+        await tester.pump();
 
         expect(find.text(textoSincronizando), findsOneWidget);
         expect(find.text(textoVazio), findsNothing);
@@ -693,7 +693,8 @@ void main() {
           status: const GmailConnectionStatus(connected: true),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump();
       expect(find.text(textoSincronizando), findsOneWidget);
 
       // Substitui a árvore inteira: dispõe o `InboxScreen`. Se o `Timer.periodic` não tivesse

@@ -79,14 +79,14 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
 
 ### 6. Build e deploy automáticos
 
-- [ ] **Claude**: CI no GitHub Actions: lint e testes do backend e do app a cada PR  
-  Hoje só a verificação do GitGuardian roda nos PRs.
-- [ ] **Claude**: Corrigir os 2 testes quebrados da Caixa de Entrada  
-  Senão a CI já nasce vermelha.
-- [ ] **Claude**: Deploy automático do backend e do app web na VPS a cada merge na master  
-  GitHub Actions com SSH.
-- [ ] **Você**: Criar no GitHub os segredos do deploy  
-  Chave SSH da VPS e endereço do servidor.
+- [x] **Claude**: CI no GitHub Actions: lint e testes do backend e do app a cada PR  
+  .github/workflows/ci.yml
+- [x] **Claude**: Corrigir os testes que estavam quebrados na master  
+  7 no backend e 10 no app.
+- [x] **Claude**: Deploy automático do backend e do app web na VPS a cada merge na master  
+  .github/workflows/deploy-sandbox.yml, com verificação em /api/health
+- [ ] **Você**: Criar a chave de deploy e os segredos no environment sandbox do GitHub  
+  Passo a passo em docs/deploy/deploy-automatico.md. Depois, rodar Actions → Deploy sandbox → Run workflow.
 - [ ] **Claude**: Build Android automático: AAB para o Teste interno da Play e APK para o Firebase
 - [ ] **Você**: Criar a conta de serviço da Play Console e os segredos de assinatura no GitHub  
   JSON da conta de serviço, keystore em base64, senhas do key.properties e token do Firebase. Eu passo o passo a passo.

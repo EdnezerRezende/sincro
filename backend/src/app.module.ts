@@ -17,6 +17,7 @@ import { RagModule } from './rag/rag.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { EmailReplyModule } from './email-reply/email-reply.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     PrismaModule,
+    HealthModule,
     AuthModule,
     UsersModule,
     SensoryProfileModule,

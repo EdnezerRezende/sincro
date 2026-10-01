@@ -1,0 +1,117 @@
+# Deploy automático do sandbox (API + app web) na VPS da Oracle.
+#
+# Roda sozinho depois que o CI passa num push na master, e pode ser disparado à mão em
+# Actions → "Deploy sandbox" → Run workflow. Entra na VPS por SSH, executa ./deploy.sh (git pull +
+# docker compose up --build) e só considera o deploy concluído quando /api/health responde 200 e
+# a página de privacidade está no ar.
+#
+# Configuração (Settings → Environments → sandbox):
+#   Secrets:   VPS_HOST, VPS_USER, VPS_SSH_KEY (chave privada só para deploy),
+#              VPS_KNOWN_HOSTS (saída de `ssh-keyscan <host>`, recomendado)
+#   Variables: VPS_APP_DIR (padrão ~/sincro), VPS_PORT (padrão 22),
+#              SANDBOX_URL (padrão https://sincro-sandbox.duckdns.org)
+# Passo a passo em docs/deploy/deploy-automatico.md.
+name: Deploy sandbox
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+# Um deploy por vez; um novo espera o anterior terminar em vez de cancelá-lo no meio do
+# docker compose.
+concurrency:
+  group: deploy-sandbox
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy na VPS
+    # Só depois de CI verde num push na master (não em PRs), ou quando disparado à mão.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: sandbox
+    timeout-minutes: 30
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '~/sincro' }}
+      SANDBOX_URL: ${{ vars.SANDBOX_URL || 'https://sincro-sandbox.duckdns.org' }}
+    steps:
+      - name: Conferir configuração
+        id: cfg
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          missing=""
+          [ -n "$VPS_HOST" ] || missing="$missing VPS_HOST"
+          [ -n "$VPS_USER" ] || missing="$missing VPS_USER"
+          [ -n "$VPS_SSH_KEY" ] || missing="$missing VPS_SSH_KEY"
+          if [ -n "$missing" ]; then
+            # Aviso em vez de falha: enquanto o deploy não foi configurado, um push na master não
+            # deve aparecer como quebrado. Depois de configurado, qualquer erro real falha o job.
+            echo "::warning::Deploy ignorado: faltam os segredos$missing (Settings → Environments → sandbox). Veja docs/deploy/deploy-automatico.md."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar SSH
+        if: steps.cfg.outputs.ok == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::VPS_KNOWN_HOSTS não configurado; confiando na chave do servidor apresentada agora (ssh-keyscan). Configure o segredo para fixar a chave."
+            ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Executar deploy.sh na VPS
+        if: steps.cfg.outputs.ok == 'true'
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$VPS_PORT" -o BatchMode=yes -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" bash -s -- "$VPS_APP_DIR" <<'REMOTE'
+          set -euo pipefail
+          app_dir="${1/#\~/$HOME}"
+          cd "$app_dir"
+          git checkout -q master
+          ./deploy.sh
+          echo "Commit publicado no sandbox: $(git rev-parse --short HEAD)"
+          REMOTE
+
+      - name: Esperar a API responder
+        if: steps.cfg.outputs.ok == 'true'
+        run: |
+          # A API roda as migrations antes de subir; dá até ~3 minutos.
+          for i in $(seq 1 36); do
+            if curl -fsS --max-time 10 "$SANDBOX_URL/api/health"; then
+              echo
+              echo "API saudável."
+              exit 0
+            fi
+            echo "Tentativa $i: API ainda não respondeu; nova tentativa em 5 s."
+            sleep 5
+          done
+          echo "::error::$SANDBOX_URL/api/health não respondeu 200 em 3 minutos. Verifique 'docker compose logs backend' na VPS."
+          exit 1
+
+      - name: Conferir páginas públicas
+        if: steps.cfg.outputs.ok == 'true'
+        run: |
+          for path in privacidade.html excluir-conta.html app-ads.txt; do
+            curl -fsS --max-time 10 -o /dev/null "$SANDBOX_URL/$path"
+            echo "OK  /$path"
+          done

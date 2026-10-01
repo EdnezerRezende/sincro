@@ -23,10 +23,10 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
 
 ### 1. Servidor (sandbox)
 
-- [ ] **Você**: Rodar ./deploy.sh na VPS com a master atual  
-  Traz a exclusão de conta, os anúncios (desligados) e as páginas públicas.
-- [ ] **Você**: Abrir no navegador /privacidade.html, /excluir-conta.html e /app-ads.txt  
-  As três URLs precisam responder antes de preencher a Play Console.
+- [x] **Você**: Rodar ./deploy.sh na VPS com a master atual  
+  Feito pelo deploy automático, que agora roda a cada merge na master.
+- [x] **Você**: Abrir no navegador /privacidade.html, /excluir-conta.html e /app-ads.txt  
+  O deploy automático confere as três a cada execução.
 - [ ] **Você**: Confirmar que o backup diário do Postgres está no cron da VPS  
   crontab -l deve listar infra/backup-postgres.sh. No plano do sandbox essa tarefa ainda aparece como pendente.
 - [ ] **Você**: Manter ADS_ENABLED=false no .env  
@@ -85,7 +85,7 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   7 no backend e 10 no app.
 - [x] **Claude**: Deploy automático do backend e do app web na VPS a cada merge na master  
   .github/workflows/deploy-sandbox.yml, com verificação em /api/health
-- [ ] **Você**: Criar a chave de deploy e os segredos no environment sandbox do GitHub  
+- [x] **Você**: Criar a chave de deploy e os segredos no environment sandbox do GitHub  
   Passo a passo em docs/deploy/deploy-automatico.md. Depois, rodar Actions → Deploy sandbox → Run workflow.
 - [ ] **Claude**: Build Android automático: AAB para o Teste interno da Play e APK para o Firebase
 - [ ] **Você**: Criar a conta de serviço da Play Console e os segredos de assinatura no GitHub  

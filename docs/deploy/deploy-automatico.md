@@ -28,17 +28,30 @@ pessoal: se um dia precisar revogar o acesso do GitHub, basta apagar uma linha n
 
 ### 2. Autorizar a chave na VPS
 
+A VPS (Oracle Linux) não aceita senha: para instalar a chave nova, entre com a chave que você já
+usa. O usuário é **`opc`**.
+
 ```bash
-ssh-copy-id -i ~/.ssh/sincro_deploy.pub ubuntu@<ip-da-vps>
-# confirme que entra sem senha:
-ssh -i ~/.ssh/sincro_deploy ubuntu@<ip-da-vps> 'cd ~/sincro && git status -sb'
+cat ~/.ssh/sincro_deploy.pub | ssh -o PubkeyAcceptedKeyTypes=+ssh-rsa \
+  -i "/caminho/da/sua/chave-atual.key" \
+  opc@<ip-da-vps> \
+  'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo CHAVE_INSTALADA'
 ```
 
-O segundo comando também confirma o caminho do repositório na VPS. Se não for `~/sincro`,
-anote o caminho certo para o passo 4.
+O `ssh-copy-id` sozinho falha com `Permission denied`, porque ele não sabe qual chave usar para
+entrar.
 
-Confira também que, na VPS, o repositório está na branch `master` e que `git pull` funciona sem
-pedir senha. Hoje o `./deploy.sh` manual já faz isso, então deve estar ok.
+Teste só com a chave nova, do mesmo jeito que o GitHub vai fazer:
+
+```bash
+ssh -i ~/.ssh/sincro_deploy -o IdentitiesOnly=yes -o BatchMode=yes opc@<ip-da-vps> 'cd ~/sincro && git status -sb'
+```
+
+Se não mostrar o status do git, o repositório não está em `~/sincro`. Anote o caminho certo para
+o passo 4.
+
+Se a chave aparece em `~/.ssh/authorized_keys` mas o acesso continua negado, o SELinux pode estar
+bloqueando o arquivo. Rode `restorecon -Rv ~/.ssh` na VPS.
 
 ### 3. Pegar a impressão digital do servidor (no seu Mac)
 
@@ -59,7 +72,7 @@ nome `sandbox`. Dentro dele:
 | Nome | Valor |
 |---|---|
 | `VPS_HOST` | IP da VPS (ou o domínio) |
-| `VPS_USER` | usuário do SSH, normalmente `ubuntu` |
+| `VPS_USER` | usuário do SSH: `opc` na VPS atual (Oracle Linux) |
 | `VPS_SSH_KEY` | conteúdo inteiro de `~/.ssh/sincro_deploy` (com as linhas `-----BEGIN` e `-----END`) |
 | `VPS_KNOWN_HOSTS` | saída do `ssh-keyscan` do passo 3 |
 
@@ -83,7 +96,7 @@ GitHub → **Actions** → **Deploy sandbox** → **Run workflow** → branch `m
 
 | Mensagem | O que fazer |
 |---|---|
-| `Permission denied (publickey)` | A chave pública não está em `~/.ssh/authorized_keys` do usuário certo na VPS, ou o `VPS_SSH_KEY` foi colado incompleto. |
+| `Permission denied (publickey)` | Rode o teste do passo 2 no seu Mac. Se falhar lá também, a chave não foi instalada (ou falta o `restorecon`). Se funcionar no Mac, confira `VPS_USER` (`opc`) e cole de novo o `VPS_SSH_KEY` com `pbcopy < ~/.ssh/sincro_deploy`. |
 | `Host key verification failed` | O `VPS_KNOWN_HOSTS` não corresponde ao servidor. Rode o `ssh-keyscan` de novo. |
 | `Not possible to fast-forward` | A cópia do repositório na VPS tem commits ou alterações locais. Entre na VPS e resolva com `git status`. |
 | `/api/health não respondeu 200` | A API não subiu. Na VPS: `docker compose -f docker-compose.yml -f docker-compose.sandbox.yml logs --tail 100 backend`. |

@@ -1,0 +1,238 @@
+# Build Android automático: gera o AAB (Google Play) e o APK (Firebase App Distribution) assinados.
+#
+# Quando roda:
+#   - Sozinho, depois que o CI passa num push na master que mexeu em mobile/.
+#   - À mão: Actions → "Android release" → Run workflow (escolhendo a faixa da Play).
+#
+# Para onde envia (cada destino só é usado se os segredos dele existirem):
+#   - Firebase App Distribution: APK para o grupo de testadores (FIREBASE_SERVICE_ACCOUNT_JSON).
+#   - Google Play: AAB para a faixa escolhida, "internal" por padrão (PLAY_SERVICE_ACCOUNT_JSON).
+#     A Play só aceita envio pela API depois que o primeiro AAB foi enviado à mão na Play Console.
+#   - Sempre: AAB e APK ficam como artefatos da execução, para baixar.
+#
+# Sem os segredos de assinatura, não gera nada e só avisa: um AAB assinado com a chave de debug
+# seria recusado pela Play.
+#
+# Configuração (Settings → Environments → android-release): docs/deploy/build-android.md.
+name: Android release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      play_track:
+        description: Faixa da Google Play
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
+      firebase:
+        description: Enviar o APK para os testadores do Firebase
+        type: boolean
+        default: true
+      release_notes:
+        description: Notas da versão (vazio = mensagem do último commit)
+        type: string
+        required: false
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.47.5
+  PACKAGE_NAME: com.sincro.sincro_mobile
+  FIREBASE_APP_ID: "1:393611506422:android:f864f79df7084de28972d7"
+
+jobs:
+  build:
+    name: Build e distribuição
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: android-release
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL || 'https://sincro-sandbox.duckdns.org/api' }}
+      GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID || '393611506422-g0ufsk76bb8kk4krc7g2tvg9uipibr6c.apps.googleusercontent.com' }}
+      FIREBASE_GROUPS: ${{ vars.FIREBASE_GROUPS || 'testadores-sandbox' }}
+      PLAY_TRACK: ${{ inputs.play_track || vars.PLAY_TRACK || 'internal' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run aponta para o commit que o CI testou; workflow_dispatch, para a branch escolhida.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Decidir se há o que construir
+        id: gate
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE_B64" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ] || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::warning::Build Android ignorado: faltam os segredos de assinatura$missing (Settings → Environments → android-release). Veja docs/deploy/build-android.md."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # No disparo automático, só constrói se o merge mexeu no app.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && git diff --quiet HEAD^1 HEAD -- .; then
+            echo "Nenhuma mudança em mobile/ neste merge; nada a construir."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          [ -n "$PLAY_JSON" ] && echo "play=true" >> "$GITHUB_OUTPUT" || echo "play=false" >> "$GITHUB_OUTPUT"
+          firebase_wanted="${{ github.event_name != 'workflow_dispatch' || inputs.firebase }}"
+          if [ -n "$FIREBASE_JSON" ] && [ "$firebase_wanted" = "true" ]; then
+            echo "firebase=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "firebase=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.build == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        if: steps.gate.outputs.build == 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Preparar assinatura
+        if: steps.gate.outputs.build == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Mesmo layout do Mac: android/key.properties aponta para android/app/release-key.jks.
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > android/app/release-key.jks
+          {
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=release-key.jks"
+          } > android/key.properties
+          keytool -list -keystore android/app/release-key.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null \
+            || { echo "::error::Keystore, senha ou alias inválidos. Confira os segredos ANDROID_*."; exit 1; }
+
+      - name: Definir versão
+        if: steps.gate.outputs.build == 'true'
+        id: version
+        run: |
+          # versionName vem do pubspec (sem o +N); versionCode cresce a cada execução deste
+          # workflow, como a Play exige. O deslocamento de 1000 deixa os builds de CI acima dos
+          # feitos à mão pelo release-firebase.sh.
+          name=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          code=$((1000 + GITHUB_RUN_NUMBER))
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Versão $name ($code)"
+
+      - name: Instalar dependências
+        if: steps.gate.outputs.build == 'true'
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build AAB e APK
+        if: steps.gate.outputs.build == 'true'
+        run: |
+          args=(
+            --release
+            --build-name="${{ steps.version.outputs.name }}"
+            --build-number="${{ steps.version.outputs.code }}"
+            --dart-define=API_BASE_URL="$API_BASE_URL"
+            --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
+          )
+          flutter build appbundle "${args[@]}"
+          flutter build apk "${args[@]}"
+
+      - name: Guardar AAB e APK
+        if: steps.gate.outputs.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sincro-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          path: |
+            mobile/build/app/outputs/bundle/release/app-release.aab
+            mobile/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Notas da versão
+        if: steps.gate.outputs.build == 'true'
+        id: notes
+        env:
+          INPUT_NOTES: ${{ inputs.release_notes }}
+        run: |
+          notes="${INPUT_NOTES:-$(git log -1 --pretty=%s)}"
+          mkdir -p ../whatsnew
+          # A Play limita as notas a 500 caracteres por idioma.
+          printf '%s' "Versão ${{ steps.version.outputs.name }}: $notes" | cut -c1-500 > ../whatsnew/whatsnew-pt-BR
+          {
+            echo "text<<EOF"
+            cat ../whatsnew/whatsnew-pt-BR
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Enviar para o Firebase App Distribution
+        if: steps.gate.outputs.firebase == 'true'
+        env:
+          FIREBASE_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          NOTES: ${{ steps.notes.outputs.text }}
+        run: |
+          printf '%s' "$FIREBASE_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+          npx --yes firebase-tools@latest appdistribution:distribute \
+            build/app/outputs/flutter-apk/app-release.apk \
+            --app "$FIREBASE_APP_ID" \
+            --groups "$FIREBASE_GROUPS" \
+            --release-notes "$NOTES"
+
+      - name: Enviar para a Google Play
+        if: steps.gate.outputs.play == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PACKAGE_NAME }}
+          releaseFiles: mobile/build/app/outputs/bundle/release/app-release.aab
+          track: ${{ env.PLAY_TRACK }}
+          # Faixas de teste publicam direto; produção entra como rascunho para revisar na Console.
+          status: ${{ env.PLAY_TRACK == 'production' && 'draft' || 'completed' }}
+          whatsNewDirectory: whatsnew
+
+      - name: Resumo
+        if: steps.gate.outputs.build == 'true'
+        run: |
+          {
+            echo "### Sincro ${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})"
+            echo "- AAB e APK: artefato desta execução"
+            echo "- Firebase App Distribution: ${{ steps.gate.outputs.firebase == 'true' && format('enviado para {0}', env.FIREBASE_GROUPS) || 'não enviado' }}"
+            echo "- Google Play: ${{ steps.gate.outputs.play == 'true' && format('enviado para a faixa {0}', env.PLAY_TRACK) || 'não enviado (sem PLAY_SERVICE_ACCOUNT_JSON)' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apagar chave de assinatura
+        if: always()
+        run: rm -f android/app/release-key.jks android/key.properties "$RUNNER_TEMP/firebase-sa.json"

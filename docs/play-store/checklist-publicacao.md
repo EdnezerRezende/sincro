@@ -34,8 +34,8 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
 
 ### 2. Conta e app na Play Console
 
-- [ ] **Você**: Conferir o tipo da conta de desenvolvedor  
-  Conta de organização (CNPJ) exige número D-U-N-S e não exige teste fechado. Conta pessoal criada após nov/2023 exige teste fechado com 12 testadores por 14 dias antes da produção.
+- [x] **Você**: Conferir o tipo da conta de desenvolvedor  
+  Conta pessoal (ID 7942397505800602815): a produção só libera depois do teste fechado com 12 testadores por 14 dias.
 - [ ] **Você**: Criar o app: nome "Sincro: rotina e bem-estar", idioma pt-BR, app gratuito
 - [ ] **Você**: Ativar a Assinatura de apps do Google Play (Play App Signing)  
   Padrão para apps novos. A chave do seu Mac vira a chave de upload.
@@ -74,7 +74,8 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
 - [ ] **Você**: Gerar o AAB: ./scripts/release-firebase.sh -b patch --aab --dry-run  
   O arquivo sai em mobile/build/app/outputs/bundle/release/app-release.aab
 - [ ] **Você**: Enviar para Teste interno e adicionar os testadores (até 100, sem revisão demorada)
-- [ ] **Você**: Teste fechado com 12 testadores por 14 dias, se a conta for pessoal
+- [ ] **Você**: Teste fechado com 12 testadores por 14 dias (obrigatório na conta pessoal)  
+  Faixa alpha no workflow Android release. Depois, Painel da Play Console → Solicitar acesso à produção.
 - [ ] **Você**: Ler o Relatório de pré-lançamento da Play e me mandar os erros
 
 ### 6. Build e deploy automáticos
@@ -87,9 +88,10 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   .github/workflows/deploy-sandbox.yml, com verificação em /api/health
 - [x] **Você**: Criar a chave de deploy e os segredos no environment sandbox do GitHub  
   Passo a passo em docs/deploy/deploy-automatico.md. Depois, rodar Actions → Deploy sandbox → Run workflow.
-- [ ] **Claude**: Build Android automático: AAB para o Teste interno da Play e APK para o Firebase
-- [ ] **Você**: Criar a conta de serviço da Play Console e os segredos de assinatura no GitHub  
-  JSON da conta de serviço, keystore em base64, senhas do key.properties e token do Firebase. Eu passo o passo a passo.
+- [x] **Claude**: Build Android automático: AAB para o Teste interno da Play e APK para o Firebase  
+  .github/workflows/android-release.yml
+- [ ] **Você**: Criar os segredos de assinatura e as contas de serviço (Firebase e Play) no environment android-release  
+  Passo a passo em docs/deploy/build-android.md. A conta de serviço da Play só depois do primeiro AAB enviado à mão.
 - [ ] **Claude**: Reativar o Sentry no app  
   Está comentado em main.dart por compatibilidade de build.
 

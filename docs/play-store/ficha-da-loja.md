@@ -100,6 +100,14 @@ Primeira versão do Sincro na Google Play:
 
 ---
 
+## Conta de desenvolvedor
+
+Conta **pessoal**, ID `7942397505800602815`. Por ser pessoal, a Play exige um **teste fechado com
+pelo menos 12 testadores inscritos por 14 dias seguidos** antes de liberar o pedido de acesso à
+produção. Fluxo de faixas em `docs/deploy/build-android.md`.
+
+---
+
 ## Conteúdo do app (Monitorar e melhorar → Política e programas → Conteúdo do app)
 
 ### URLs

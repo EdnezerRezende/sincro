@@ -11,9 +11,13 @@ const RETENTION_DAYS = 90;
 const FIREBASE_BATCH_SIZE = 100;
 
 /** LGPD art. 16 / declaração do Play Console ("dados excluídos automaticamente em 90 dias"):
- *  apaga contas sem atividade de login há 90+ dias. "Atividade" usa o `lastSignInTime` do
- *  próprio Firebase Auth (fonte de verdade de login) em vez de um campo próprio replicado no
- *  Postgres — evita migração e evita o campo divergir do que o Firebase realmente registra.
+ *  apaga contas sem atividade há 90+ dias. "Atividade" é o mais recente entre `lastRefreshTime`
+ *  (último uso: o app renova o ID token ao falar com o backend; o Firebase atualiza o campo
+ *  no máximo cerca de 1x por hora) e `lastSignInTime` do
+ *  próprio Firebase Auth. `lastSignInTime` sozinho NÃO serve: a sessão fica salva por meses, então
+ *  ele só reflete o login original e apagaria quem usa o app todo dia. O sync de biofeedback em
+ *  segundo plano também renova o token e conta como uso, de propósito: app instalado e trabalhando
+ *  para a pessoa não é conta abandonada (a promessa pública é "90 dias sem usar o app").
  *  Conta sem registro correspondente no Firebase Auth (apagada direto no console, por exemplo)
  *  é tratada como órfã e removida no mesmo ciclo: não há como ela voltar a ficar "ativa". */
 @Injectable()
@@ -58,9 +62,11 @@ export class AccountRetentionScheduler {
         const firebaseUser = porUid.get(firebaseUid);
         // Sem registro no Firebase Auth = conta órfã (ex.: apagada direto no console). Nunca
         // mais vai ter atividade, então é elegível imediatamente.
-        const ultimaAtividade = firebaseUser?.metadata.lastSignInTime
-          ? new Date(firebaseUser.metadata.lastSignInTime)
-          : createdAt;
+        const ultimaAtividade =
+          maisRecente(
+            firebaseUser?.metadata?.lastRefreshTime,
+            firebaseUser?.metadata?.lastSignInTime,
+          ) ?? createdAt;
 
         if (ultimaAtividade > cutoff) continue;
 
@@ -81,4 +87,12 @@ export class AccountRetentionScheduler {
       this.logger.log(`Retention purge: ${apagadas} conta(s) inativa(s) há ${RETENTION_DAYS}+ dias apagada(s).`);
     }
   }
+}
+
+function maisRecente(...datas: (string | null | undefined)[]): Date | null {
+  const tempos = datas
+    .filter((d): d is string => !!d)
+    .map((d) => new Date(d).getTime())
+    .filter((t) => !Number.isNaN(t));
+  return tempos.length ? new Date(Math.max(...tempos)) : null;
 }

@@ -41,13 +41,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Android 13 e anteriores: o Health Connect abre esta tela para mostrar a política de
+             privacidade. No Android 14+ o mesmo papel é do alias ViewPermissionUsageActivity abaixo. -->
+        <activity
+            android:name=".PrivacyPolicyActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
         <!-- A tela de permissões do Health Connect linka para a política de privacidade do app
              através deste alias. Exigido pelo plugin `health` e pela revisão do Google Play ao
              pedir permissões de saúde (sensíveis). -->
         <activity-alias
             android:name="ViewPermissionUsageActivity"
             android:exported="true"
-            android:targetActivity=".MainActivity"
+            android:targetActivity=".PrivacyPolicyActivity"
             android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />

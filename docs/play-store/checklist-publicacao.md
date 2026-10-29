@@ -63,8 +63,8 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   Classificação: Conteúdo online = Sim (IA). Recursos financeiros: "não oferece". Saúde: estresse/relaxamento, saúde mental, emergência, serviços de saúde.
 - [ ] **Você**: Preencher a declaração de permissões do Health Connect  
   Justificativas prontas no ficha-da-loja.md.
-- [ ] **Claude**: Garantir que a tela de justificativa do Health Connect abre a política de privacidade  
-  A Play e o Health Connect exigem. O manifest já tem o alias; falta confirmar o comportamento.
+- [x] **Claude**: Garantir que a tela de justificativa do Health Connect abre a política de privacidade  
+  PrivacyPolicyActivity abre /privacidade.html no Android 13- (ACTION_SHOW_PERMISSIONS_RATIONALE) e 14+ (alias). Falta testar num aparelho com Health Connect.
 
 ### 4. Gmail e Google Cloud
 

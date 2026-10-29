@@ -54,10 +54,13 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   Posso gerar uma a partir da identidade visual do app.
 - [ ] **Você**: Tirar de 2 a 8 capturas de tela do celular  
   Sugestão: Home, Caixa de Entrada, Finanças, Biofeedback, Cartões, Emergência. Use uma conta de teste com dados fictícios.
-- [ ] **Você**: Criar uma conta de teste para o revisor do Google e informar em Acesso ao app
-- [ ] **Você**: Preencher: política de privacidade, segurança dos dados, exclusão de dados  
+- [x] **Você**: Criar uma conta de teste para o revisor do Google e informar em Acesso ao app  
+  Conta criada; o onboarding fica para o revisor fazer (ele pode preencher anamnese e contato, só não pode criar conta).
+- [x] **Você**: Preencher: política de privacidade, segurança dos dados, exclusão de dados  
+  Feito na sessão de 24–29/09. Ao ligar os anúncios ou o WhatsApp, revisar a Segurança dos dados.  
   URLs e tabela prontas no ficha-da-loja.md.
-- [ ] **Você**: Preencher: classificação etária, público-alvo (18+), recursos financeiros, apps de saúde
+- [x] **Você**: Preencher: classificação etária, público-alvo (18+), recursos financeiros, apps de saúde  
+  Classificação: Conteúdo online = Sim (IA). Recursos financeiros: "não oferece". Saúde: estresse/relaxamento, saúde mental, emergência, serviços de saúde.
 - [ ] **Você**: Preencher a declaração de permissões do Health Connect  
   Justificativas prontas no ficha-da-loja.md.
 - [ ] **Claude**: Garantir que a tela de justificativa do Health Connect abre a política de privacidade  
@@ -94,6 +97,17 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   Passo a passo em docs/deploy/build-android.md. A conta de serviço da Play só depois do primeiro AAB enviado à mão.
 - [ ] **Claude**: Reativar o Sentry no app  
   Está comentado em main.dart por compatibilidade de build.
+
+### 4.1 WhatsApp (bloqueado pela Meta, não bloqueia a Play)
+
+- [x] **Claude**: Vínculo do número, webhook e tela no app  
+  Separado no branch local `feat/whatsapp` (commit bd5e5b8), fora da master: a linha em Configurações não tinha trava e quebraria a revisão.
+- [ ] **Você**: Aguardar a verificação da empresa na Central de Segurança da Meta (Business ID 1444556850028550)
+- [ ] **Você**: Gerar número de teste e token de usuário de sistema; preencher as `WHATSAPP_*` no .env da VPS
+- [ ] **Claude**: Esconder a linha "Finanças pelo WhatsApp" atrás de feature flag e trazer o branch para a master
+- [ ] **Juntos**: Registrar o webhook `/api/whatsapp/webhook`, assinar `messages` e rodar `backend/scripts/smoke-whatsapp.cjs`
+- [ ] **Você**: Atualizar a Segurança dos dados (Número de telefone, Outras mensagens) ao publicar o recurso
+- [ ] **Claude**: Rodar no Figma `06_assets/sincro/figma_sincro_whatsapp_2026-09-24.js` (vault) para as telas do WhatsApp
 
 ## Fase de produção
 

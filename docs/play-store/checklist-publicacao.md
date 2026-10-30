@@ -95,8 +95,10 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   .github/workflows/android-release.yml
 - [ ] **Você**: Criar os segredos de assinatura e as contas de serviço (Firebase e Play) no environment android-release  
   Passo a passo em docs/deploy/build-android.md. A conta de serviço da Play só depois do primeiro AAB enviado à mão.
-- [ ] **Claude**: Reativar o Sentry no app  
-  Está comentado em main.dart por compatibilidade de build.
+- [x] **Claude**: Reativar o Sentry no app  
+  sentry_flutter 10.2 (Flutter 3.47), sem PII. O build da Play usa a variável `SENTRY_DSN_MOBILE` do environment android-release.
+- [ ] **Você**: Criar o projeto Flutter no Sentry e salvar o DSN em `SENTRY_DSN_MOBILE` (Variables do environment android-release)
+- [ ] **Você**: Segurança dos dados: marcar Registros de falhas e Diagnóstico (coletados, não compartilhados, finalidade Análise)
 
 ### 4.1 WhatsApp (bloqueado pela Meta, não bloqueia a Play)
 

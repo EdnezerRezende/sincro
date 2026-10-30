@@ -64,6 +64,8 @@ jobs:
       GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID || '393611506422-g0ufsk76bb8kk4krc7g2tvg9uipibr6c.apps.googleusercontent.com' }}
       FIREBASE_GROUPS: ${{ vars.FIREBASE_GROUPS || 'testadores-sandbox' }}
       PLAY_TRACK: ${{ inputs.play_track || vars.PLAY_TRACK || 'internal' }}
+      # DSN do projeto Sentry do app (Flutter). Vazio = build sem Sentry.
+      SENTRY_DSN: ${{ vars.SENTRY_DSN_MOBILE }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,6 +169,7 @@ jobs:
             --dart-define=API_BASE_URL="$API_BASE_URL"
             --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
           )
+          if [ -n "$SENTRY_DSN" ]; then args+=(--dart-define=SENTRY_DSN="$SENTRY_DSN"); fi
           flutter build appbundle "${args[@]}"
           flutter build apk "${args[@]}"
 

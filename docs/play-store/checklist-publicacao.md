@@ -27,9 +27,11 @@ Objetivo: app na Google Play em teste, com todas as funções funcionando para o
   Feito pelo deploy automático, que agora roda a cada merge na master.
 - [x] **Você**: Abrir no navegador /privacidade.html, /excluir-conta.html e /app-ads.txt  
   O deploy automático confere as três a cada execução.
-- [ ] **Você**: Confirmar que o backup diário do Postgres está no cron da VPS  
+- [x] **Você**: Confirmar que o backup diário do Postgres está no cron da VPS  
+  Confirmado em 01/11: dumps diários às 03:00 em infra/backups, 7 dias de retenção.  
   crontab -l deve listar infra/backup-postgres.sh. No plano do sandbox essa tarefa ainda aparece como pendente.
-- [ ] **Você**: Manter ADS_ENABLED=false no .env  
+- [ ] **Você**: Ligar ADS_ENABLED=true no backend/.env da VPS e recriar o backend (decidido em 01/11: monetização já na fase de teste)  
+  Antes: cadastrar os aparelhos dos testadores em AdMob → Configurações → Dispositivos de teste.  
   Só liga depois da aprovação do AdMob (fase de produção).
 
 ### 2. Conta e app na Play Console
